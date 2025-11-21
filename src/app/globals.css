@@ -1,0 +1,98 @@
+/* stylelint-disable at-rule-no-unknown */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+/* stylelint-enable at-rule-no-unknown */
+
+/* =========================
+   Theme Tokens
+   ========================= */
+:root {
+  /* Brand */
+  --brand: #23749a;
+  --brand-600: #12536f;
+  --brand-contrast: #ffffff;
+
+  /* Neutrals */
+  --ink: #0f172a;
+  --muted: #64748b;
+  --ring: #e5e7eb;
+  --card: #ffffff;
+
+  /* Background – pale blue */
+  --bg-from: #e9f3ff;
+  --bg-to: #f7fbff;
+
+  /* Focus */
+  --focus: #94d2ff;
+}
+
+/* Theme Variants */
+[data-theme="mint"] {
+  --brand: #10b981;
+  --brand-600: #059669;
+}
+[data-theme="purple"] {
+  --brand: #7c3aed;
+  --brand-600: #6d28d9;
+}
+
+/* Legacy aliases */
+:root {
+  --sr-primary: var(--brand);
+  --sr-primary-600: var(--brand-600);
+  --sr-ink: var(--ink);
+  --sr-muted: var(--muted);
+  --sr-card: var(--card);
+  --sr-ring: var(--ring);
+}
+
+/* Base */
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: linear-gradient(to bottom, var(--bg-from), var(--bg-to));
+}
+
+.app-bg {
+  min-height: 100vh;
+  background: linear-gradient(to bottom, var(--bg-from), var(--bg-to));
+}
+
+/* Focus ring */
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Brand helpers */
+.brand-bg {
+  background: var(--brand);
+}
+.brand-bg-600 {
+  background: var(--brand-600);
+}
+
+.brand-cta {
+  background: var(--brand);
+  color: var(--brand-contrast, #fff);
+  transition: background 0.2s ease;
+}
+.brand-cta:hover {
+  background: var(--brand-600);
+}
