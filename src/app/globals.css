@@ -1,40 +1,39 @@
 /* stylelint-disable at-rule-no-unknown */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
 /* stylelint-enable at-rule-no-unknown */
 
 /* =========================
-   Theme Tokens
+   Theme Tokens – Studyroom
    ========================= */
+
 :root {
   /* Brand */
-  --brand: #23749a;
-  --brand-600: #12536f;
+  --brand: #456071;        /* slate blue */
+  --brand-600: #374f5e;    /* deep slate */
+  --brand-soft: #b8cad6;   /* soft blue accent */
   --brand-contrast: #ffffff;
 
+  /* Accents */
+  --accent-sage: #82977e;      /* sage green */
+  --accent-soft: #d6e5e3;      /* mist green */
+  --accent-rose: #e5d1d0;      /* muted warm pink */
+
   /* Neutrals */
-  --ink: #0f172a;
-  --muted: #64748b;
-  --ring: #e5e7eb;
-  --card: #ffffff;
+  --ink: #2a2f33;              /* main text */
+  --muted: #748398;            /* secondary text */
+  --ring: #d7e0ea;             /* borders */
+  --card: #ffffff;             /* cards / surfaces */
 
-  /* Background – pale blue */
-  --bg-from: #e9f3ff;
-  --bg-to: #f7fbff;
+  /* Backgrounds */
+  --bg-page: #f5f7fa;          /* main page background */
+  --bg-hero: #f8f8ff;          /* hero background */
+  --bg-soft: #eaeeea;          /* soft neutral section */
+  --bg-philosophy: #e3ebe7;    /* gentle green-tinted band */
 
-  /* Focus */
-  --focus: #94d2ff;
-}
-
-/* Theme Variants */
-[data-theme="mint"] {
-  --brand: #10b981;
-  --brand-600: #059669;
-}
-[data-theme="purple"] {
-  --brand: #7c3aed;
-  --brand-600: #6d28d9;
+  /* Footer (option B: very soft slate-blue tint) */
+  --footer-bg: rgba(69, 96, 113, 0.09);
 }
 
 /* Legacy aliases */
@@ -48,6 +47,7 @@
 }
 
 /* Base */
+
 html,
 body {
   height: 100%;
@@ -56,17 +56,17 @@ body {
 body {
   margin: 0;
   color: var(--ink);
-  background: linear-gradient(to bottom, var(--bg-from), var(--bg-to));
+  background-color: var(--bg-page);
 }
 
 .app-bg {
   min-height: 100vh;
-  background: linear-gradient(to bottom, var(--bg-from), var(--bg-to));
+  background-color: var(--bg-page);
 }
 
 /* Focus ring */
 :focus-visible {
-  outline: 3px solid var(--focus);
+  outline: 3px solid var(--accent-soft);
   outline-offset: 2px;
   border-radius: 8px;
 }
@@ -81,6 +81,7 @@ body {
 }
 
 /* Brand helpers */
+
 .brand-bg {
   background: var(--brand);
 }
@@ -90,9 +91,15 @@ body {
 
 .brand-cta {
   background: var(--brand);
-  color: var(--brand-contrast, #fff);
-  transition: background 0.2s ease;
+  color: #ffffff;
+  transition:
+    background 0.18s ease,
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
 }
+
 .brand-cta:hover {
   background: var(--brand-600);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(69, 96, 113, 0.18);
 }

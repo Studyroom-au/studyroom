@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   addDoc,
   collection,
@@ -12,6 +12,7 @@ import {
   serverTimestamp,
   QueryDocumentSnapshot,
   DocumentData,
+  updateDoc,
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
@@ -28,16 +29,14 @@ export default function TaskListWidget() {
   const [text, setText] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  // Wait for auth & refresh token once (avoids permission-denied)
   useEffect(() => {
     const off = onAuthStateChanged(auth, async (u) => {
       if (u) {
         try {
           await u.getIdToken(true);
-        } catch {
-          // ignore refresh errors
-        }
+        } catch {}
         setAuthReady(true);
       } else {
         setAuthReady(false);
@@ -47,7 +46,6 @@ export default function TaskListWidget() {
     return () => off();
   }, []);
 
-  // Subscribe to /users/{uid}/tasks
   useEffect(() => {
     if (!authReady) return;
     const u = auth.currentUser;
@@ -91,6 +89,7 @@ export default function TaskListWidget() {
       return;
     }
 
+    setSaving(true);
     try {
       await addDoc(collection(db, "users", u.uid, "tasks"), {
         title,
@@ -101,6 +100,8 @@ export default function TaskListWidget() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setErr(msg || "Could not add task");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -110,16 +111,7 @@ export default function TaskListWidget() {
     if (!u) return;
     setBusyId(t.id);
     try {
-      await deleteDoc(doc(db, "users", u.uid, "tasks", t.id)); // hard toggle via replace? Simpler: update
-    } catch {
-      // if delete fails, fallback to update
-    }
-    try {
-      await addDoc(collection(db, "users", u.uid, "tasks"), {
-        title: t.title,
-        done: !t.done,
-        createdAt: serverTimestamp(),
-      });
+      await updateDoc(doc(db, "users", u.uid, "tasks", t.id), { done: !t.done });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setErr(msg || "Could not update task");
@@ -151,28 +143,44 @@ export default function TaskListWidget() {
         </div>
       )}
 
+      {/* Add Task */}
       <form onSubmit={addTask} className="flex gap-2">
         <input
           type="text"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Add a task…"
-          className="flex-1 rounded-xl border border-[color:var(--ring)] px-3 py-2 text-sm"
+          placeholder="Write 1–3 things you’ll finish today…"
+          className="flex-1 rounded-xl border border-[color:var(--ring)] bg-[color:var(--card)] px-3 py-2 text-sm"
           autoComplete="off"
         />
+
+        {/* FIX: Correct brand button colouring */}
         <button
           type="submit"
-          className="rounded-xl bg-[color:var(--brand)] px-3 py-2 text-sm font-medium text-[color:var(--brand-contrast)] shadow-sm transition hover:bg-[color:var(--brand-600)]"
+          disabled={saving}
+          className="
+            rounded-xl 
+            bg-[color:var(--brand)] 
+            px-3 py-2 
+            text-sm 
+            font-medium 
+            text-[color:var(--brand-contrast)]
+            shadow-sm 
+            transition 
+            hover:bg-[color:var(--brand-600)] 
+            disabled:opacity-60
+          "
         >
-          Add
+          {saving ? "Adding…" : "Add"}
         </button>
       </form>
 
+      {/* Task List */}
       <ul className="space-y-2 text-sm">
         {tasks.map((t) => (
           <li
             key={t.id}
-            className="flex items-center justify-between rounded-xl border border-[color:var(--ring)] bg-[color:var(--card)] px-3 py-2"
+            className="flex items-center justify-between rounded-xl border border-[color:var(--ring)] bg-[color:var(--card)] px-3 py-2 shadow-sm"
           >
             <label className="flex items-center gap-2">
               <input
@@ -180,6 +188,7 @@ export default function TaskListWidget() {
                 checked={t.done}
                 onChange={() => toggleTask(t)}
                 disabled={busyId === t.id}
+                className="h-3 w-3"
               />
               <span
                 className={
@@ -191,11 +200,19 @@ export default function TaskListWidget() {
                 {t.title}
               </span>
             </label>
+
             <button
-              type="button"
               onClick={() => removeTask(t)}
               disabled={busyId === t.id}
-              className="rounded-lg border border-[color:var(--ring)] px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
+              className="
+                rounded-lg 
+                border border-[color:var(--ring)] 
+                px-2 py-1 
+                text-xs 
+                text-red-600 
+                hover:bg-red-50 
+                disabled:opacity-50
+              "
             >
               Delete
             </button>
@@ -204,7 +221,7 @@ export default function TaskListWidget() {
 
         {tasks.length === 0 && (
           <li className="rounded-xl border border-dashed border-[color:var(--ring)] px-3 py-4 text-center text-xs text-[color:var(--muted)]">
-            No tasks yet. Add one to get started.
+            No tasks yet. Add a couple of small wins for today.
           </li>
         )}
       </ul>

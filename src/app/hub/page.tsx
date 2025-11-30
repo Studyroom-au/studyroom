@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import Image from "next/image";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import PomoWidget from "@/components/widgets/PomoWidget";
@@ -70,19 +72,31 @@ export default function HubPage() {
     <div className="app-bg min-h-[100svh]">
       <div className="mx-auto max-w-6xl px-4 py-6 md:py-8">
         {/* Top Bar */}
-        <header className="mb-6 flex items-center justify-between">
+        <header className="mb-6 flex items-center justify-between gap-4 rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] px-4 py-3 shadow-sm">
           <div className="flex items-center gap-3">
-            <span
-              aria-hidden
-              className="inline-block h-7 w-7 rounded-xl bg-[color:var(--brand)] shadow-sm"
-            />
-            <div>
-              <h1 className="text-xl font-semibold leading-tight text-[color:var(--ink)]">
-                Your Hub
-              </h1>
-              <p className="text-sm text-[color:var(--muted)]">
+            <Link href="/" className="flex items-center gap-3">
+              <div className="relative h-9 w-9 rounded-xl bg-[color:var(--brand)] shadow-sm">
+                {/* Update src to your actual logo asset, e.g. /logo-studyroom.svg or /studyroom-logo.png */}
+                <Image
+                  src="/logo.png"
+                  alt="Studyroom"
+                  fill
+                  className="object-contain p-1.5"
+                />
+              </div>
+              <div className="flex flex-col leading-tight">
+                <span className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
+                  Studyroom
+                </span>
+                <span className="text-sm font-semibold text-[color:var(--ink)]">
+                  Student Hub
+                </span>
+              </div>
+            </Link>
+            <div className="hidden flex-col leading-tight sm:flex">
+              <span className="text-xs text-[color:var(--muted)]">
                 A calm space to plan and focus.
-              </p>
+              </span>
             </div>
           </div>
 
@@ -90,14 +104,14 @@ export default function HubPage() {
             <button
               type="button"
               onClick={() => router.push("/lobby")}
-              className="rounded-xl border border-[color:var(--ring)] bg-[color:var(--card)] px-3 py-2 text-sm text-[color:var(--ink)]/80 shadow-sm transition hover:bg-white"
+              className="rounded-xl border border-[color:var(--ring)] bg-[color:var(--card)] px-3 py-2 text-sm font-medium text-[color:var(--ink)]/80 shadow-sm transition hover:bg-white"
             >
               Studyrooms
             </button>
             <button
               type="button"
               onClick={handleSignOut}
-              className="rounded-xl border border-[color:var(--ring)] bg-[color:var(--card)] px-3 py-2 text-sm text-[color:var(--ink)]/80 shadow-sm transition hover:bg-white"
+              className="rounded-xl border border-[color:var(--ring)] bg-[color:var(--card)] px-3 py-2 text-sm font-medium text-[color:var(--muted)] shadow-sm transition hover:bg-white"
             >
               Sign out
             </button>
@@ -106,7 +120,7 @@ export default function HubPage() {
 
         {/* Study Rooms Section */}
         <section className="mb-8 rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] px-6 py-5 shadow-sm">
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-[1fr_1fr]">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-[1.1fr_0.9fr]">
             <div className="flex flex-col justify-between gap-4">
               <div>
                 <h2 className="text-xl font-semibold text-[color:var(--ink)]">
@@ -121,14 +135,14 @@ export default function HubPage() {
                 <button
                   type="button"
                   onClick={() => router.push("/lobby")}
-                  className="rounded-xl bg-[color:var(--brand)] px-5 py-2 text-[color:var(--brand-contrast)] shadow-sm transition hover:bg-[color:var(--brand-600)]"
+                  className="brand-cta rounded-xl px-5 py-2 text-sm font-semibold shadow-sm"
                 >
                   Open Lobby
                 </button>
                 <button
                   type="button"
                   onClick={() => router.push("/room/Room%201")}
-                  className="rounded-xl border border-[color:var(--ring)] bg-[color:var(--card)] px-4 py-2 text-sm text-[color:var(--ink)]/80 shadow-sm transition hover:bg-white"
+                  className="rounded-xl border border-[color:var(--ring)] bg-[color:var(--card)] px-4 py-2 text-sm font-medium text-[color:var(--ink)]/80 shadow-sm transition hover:bg-white"
                 >
                   Join Default Room
                 </button>
@@ -142,7 +156,9 @@ export default function HubPage() {
                   onClick={() => router.push(`/room/${encodeURIComponent(room)}`)}
                   className="group flex flex-col items-center justify-center rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] p-4 text-center text-sm text-[color:var(--ink)] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
                 >
-                  <span className="text-base font-medium">{room}</span>
+                  <span className="text-base font-medium group-hover:text-[color:var(--brand)]">
+                    {room}
+                  </span>
                   <span className="mt-1 text-xs text-[color:var(--muted)]">
                     Open 24/7
                   </span>

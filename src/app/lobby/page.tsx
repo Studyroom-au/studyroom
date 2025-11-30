@@ -14,10 +14,12 @@ import {
   QueryDocumentSnapshot,
   addDoc,
   serverTimestamp,
+  deleteDoc,          // 👈 NEW
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import PomoWidget from "@/components/widgets/PomoWidget";
 import TaskListWidget from "@/components/widgets/TaskListWidget";
+import Image from "next/image"; // 👈 for logo
 
 type Room = {
   id: string;
@@ -36,7 +38,8 @@ const DEFAULT_ROOMS: Room[] = [
   { id: "room-4", title: "Room 4" },
 ];
 
-const ACTIVE_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+const ACTIVE_WINDOW_MS = 5 * 60 * 1000;      // 5 minutes for “active now”
+const EXPIRY_MS = 24 * 60 * 60 * 1000;       // 24 hours for auto-delete
 
 const friendlyError = (msg: string) =>
   msg.includes("permission") ? "You do not have permission to do that." : msg;
@@ -67,6 +70,51 @@ export default function LobbyPage() {
     });
     return () => off();
   }, [router]);
+
+  // 🔁 One-shot cleanup: delete non-default rooms older than 24h (by lastActiveAt or createdAt)
+  useEffect(() => {
+    if (!authed) return;
+
+    const cleanupOldRooms = async () => {
+      try {
+        const snap = await getDocs(collection(db, "rooms"));
+        const now = Date.now();
+
+        const deletePromises: Promise<void>[] = [];
+
+        snap.forEach((docSnap) => {
+          const id = docSnap.id;
+
+          // Never touch default rooms
+          const isDefault = DEFAULT_ROOMS.some((r) => r.id === id);
+          if (isDefault) return;
+
+          const data = docSnap.data() as Room;
+          const lastActiveMs = data.lastActiveAt?.toMillis?.();
+          const createdAtMs = data.createdAt?.toMillis?.();
+
+          // Use “lastActive” if it exists, otherwise fall back to “createdAt”
+          const referenceTime = lastActiveMs ?? createdAtMs;
+          if (typeof referenceTime !== "number") return;
+
+          const age = now - referenceTime;
+
+          // If the room hasn't been touched in 24h → delete it
+          if (age > EXPIRY_MS) {
+            deletePromises.push(deleteDoc(docSnap.ref));
+          }
+        });
+
+        if (deletePromises.length > 0) {
+          await Promise.allSettled(deletePromises);
+        }
+      } catch (e) {
+        console.error("Failed to clean up old rooms", e);
+      }
+    };
+
+    void cleanupOldRooms();
+  }, [authed]);
 
   // Subscribe to rooms when authed
   useEffect(() => {
@@ -148,11 +196,23 @@ export default function LobbyPage() {
         {/* Header */}
         <header className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span
-              aria-hidden
-              className="inline-block h-7 w-7 rounded-xl bg-[color:var(--brand)]"
-            />
-            <div>
+            {/* 🔵 Logo + wordmark block */}
+            <div className="flex items-center gap-2">
+              <div className="relative h-8 w-8 rounded-xl bg-[color:var(--brand)]/10 flex items-center justify-center overflow-hidden">
+                {/* ⬇️ Update src to your actual logo (e.g. "/logo-studyroom-mark.svg" or "/logo.svg") */}
+                <Image
+                  src="/logo.png"
+                  alt="Studyroom logo"
+                  fill
+                  className="object-contain p-1.5"
+                />
+              </div>
+              <span className="text-sm font-semibold tracking-tight text-[color:var(--brand)]">
+                Studyroom
+              </span>
+            </div>
+
+            <div className="ml-3">
               <h1 className="text-xl font-semibold leading-tight text-[color:var(--ink)]">
                 Library Lobby
               </h1>
@@ -207,7 +267,8 @@ export default function LobbyPage() {
 
               {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
               <p className="mt-2 text-xs text-[color:var(--muted)]">
-                Only active rooms appear below, plus four default rooms.
+                Only active rooms appear below, plus four default rooms. Old rooms
+                are cleaned up after 24 hours of inactivity.
               </p>
             </section>
 
@@ -269,7 +330,7 @@ export default function LobbyPage() {
           <aside className="flex min-h-0 flex-col gap-5">
             <section className="rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] p-4 shadow-sm">
               <div className="mb-2 text-sm font-medium text-[color:var(--ink)]">
-                Pomodoro
+                Private Pomodoro
               </div>
               <PomoWidget />
             </section>
