@@ -17,15 +17,16 @@ export default function Footer() {
         <div className="md:col-span-2">
           <div className="mb-3 flex items-center gap-3">
             <div>
-              <div className="relative h-9 w-40">
-                        <Image
-                          src="/logo.png"
-                          alt="Studyroom"
-                          fill
-                          className="object-contain"
-                          priority
-                        />
-                      </div>
+              <div className="h-9 w-40" suppressHydrationWarning>
+                <Image
+                  src="/logo.png"
+                  alt="Studyroom"
+                  width={160}
+                  height={36}
+                  className="h-full w-auto object-contain"
+                />
+              </div>
+
               <div className="text-xs text-[#d6e5e3]">
                 Personalised tutoring that meets students where they are.
               </div>

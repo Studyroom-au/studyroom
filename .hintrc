@@ -1,0 +1,19 @@
+{
+  "extends": [
+    "development"
+  ],
+  "hints": {
+    "axe/forms": [
+      "default",
+      {
+        "autocomplete-valid": "off"
+      }
+    ],
+    "axe/aria": [
+      "default",
+      {
+        "aria-valid-attr-value": "off"
+      }
+    ]
+  }
+}

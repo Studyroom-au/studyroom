@@ -1,20 +1,30 @@
+// src/app/room/[id]/page.tsx
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
 import { getIdToken, onAuthStateChanged } from "firebase/auth";
 import axios from "axios";
-import { LiveKitRoom, RoomAudioRenderer, useRoomContext } from "@livekit/components-react";
+import {
+  LiveKitRoom,
+  RoomAudioRenderer,
+  useRoomContext,
+} from "@livekit/components-react";
 import "@livekit/components-styles";
 import { ConnectionState } from "livekit-client";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import {
+  doc,
+  setDoc,
+  serverTimestamp,
+  increment,
+} from "firebase/firestore";
 
 import SafeVideoArea from "@/components/SafeVideoArea";
 import PomoWidget from "@/components/widgets/PomoWidget";
 import ChatPanel from "@/components/ChatPanel";
-import ConnectionChip from "@/components/ConnectionChip";
 import { useUserRole } from "@/hooks/useUserRole";
+import RoomWhiteboard from "@/components/RoomWhiteboard";
 
 async function touchRoomActivity(roomId: string) {
   try {
@@ -32,13 +42,44 @@ async function touchRoomActivity(roomId: string) {
   }
 }
 
+async function updatePresence(roomId: string, delta: 1 | -1) {
+  try {
+    const ref = doc(db, "rooms", roomId);
+    await setDoc(
+      ref,
+      {
+        participantCount: increment(delta),
+        lastActiveAt: serverTimestamp(),
+        isActive: true,
+      },
+      { merge: true }
+    );
+  } catch {
+    // soft-fail – presence is best-effort
+  }
+}
+
 function RoomActivityTouch({ roomId }: { roomId: string }) {
   const room = useRoomContext();
+  const joinedRef = useRef(false);
+
   useEffect(() => {
-    if (room?.state === ConnectionState.Connected) {
+    if (!room) return;
+
+    if (room.state === ConnectionState.Connected && !joinedRef.current) {
+      joinedRef.current = true;
       void touchRoomActivity(roomId);
+      void updatePresence(roomId, 1);
     }
-  }, [room?.state, roomId]);
+
+    return () => {
+      if (joinedRef.current) {
+        joinedRef.current = false;
+        void updatePresence(roomId, -1);
+      }
+    };
+  }, [room, roomId]);
+
   return null;
 }
 
@@ -50,28 +91,24 @@ function RoomHeader({
   onBack: () => void;
 }) {
   return (
-    <header className="flex items-center justify-between rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] px-4 py-3 shadow-sm">
+    <header className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] px-4 py-2 shadow-sm">
+      {/* Left side: back button + room label */}
       <div className="flex items-center gap-3">
         <button
           type="button"
           onClick={onBack}
-          className="rounded-full border border-[color:var(--ring)] bg-[color:var(--card)] px-3 py-1.5 text-sm text-[color:var(--ink)] hover:bg-white"
-          title="Back to Lobby"
+          className="rounded-full border border-[color:var(--ring)] bg-white px-3 py-1.5 text-xs font-medium text-[color:var(--ink)]/80 hover:bg-slate-50"
         >
           Lobby
         </button>
-        <div className="leading-tight">
-          <div className="text-base font-semibold text-[color:var(--ink)]">
+        <div className="flex flex-col leading-tight">
+          <span className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
             Studyroom
-          </div>
-          <div className="text-xs text-[color:var(--muted)]">Room: {roomName}</div>
+          </span>
+          <span className="text-sm font-semibold text-[color:var(--ink)]">
+            Room: {roomName}
+          </span>
         </div>
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="rounded-full border border-[color:var(--ring)] px-2 py-0.5 text-xs text-[color:var(--muted)]">
-          Friendly Mode
-        </span>
-        <ConnectionChip />
       </div>
     </header>
   );
@@ -118,7 +155,10 @@ export default function RoomPage() {
     (async () => {
       try {
         const idToken = await getIdToken(auth.currentUser!, true);
-        const { data } = await axios.post("/api/livekitToken", { idToken, roomName });
+        const { data } = await axios.post("/api/livekitToken", {
+          idToken,
+          roomName,
+        });
         if (!cancelled) {
           setUrl(data.url);
           setToken(data.token);
@@ -160,12 +200,14 @@ export default function RoomPage() {
         <RoomActivityTouch roomId={roomName} />
         <RoomHeader roomName={roomName} onBack={handleBack} />
 
-        <div className="grid h-full grid-cols-1 gap-3 md:grid-cols-[1fr_340px]">
-          <section className="min-h-0 overflow-hidden rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] shadow-sm">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)]">
+          {/* VIDEO + CONTROLS */}
+          <section className="min-h-0 rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] shadow-sm">
             <SafeVideoArea />
           </section>
 
-          <aside className="min-h-0 flex flex-col gap-3">
+          {/* SIDE WIDGETS */}
+          <aside className="flex min-h-0 flex-col gap-3">
             <section className="rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] p-3 shadow-sm">
               <PomoWidget />
             </section>
@@ -173,6 +215,11 @@ export default function RoomPage() {
               <ChatPanel roomId={roomName} canModerate={canModerate} />
             </section>
           </aside>
+        </div>
+
+        {/* WHITEBOARD BELOW – scroll if needed */}
+        <div className="mt-3 rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] p-3 shadow-sm">
+          <RoomWhiteboard roomId={roomName} />
         </div>
 
         <RoomAudioRenderer />

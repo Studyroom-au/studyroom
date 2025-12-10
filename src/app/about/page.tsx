@@ -25,13 +25,14 @@ export default function AboutPage() {
       {/* OUR PURPOSE */}
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-6xl grid gap-6 lg:grid-cols-[1.4fr,1fr] lg:items-center">
-          <div className="rounded-3xl bg-[color:var(--card)] p-8 shadow-sm ring-1 ring-[color:var(--ring)] space-y-4">
+          <div className="space-y-4 rounded-3xl bg-[color:var(--card)] p-8 shadow-sm ring-1 ring-[color:var(--ring)]">
             <h2 className="text-2xl font-semibold text-[color:var(--ink)]">Our Purpose</h2>
 
             <p className="text-sm text-[color:var(--muted)]">
-              So many students aren’t struggling because they “can’t do it.” They’re struggling
-              because they don’t feel confident, they’re unsure where to start, they’re overwhelmed
-              by fast-paced classrooms, or they’ve never been taught how to organise themselves.
+              So many students aren&apos;t struggling because they &quot;can&apos;t do it.&quot; They&apos;re
+              struggling because they don&apos;t feel confident, they&apos;re unsure where to start, they feel
+              overwhelmed by fast-paced classrooms, or they&apos;ve never been taught how to organise
+              themselves.
             </p>
 
             <p className="text-sm text-[color:var(--muted)]">
@@ -40,7 +41,10 @@ export default function AboutPage() {
             </p>
           </div>
 
-          <div className="relative h-72 w-full overflow-hidden rounded-3xl ring-1 ring-[color:var(--ring)]">
+          <div
+            className="relative h-72 w-full overflow-hidden rounded-3xl ring-1 ring-[color:var(--ring)]"
+            suppressHydrationWarning
+          >
             <Image
               src="/artgallery.jpeg"
               alt="Lily standing in front of colourful artwork"
@@ -53,12 +57,10 @@ export default function AboutPage() {
 
       {/* WHAT WE BELIEVE */}
       <section className="px-4 md:px-6">
-        <div className="mx-auto max-w-6xl rounded-3xl bg-[color:var(--card)] p-8 shadow-sm ring-1 ring-[color:var(--ring)] space-y-5">
+        <div className="mx-auto max-w-6xl space-y-5 rounded-3xl bg-[color:var(--card)] p-8 shadow-sm ring-1 ring-[color:var(--ring)]">
           <h2 className="text-2xl font-semibold text-[color:var(--ink)]">What We Believe</h2>
 
-          <p className="text-sm text-[color:var(--muted)]">
-            At Studyroom, we believe:
-          </p>
+          <p className="text-sm text-[color:var(--muted)]">At Studyroom, we believe:</p>
 
           <ul className="space-y-2 text-sm text-[color:var(--muted)]">
             <li>• Confidence comes before achievement</li>
@@ -70,7 +72,7 @@ export default function AboutPage() {
           </ul>
 
           <p className="text-sm text-[color:var(--muted)]">
-            We don’t force students into a system — we build the system around them.
+            We don&apos;t force students into a system – we build the system around them.
           </p>
         </div>
       </section>
@@ -81,8 +83,8 @@ export default function AboutPage() {
           <div className="space-y-3">
             <h2 className="text-2xl font-semibold text-[color:var(--ink)]">Who We Support</h2>
             <p className="text-sm text-[color:var(--muted)]">
-              Studyroom is for students who want to feel confident, organised, and capable — without
-              pressure or fear of making mistakes.
+              Studyroom is for students who want to feel confident, organised, and capable –
+              without pressure or fear of making mistakes.
             </p>
           </div>
 
@@ -101,8 +103,8 @@ export default function AboutPage() {
                 key={item}
                 className="flex gap-3 rounded-2xl bg-white/80 p-4 ring-1 ring-[color:var(--ring)]"
               >
-                <div className="h-10 w-10 flex items-center justify-center rounded-full bg-[color:var(--brand)]/10 text-[color:var(--brand)]">
-                  ✓
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[color:var(--brand)]/10 text-[color:var(--brand)]">
+                  <span className="text-lg">✨</span>
                 </div>
                 <div className="text-sm font-semibold text-[color:var(--ink)]">{item}</div>
               </div>
@@ -115,10 +117,12 @@ export default function AboutPage() {
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-6xl grid gap-6 lg:grid-cols-2">
           <div className="rounded-3xl bg-[color:var(--card)] p-8 shadow-sm ring-1 ring-[color:var(--ring)]">
-            <h2 className="text-2xl font-semibold text-[color:var(--ink)]">The Studyroom Difference</h2>
+            <h2 className="text-2xl font-semibold text-[color:var(--ink)]">
+              The Studyroom Difference
+            </h2>
             <p className="mt-3 text-sm text-[color:var(--muted)]">
-              We don’t just tutor. We help students rebuild confidence, create structure, and feel
-              capable in their learning.
+              We don&apos;t just tutor. We help students rebuild confidence, create structure, and
+              feel capable in their learning.
             </p>
 
             <ul className="mt-4 space-y-2 text-sm text-[color:var(--muted)]">
@@ -131,14 +135,17 @@ export default function AboutPage() {
                 "Feeling capable, organised, and prepared",
               ].map((item) => (
                 <li key={item} className="flex items-start gap-2">
-                  <span className="h-1.5 w-1.5 mt-1 rounded-full bg-[color:var(--accent-sage)]" />
+                  <span className="mt-1 h-1.5 w-1.5 rounded-full bg-[color:var(--accent-sage)]" />
                   <span>{item}</span>
                 </li>
               ))}
             </ul>
           </div>
 
-          <div className="relative h-80 w-full overflow-hidden rounded-3xl ring-1 ring-[color:var(--ring)]">
+          <div
+            className="relative h-80 w-full overflow-hidden rounded-3xl ring-1 ring-[color:var(--ring)]"
+            suppressHydrationWarning
+          >
             <Image
               src="/image.png"
               alt="Lily receiving academic award"
@@ -152,7 +159,10 @@ export default function AboutPage() {
       {/* ABOUT LILY */}
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-6xl grid gap-6 lg:grid-cols-[1fr,1.3fr] lg:items-center">
-          <div className="relative h-80 w-full overflow-hidden rounded-3xl ring-1 ring-[color:var(--ring)]">
+          <div
+            className="relative h-80 w-full overflow-hidden rounded-3xl ring-1 ring-[color:var(--ring)]"
+            suppressHydrationWarning
+          >
             <Image
               src="/selfphoto.jpeg"
               alt="Portrait of Lily Smith"
@@ -161,23 +171,25 @@ export default function AboutPage() {
             />
           </div>
 
-          <div className="rounded-3xl bg-[color:var(--card)] p-8 shadow-sm ring-1 ring-[color:var(--ring)] space-y-4">
-            <h2 className="text-2xl font-semibold text-[color:var(--ink)]">About Lily — Founder</h2>
+          <div className="space-y-4 rounded-3xl bg-[color:var(--card)] p-8 shadow-sm ring-1 ring-[color:var(--ring)]">
+            <h2 className="text-2xl font-semibold text-[color:var(--ink)]">
+              About Lily – Founder
+            </h2>
 
             <p className="text-sm text-[color:var(--muted)]">
-              I started Studyroom after realising how many students felt the same way I once did —
+              I started Studyroom after realising how many students felt the same way I once did –
               capable, but overwhelmed.
             </p>
 
             <p className="text-sm text-[color:var(--muted)]">
-              I often struggled with confidence, organisation, and feeling behind even when I wasn’t.
-              Once I learned how to break tasks down and study properly, everything changed — and I
-              wanted to help other students feel the same.
+              I often struggled with confidence, organisation, and feeling behind even when I
+              wasn&apos;t. Once I learned how to break tasks down and study properly, everything
+              changed – and I wanted to help other students feel the same.
             </p>
 
             <p className="text-sm text-[color:var(--muted)]">
-              I’m now studying a Bachelor of Education (Primary & Secondary — Mathematics) and have
-              worked with hundreds of students across Logan and Brisbane.
+              I&apos;m now studying a Bachelor of Education (Primary & Secondary – Mathematics) and
+              have worked with hundreds of students across Logan and Brisbane.
             </p>
 
             <p className="text-sm text-[color:var(--muted)]">
@@ -191,7 +203,9 @@ export default function AboutPage() {
       {/* SAFETY + VALUES */}
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-6xl rounded-3xl bg-[color:var(--card)] p-8 shadow-sm ring-1 ring-[color:var(--ring)]">
-          <h2 className="text-2xl font-semibold text-[color:var(--ink)]">Safety & Professional Standards</h2>
+          <h2 className="text-2xl font-semibold text-[color:var(--ink)]">
+            Safety &amp; Professional Standards
+          </h2>
 
           <p className="mt-3 text-sm text-[color:var(--muted)]">
             Families trust us because we are committed to child safety, professionalism, and clear,
@@ -210,14 +224,12 @@ export default function AboutPage() {
 
       {/* FINAL CTA */}
       <section className="px-4 md:px-6">
-        <div className="mx-auto max-w-6xl rounded-3xl bg-[color:var(--brand)] px-8 py-10 text-white shadow-lg space-y-4">
-          <h2 className="text-3xl font-semibold">
-            We hear you, and we want to help.
-          </h2>
+        <div className="mx-auto max-w-6xl space-y-4 rounded-3xl bg-[color:var(--brand)] px-8 py-10 text-white shadow-lg">
+          <h2 className="text-3xl font-semibold">We hear you, and we want to help.</h2>
 
           <p className="text-sm text-white/90 md:max-w-2xl">
-            If your child needs clarity, calmness, confidence, or a fresh start — we’re here.  
-            Share a few details and we’ll recommend a supportive starting point.
+            If your child needs clarity, calmness, confidence, or a fresh start – we&apos;re here.
+            Share a few details and we&apos;ll recommend a supportive starting point.
           </p>
 
           <Link

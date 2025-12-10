@@ -1,12 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { auth } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
+  updateProfile,
 } from "firebase/auth";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+
+type Role = "student" | "parent" | "tutor";
 
 function friendlyError(e: unknown, mode: "signin" | "signup") {
   const code = (e as { code?: string })?.code ?? "";
@@ -19,13 +23,17 @@ function friendlyError(e: unknown, mode: "signin" | "signup") {
     "auth/email-already-in-use": "That email is already registered.",
     "auth/weak-password": "Try a longer password (at least 6 characters).",
   };
-  return map[code] || (mode === "signin"
-    ? "We could not sign you in. Please try again."
-    : "We could not create your account. Please try again.");
+  return (
+    map[code] ||
+    (mode === "signin"
+      ? "We could not sign you in. Please try again."
+      : "We could not create your account. Please try again.")
+  );
 }
 
 export default function SignInForm() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
+
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -33,18 +41,76 @@ export default function SignInForm() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
+  // extra fields for SIGNUP
+  const [name, setName] = useState("");
+  const [role, setRole] = useState<Role>("student");
+  const [parentEmail, setParentEmail] = useState("");
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setInfo(null);
     setBusy(true);
+
     try {
       if (mode === "signin") {
+        // --- SIGN IN ---
         await signInWithEmailAndPassword(auth, email.trim(), pw);
+        // Redirect is handled in login/page.tsx via onAuthStateChanged
       } else {
-        await createUserWithEmailAndPassword(auth, email.trim(), pw);
+        // --- SIGN UP ---
+        const trimmedEmail = email.trim();
+        const trimmedPw = pw;
+        const trimmedName = name.trim();
+        const trimmedParentEmail = parentEmail.trim();
+
+        // basic checks
+        if (!trimmedName || !trimmedEmail || !trimmedPw) {
+          setError("Please fill in your name, email, and password.");
+          return;
+        }
+
+        if (!acceptedTerms) {
+          setError("You need to agree to the Terms and Privacy Policy to continue.");
+          return;
+        }
+
+        if (role === "student" && !trimmedParentEmail) {
+          setError("Students must provide a parent email.");
+          return;
+        }
+
+        // Create Auth user
+        const cred = await createUserWithEmailAndPassword(
+          auth,
+          trimmedEmail,
+          trimmedPw
+        );
+
+        // Set display name
+        await updateProfile(cred.user, {
+          displayName: trimmedName,
+        });
+
+        const uid = cred.user.uid;
+
+        // Create Firestore profile
+        await setDoc(doc(db, "users", uid), {
+          name: trimmedName,
+          email: trimmedEmail,
+          role,
+          parentEmail: role === "student" ? trimmedParentEmail : null,
+          createdAt: serverTimestamp(),
+        });
+
+        // Create Firestore role doc (used by security rules)
+        await setDoc(doc(db, "roles", uid), {
+          role,
+        });
+
+        // Redirect still handled by onAuthStateChanged in login/page.tsx
       }
-      // Redirect handled in page.tsx via onAuthStateChanged
     } catch (err) {
       setError(friendlyError(err, mode));
     } finally {
@@ -57,7 +123,7 @@ export default function SignInForm() {
     setInfo(null);
     const addr = email.trim();
     if (!addr) {
-      setError("Type your email first, then tap ‘Forgot password’."); 
+      setError("Type your email first, then tap ‘Forgot password’.");
       return;
     }
     try {
@@ -72,7 +138,12 @@ export default function SignInForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4" autoComplete="on" method="post">
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-4"
+      autoComplete="on"
+      method="post"
+    >
       {/* Mode toggle */}
       <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-[color:var(--sr-ring)]">
         <button
@@ -99,7 +170,7 @@ export default function SignInForm() {
         </button>
       </div>
 
-      {/* ✅ Accessible message region */}
+      {/* Message region */}
       {(error || info) && (
         <div
           className={`rounded-lg px-3 py-2 text-sm ${
@@ -114,9 +185,35 @@ export default function SignInForm() {
         </div>
       )}
 
+      {/* SIGNUP-ONLY: Name */}
+      {mode === "signup" && (
+        <div>
+          <label
+            htmlFor="name"
+            className="mb-1 block text-sm text-[color:var(--sr-ink)]"
+          >
+            Full name
+          </label>
+          <input
+            id="name"
+            name="name"
+            type="text"
+            className="w-full rounded-lg border border-[color:var(--sr-ring)] px-3 py-2"
+            placeholder="Your name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoComplete="name"
+            required
+          />
+        </div>
+      )}
+
       {/* Email */}
       <div>
-        <label htmlFor="email" className="mb-1 block text-sm text-[color:var(--sr-ink)]">
+        <label
+          htmlFor="email"
+          className="mb-1 block text-sm text-[color:var(--sr-ink)]"
+        >
           Email
         </label>
         <input
@@ -133,37 +230,74 @@ export default function SignInForm() {
         />
       </div>
 
+      {/* SIGNUP-ONLY: Role + Parent email */}
+      {mode === "signup" && (
+        <>
+          {/* Role */}
+          <div>
+            <label className="mb-1 block text-sm text-[color:var(--sr-ink)]">
+              I am a…
+            </label>
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value as Role)}
+              className="w-full rounded-lg border border-[color:var(--sr-ring)] px-3 py-2"
+              aria-label="User role"
+            >
+              <option value="student">Student</option>
+              <option value="parent">Parent</option>
+              <option value="tutor">Tutor</option>
+            </select>
+          </div>
+
+          {/* Parent email for students */}
+          {role === "student" && (
+            <div>
+              <label
+                htmlFor="parentEmail"
+                className="mb-1 block text-sm text-[color:var(--sr-ink)]"
+              >
+                Parent email (required for students)
+              </label>
+              <input
+                id="parentEmail"
+                name="parentEmail"
+                type="email"
+                className="w-full rounded-lg border border-[color:var(--sr-ring)] px-3 py-2"
+                placeholder="parent@example.com"
+                value={parentEmail}
+                onChange={(e) => setParentEmail(e.target.value)}
+                autoComplete="email"
+              />
+              <p className="mt-1 text-xs text-[color:var(--sr-muted)]">
+                We may use this to contact your parent/guardian about safety or
+                scheduling.
+              </p>
+            </div>
+          )}
+        </>
+      )}
+
       {/* Password */}
       <div>
-        <label htmlFor="password" className="mb-1 block text-sm text-[color:var(--sr-ink)]">
+        <label
+          htmlFor="password"
+          className="mb-1 block text-sm text-[color:var(--sr-ink)]"
+        >
           Password
         </label>
         <div className="relative">
-          {mode === "signin" ? (
-            <input
-              id="password"
-              name="password"
-              type={showPw ? "text" : "password"}
-              className="w-full rounded-lg border border-[color:var(--sr-ring)] px-3 py-2 pr-14"
-              placeholder="8+ characters"
-              value={pw}
-              onChange={(e) => setPw(e.target.value)}
-              autoComplete="current-password"
-              required
-            />
-          ) : (
-            <input
-              id="password"
-              name="password"
-              type={showPw ? "text" : "password"}
-              className="w-full rounded-lg border border-[color:var(--sr-ring)] px-3 py-2 pr-14"
-              placeholder="8+ characters"
-              value={pw}
-              onChange={(e) => setPw(e.target.value)}
-              autoComplete="new-password"
-              required
-            />
-          )}
+          <input
+            id="password"
+            name="password"
+            type={showPw ? "text" : "password"}
+            className="w-full rounded-lg border border-[color:var(--sr-ring)] px-3 py-2 pr-14"
+            placeholder="8+ characters"
+            value={pw}
+            onChange={(e) => setPw(e.target.value)}
+            autoComplete={mode === "signin" ? "current-password" : "new-password"}
+            required
+          />
           <button
             type="button"
             onClick={() => setShowPw((s) => !s)}
@@ -186,10 +320,46 @@ export default function SignInForm() {
           </div>
         ) : (
           <p className="pt-2 text-xs text-[color:var(--sr-muted)]">
-            Choose a password that’s easy to remember.
+            Choose a password that’s easy to remember but hard to guess.
           </p>
         )}
       </div>
+
+      {/* SIGNUP-ONLY: Terms / Privacy checkbox */}
+      {mode === "signup" && (
+        <div className="flex items-start gap-2 pt-1">
+          <input
+            id="terms"
+            type="checkbox"
+            checked={acceptedTerms}
+            onChange={(e) => setAcceptedTerms(e.target.checked)}
+            className="mt-1"
+          />
+          <label
+            htmlFor="terms"
+            className="text-xs text-[color:var(--sr-ink)]"
+          >
+            I agree to the{" "}
+            <a
+              href="/terms"
+              className="text-[color:var(--sr-primary)] underline"
+              target="_blank"
+            >
+              Terms of Use
+            </a>{" "}
+            and{" "}
+            <a
+              href="/privacy"
+              className="text-[color:var(--sr-primary)] underline"
+              target="_blank"
+            >
+              Privacy Policy
+            </a>
+            . I understand this app is designed to be a calm and safe learning
+            space.
+          </label>
+        </div>
+      )}
 
       {/* Submit */}
       <div className="pt-2">
@@ -198,7 +368,11 @@ export default function SignInForm() {
           disabled={busy}
           className="w-full rounded-lg bg-[color:var(--sr-primary)] px-4 py-2 font-medium text-white transition hover:bg-[color:var(--sr-primary-600)] disabled:opacity-60"
         >
-          {busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}
+          {busy
+            ? "Please wait…"
+            : mode === "signin"
+            ? "Sign in"
+            : "Create account"}
         </button>
       </div>
     </form>

@@ -5,7 +5,7 @@ const services = [
   {
     title: "In-home tutoring",
     desc: "Calm, structured lessons at your kitchen table that build confidence, clarity and routine.",
-    tag: "In-home 1:1 support",
+    tag: "In person 1:1 support",
   },
   {
     title: "Online tutoring",
@@ -104,8 +104,23 @@ const testimonials = [
   },
   {
     quote:
+      "Lily is the best tutor I have ever had! She puts in the effort to help tutor me online while im overseas, and is dedicated to helping me with my education! She’s helped me so much with math! I went from failing my assignments and exams to passing all of them from Lily’s help. If you are in need of a tutor, I 100% recommend Lily, she is dedicated, friendly and puts in the effort to ensure you get the goals you would like for your schooling! She has helped me so much throughout this year and I wouldnt of been able to get through it without her! Thankyou Lily 🤗🤍",
+    name: "Year 11 student",
+  },
+  {
+    quote:
       "Within a term she moved from a C to an A in Science and finally feels proud of her hard work.",
     name: "Parent of Year 9 student",
+  },
+  {
+    quote:
+      "Before tutoring with lily, I was struggling immensely with mathematics, to a point where i would simply give up on trying. Lily helped explain problems with much more clarity than the questions in my textbook, and after 1 term of tutoing, I went from a D to a B- on my exam. I can now confidently try my best at maths, and not be intimidated by attempting difficult and confusing questions. If you are having trouple with anything, I can't recomment Lily enough! She's kind, patient and 100% perfect for helping people like you and me! Thank you Lily!!",
+    name: "Grade 8 student",
+  },
+  {
+    quote:
+      " You've helped my daughter come so far! From failing maths to receiving a maths awards (and enjoying maths now, with confidence) Thank you Lily!",
+    name: "Parent of Year 11 student",
   },
 ];
 
@@ -181,13 +196,13 @@ export default function HomePage() {
           {/* IMAGE SIDE */}
           <div className="flex-1">
             <div className="overflow-hidden rounded-xl border border-[color:var(--ring)] bg-[#fdfdff] shadow-sm">
-              <div className="relative h-64 w-full p-3 sm:h-72 lg:h-80">
+              <div className="h-64 w-full overflow-hidden rounded-xl" suppressHydrationWarning>
                 <Image
                   src="/long-lily-teaching.png"
                   alt="Lily teaching a small group in a calm classroom setting"
-                  fill
-                  className="object-cover"
-                  priority
+                  width={1200}
+                  height={800}
+                  className="h-full w-full object-cover"
                 />
               </div>
             </div>
@@ -394,12 +409,13 @@ export default function HomePage() {
             </div>
           </div>
           <div className="overflow-hidden rounded-xl border border-[color:var(--ring)] bg-[#f8f8ff] shadow-sm">
-            <div className="relative h-64 w-full p-3 sm:h-72">
+            <div className="h-64 w-full overflow-hidden rounded-xl" suppressHydrationWarning>
               <Image
                 src="/workshop-group.jpeg"
                 alt="Studyroom workshop group smiling together"
-                fill
-                className="object-fill object-top"
+                width={1000}
+                height={900}
+                className="h-full w-full object-cover object-top"
               />
             </div>
           </div>
@@ -463,7 +479,7 @@ export default function HomePage() {
                 Next step
               </p>
               <h2 className="text-2xl font-semibold">
-                Tell us about your child and we will reply within 24 hours.
+                Tell us about your child and we will reply within 1-3 business days.
               </h2>
               <p className="text-sm text-white/85">
                 Whether they want to pass and feel proud or are aiming for an A plus,

@@ -19,14 +19,13 @@ export default function SignInPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-slate-50 to-white px-4">
       <main className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-md">
-        <div className="mb-4">
-          <h1 className="text-xl font-semibold text-slate-900">
-            Welcome to Studyroom
-          </h1>
-          <p className="text-sm text-slate-600">
-            Sign in to start your quiet study session.
-          </p>
-        </div>
+        <h1 className="text-xl font-semibold text-slate-900">
+          Welcome to Studyroom
+        </h1>
+        <p className="text-sm text-slate-600 mb-4">
+          Sign in or create an account to start a calm study session.
+        </p>
+
         <SignInForm />
       </main>
     </div>

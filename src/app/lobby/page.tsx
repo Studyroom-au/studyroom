@@ -1,3 +1,4 @@
+// src/app/lobby/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -14,12 +15,12 @@ import {
   QueryDocumentSnapshot,
   addDoc,
   serverTimestamp,
-  deleteDoc,          // 👈 NEW
+  deleteDoc,
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import PomoWidget from "@/components/widgets/PomoWidget";
 import TaskListWidget from "@/components/widgets/TaskListWidget";
-import Image from "next/image"; // 👈 for logo
+import Image from "next/image";
 
 type Room = {
   id: string;
@@ -38,11 +39,14 @@ const DEFAULT_ROOMS: Room[] = [
   { id: "room-4", title: "Room 4" },
 ];
 
-const ACTIVE_WINDOW_MS = 5 * 60 * 1000;      // 5 minutes for “active now”
-const EXPIRY_MS = 24 * 60 * 60 * 1000;       // 24 hours for auto-delete
+const DEFAULT_ROOM_IDS = new Set(DEFAULT_ROOMS.map((r) => r.id));
+
+const EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 const friendlyError = (msg: string) =>
-  msg.includes("permission") ? "You do not have permission to do that." : msg;
+  msg.toLowerCase().includes("permission")
+    ? "You do not have permission to do that."
+    : msg;
 
 export default function LobbyPage() {
   const router = useRouter();
@@ -53,7 +57,7 @@ export default function LobbyPage() {
   const [newTitle, setNewTitle] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  // Require auth and refresh token (so rule changes apply)
+  // Require auth and refresh token (so Firestore rule changes apply)
   useEffect(() => {
     const off = onAuthStateChanged(auth, async (u) => {
       if (!u) {
@@ -64,14 +68,14 @@ export default function LobbyPage() {
       try {
         await u.getIdToken(true);
       } catch {
-        /* ignore token refresh fail */
+        // ignore token refresh failures, just continue
       }
       setAuthed(true);
     });
     return () => off();
   }, [router]);
 
-  // 🔁 One-shot cleanup: delete non-default rooms older than 24h (by lastActiveAt or createdAt)
+  // One-shot cleanup: delete non-default rooms older than 24h
   useEffect(() => {
     if (!authed) return;
 
@@ -86,20 +90,16 @@ export default function LobbyPage() {
           const id = docSnap.id;
 
           // Never touch default rooms
-          const isDefault = DEFAULT_ROOMS.some((r) => r.id === id);
-          if (isDefault) return;
+          if (DEFAULT_ROOM_IDS.has(id)) return;
 
           const data = docSnap.data() as Room;
           const lastActiveMs = data.lastActiveAt?.toMillis?.();
           const createdAtMs = data.createdAt?.toMillis?.();
 
-          // Use “lastActive” if it exists, otherwise fall back to “createdAt”
           const referenceTime = lastActiveMs ?? createdAtMs;
           if (typeof referenceTime !== "number") return;
 
           const age = now - referenceTime;
-
-          // If the room hasn't been touched in 24h → delete it
           if (age > EXPIRY_MS) {
             deletePromises.push(deleteDoc(docSnap.ref));
           }
@@ -136,16 +136,20 @@ export default function LobbyPage() {
     return () => off();
   }, [authed]);
 
+  // 🔎 Which rooms should be shown in the grid
   const shownRooms = useMemo(() => {
     const now = Date.now();
 
     const activeNonDefault = rooms.filter((r) => {
-      const isDefaultId = DEFAULT_ROOMS.some((d) => d.id === r.id);
-      if (isDefaultId) return false;
-      const ts = r.lastActiveAt?.toMillis?.();
-      const recentlyActive =
-        typeof ts === "number" && now - ts <= ACTIVE_WINDOW_MS;
-      return recentlyActive || r.isActive === true;
+      if (DEFAULT_ROOM_IDS.has(r.id)) return false;
+
+      const lastMs =
+        r.lastActiveAt?.toMillis?.() ?? r.createdAt?.toMillis?.();
+      if (typeof lastMs !== "number") return false;
+
+      const age = now - lastMs;
+      // Only show if used/created within last 24 hours
+      return age <= EXPIRY_MS;
     });
 
     const base = [...DEFAULT_ROOMS, ...activeNonDefault];
@@ -196,15 +200,13 @@ export default function LobbyPage() {
         {/* Header */}
         <header className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            {/* 🔵 Logo + wordmark block */}
             <div className="flex items-center gap-2">
-              <div className="relative h-8 w-8 rounded-xl bg-[color:var(--brand)]/10 flex items-center justify-center overflow-hidden">
-                {/* ⬇️ Update src to your actual logo (e.g. "/logo-studyroom-mark.svg" or "/logo.svg") */}
+              <div className="relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-xl bg-[color:var(--brand)]/10">
                 <Image
                   src="/logo.png"
                   alt="Studyroom logo"
                   fill
-                  className="object-contain p-1.5"
+                  className="p-1.5 object-contain"
                 />
               </div>
               <span className="text-sm font-semibold tracking-tight text-[color:var(--brand)]">
@@ -265,10 +267,12 @@ export default function LobbyPage() {
                 </button>
               </div>
 
-              {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+              {error && (
+                <p className="mt-2 text-sm text-red-600">{error}</p>
+              )}
               <p className="mt-2 text-xs text-[color:var(--muted)]">
-                Only active rooms appear below, plus four default rooms. Old rooms
-                are cleaned up after 24 hours of inactivity.
+                Only rooms used in the last 24 hours appear below, plus four
+                default rooms. Older rooms are cleaned up automatically.
               </p>
             </section>
 
@@ -301,11 +305,9 @@ export default function LobbyPage() {
                             ? `Added ${room.createdAt
                                 .toDate()
                                 .toLocaleDateString()}`
-                            : ["room-1", "room-2", "room-3", "room-4"].includes(
-                                room.id
-                              )
+                            : DEFAULT_ROOM_IDS.has(room.id)
                             ? "Default room"
-                            : "Active now"}
+                            : "Recent room"}
                         </div>
                         <div className="mt-auto">
                           <span className="inline-flex items-center rounded-full border border-[color:var(--ring)] px-2 py-0.5 text-xs text-[color:var(--muted)]">

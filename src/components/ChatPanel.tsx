@@ -23,6 +23,7 @@ const ATTACHMENTS_ENABLED = false; // keep false until Storage billing is enable
 const MAX_MESSAGE_CHARS = 2000;
 const MAX_DOC_BYTES = 9000;
 const PAGE_LIMIT = 200;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const BANNED_TERMS = ["fuck", "shit", "bitch", "asshole", "bastard", "dick"];
 
@@ -77,7 +78,8 @@ async function touchRoom(roomId: string) {
 
 function friendlyError(e: unknown) {
   const code = (e as { code?: string })?.code ?? "";
-  if (code.includes("permission")) return "You do not have permission to do that.";
+  if (code.includes("permission"))
+    return "You do not have permission to do that.";
   return (e as Error)?.message || "Something went wrong. Please try again.";
 }
 
@@ -122,8 +124,17 @@ export default function ChatPanel({
       qy,
       (snap) => {
         const rows: ChatMessage[] = [];
+        const staleIds: string[] = [];
+        const now = Date.now();
+
         snap.forEach((d: QueryDocumentSnapshot<DocumentData>) => {
           const data = d.data();
+          const createdAt = toDateSafe(data.createdAt);
+          if (createdAt && now - createdAt.getTime() > DAY_MS) {
+            staleIds.push(d.id);
+            return;
+          }
+
           rows.push({
             id: d.id,
             uid: String(data.uid || ""),
@@ -131,15 +142,21 @@ export default function ChatPanel({
             text: (data.text as string | undefined) ?? undefined,
             fileUrl: (data.fileUrl as string | null) ?? null,
             fileName: (data.fileName as string | null) ?? null,
-            createdAt: toDateSafe(data.createdAt),
+            createdAt,
           });
         });
+
         setMessages(rows);
         queueMicrotask(() => {
           scrollRef.current?.scrollTo({
             top: scrollRef.current.scrollHeight,
             behavior: "smooth",
           });
+        });
+
+        // clean up stale messages
+        staleIds.forEach((id) => {
+          void deleteDoc(doc(db, "rooms", roomId, "chat", id)).catch(() => {});
         });
       },
       (e: FirestoreError) => setErr(e.message || "Failed to load chat")
@@ -167,7 +184,9 @@ export default function ChatPanel({
     if (!trimmed) return;
 
     if (trimmed.length > MAX_MESSAGE_CHARS) {
-      setErr(`Message is too long. Keep it under ${MAX_MESSAGE_CHARS} characters.`);
+      setErr(
+        `Message is too long. Keep it under ${MAX_MESSAGE_CHARS} characters.`
+      );
       return;
     }
 
@@ -249,7 +268,9 @@ export default function ChatPanel({
   return (
     <section className="flex h-full flex-col rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] shadow-sm">
       <div className="flex items-center justify-between border-b border-[color:var(--ring)] px-3 py-2">
-        <div className="text-sm font-medium text-[color:var(--ink)]">Room Chat</div>
+        <div className="text-sm font-medium text-[color:var(--ink)]">
+          Room Chat
+        </div>
         <div className="text-xs text-[color:var(--muted)]">
           {messages.length} message{messages.length === 1 ? "" : "s"}
         </div>
@@ -261,7 +282,10 @@ export default function ChatPanel({
         </div>
       )}
 
-      <div ref={scrollRef} className="flex-1 space-y-2 overflow-y-auto p-3 text-sm">
+      <div
+        ref={scrollRef}
+        className="flex-1 space-y-2 overflow-y-auto p-3 text-sm"
+      >
         {messages.map((m) => (
           <div key={m.id} className="flex items-start justify-between gap-2">
             <div className="min-w-0">

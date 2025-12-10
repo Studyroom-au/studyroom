@@ -1,3 +1,4 @@
+// src/app/hub/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -10,6 +11,7 @@ import PomoWidget from "@/components/widgets/PomoWidget";
 import TaskListWidget from "@/components/widgets/TaskListWidget";
 import DailyPlannerWidget from "@/components/widgets/DailyPlannerWidget";
 import MoodTrackerWidget from "@/components/widgets/MoodTrackerWidget";
+import { useUserRole } from "@/hooks/useUserRole";
 
 function Card({
   title,
@@ -46,11 +48,23 @@ function Card({
   );
 }
 
+// ✅ Keep in sync with Lobby defaults
+const DEFAULT_ROOMS = [
+  { id: "room-1", label: "Room 1" },
+  { id: "room-2", label: "Room 2" },
+  { id: "room-3", label: "Room 3" },
+  { id: "room-4", label: "Room 4" },
+];
+
 export default function HubPage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
+  const role = useUserRole(); // "student" | "tutor" | "admin" | null
 
+  // Avoid hydration issues by only rendering after mount
   useEffect(() => setMounted(true), []);
+
+  // Auth guard: if not logged in, send to landing
   useEffect(() => {
     const off = onAuthStateChanged(auth, (u) => {
       if (!u) router.replace("/");
@@ -68,15 +82,26 @@ export default function HubPage() {
 
   if (!mounted) return <div className="min-h-screen" />;
 
+  const roleLabel =
+    role === "admin" ? "Admin" : role === "tutor" ? "Tutor" : "Student";
+
+  const navButtonBase =
+    "rounded-xl px-3 py-1.5 text-xs font-medium shadow-sm transition";
+  const navInactive =
+    navButtonBase +
+    " border border-[color:var(--ring)] bg-[color:var(--card)] text-[color:var(--ink)]/80 hover:bg-white";
+  const navActive =
+    navButtonBase +
+    " bg-[color:var(--brand)] text-[color:var(--brand-contrast)]";
+
   return (
     <div className="app-bg min-h-[100svh]">
       <div className="mx-auto max-w-6xl px-4 py-6 md:py-8">
         {/* Top Bar */}
-        <header className="mb-6 flex items-center justify-between gap-4 rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] px-4 py-3 shadow-sm">
+        <header className="mb-6 flex flex-col gap-3 rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
             <Link href="/" className="flex items-center gap-3">
               <div className="relative h-9 w-9 rounded-xl bg-[color:var(--brand)] shadow-sm">
-                {/* Update src to your actual logo asset, e.g. /logo-studyroom.svg or /studyroom-logo.png */}
                 <Image
                   src="/logo.png"
                   alt="Studyroom"
@@ -95,23 +120,56 @@ export default function HubPage() {
             </Link>
             <div className="hidden flex-col leading-tight sm:flex">
               <span className="text-xs text-[color:var(--muted)]">
-                A calm space to plan and focus.
+                A calm space to plan, focus, and check in.
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Right side nav */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Main tabs */}
             <button
               type="button"
+              className={navActive}
+              onClick={() => router.push("/hub")}
+            >
+              Hub
+            </button>
+            <button
+              type="button"
+              className={navInactive}
               onClick={() => router.push("/lobby")}
-              className="rounded-xl border border-[color:var(--ring)] bg-[color:var(--card)] px-3 py-2 text-sm font-medium text-[color:var(--ink)]/80 shadow-sm transition hover:bg-white"
             >
               Studyrooms
             </button>
             <button
               type="button"
+              className={navInactive}
+              onClick={() => router.push("/profile")}
+            >
+              Profile
+            </button>
+
+            {role === "admin" && (
+              <button
+                type="button"
+                className={navInactive}
+                onClick={() => router.push("/admin")}
+              >
+                Control Panel
+              </button>
+            )}
+
+            {/* Role pill */}
+            <span className="ml-1 inline-flex items-center rounded-xl border border-[color:var(--ring)] bg-white px-3 py-1 text-xs font-medium text-[color:var(--muted)]">
+              {roleLabel}
+            </span>
+
+            {/* Sign out */}
+            <button
+              type="button"
               onClick={handleSignOut}
-              className="rounded-xl border border-[color:var(--ring)] bg-[color:var(--card)] px-3 py-2 text-sm font-medium text-[color:var(--muted)] shadow-sm transition hover:bg-white"
+              className="ml-1 rounded-xl border border-[color:var(--ring)] bg-[color:var(--card)] px-3 py-1.5 text-xs font-medium text-[color:var(--muted)] shadow-sm transition hover:bg-white"
             >
               Sign out
             </button>
@@ -141,7 +199,7 @@ export default function HubPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => router.push("/room/Room%201")}
+                  onClick={() => router.push("/room/room-1")}
                   className="rounded-xl border border-[color:var(--ring)] bg-[color:var(--card)] px-4 py-2 text-sm font-medium text-[color:var(--ink)]/80 shadow-sm transition hover:bg-white"
                 >
                   Join Default Room
@@ -149,15 +207,16 @@ export default function HubPage() {
               </div>
             </div>
 
+            {/* Quick default room buttons */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-2">
-              {["Room 1", "Room 2", "Room 3", "Room 4"].map((room) => (
+              {DEFAULT_ROOMS.map((room) => (
                 <button
-                  key={room}
-                  onClick={() => router.push(`/room/${encodeURIComponent(room)}`)}
+                  key={room.id}
+                  onClick={() => router.push(`/room/${room.id}`)}
                   className="group flex flex-col items-center justify-center rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] p-4 text-center text-sm text-[color:var(--ink)] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
                 >
                   <span className="text-base font-medium group-hover:text-[color:var(--brand)]">
-                    {room}
+                    {room.label}
                   </span>
                   <span className="mt-1 text-xs text-[color:var(--muted)]">
                     Open 24/7
