@@ -46,12 +46,12 @@ const pricing = [
   {
     label: "In-home tutoring",
     detail:
-      "From $70 per hour for one to one sessions, depending on location and year level. Discounts available for siblings and regular bookings.",
+      "From $60 per hour for one to one sessions, depending on location and year level. Discounts available for siblings and regular bookings.",
   },
   {
     label: "Online tutoring",
     detail:
-      "From $60 per hour for one to one sessions. Flexible afternoon and evening spots available.",
+      "From $50 per hour for one to one sessions. Flexible afternoon and evening spots available.",
   },
   {
     label: "HeadStart holiday blocks",
