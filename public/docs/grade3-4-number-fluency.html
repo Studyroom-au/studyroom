@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Year 3–4 Number Fluency – Studyroom Worksheet</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <style>
+    /* ========== STUDYROOM BRAND TOKENS ========== */
+    :root {
+      --slate-blue: #456071;
+      --deep-slate: #374f5e;
+      --sage: #82977e;
+      --soft-green-blue: #d6e5e3;
+      --off-white: #f8f8ff;
+
+      --font-heading: system-ui, -apple-system, "Segoe UI", sans-serif;
+      --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+
+    /* ========== GLOBAL / PAGE SETUP ========== */
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      background: #e5eaee;
+      color: var(--deep-slate);
+      font-family: var(--font-body);
+      font-size: 12pt;
+    }
+
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 10mm auto;
+      padding: 15mm 18mm;
+      background: var(--off-white);
+      box-shadow: 0 0 8px rgba(0, 0, 0, 0.15);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      page-break-after: always;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0 0 6px;
+      font-family: var(--font-heading);
+      color: var(--slate-blue);
+    }
+
+    h1 {
+      font-size: 18pt;
+    }
+
+    h2 {
+      font-size: 14pt;
+    }
+
+    h3 {
+      font-size: 12pt;
+    }
+
+    p {
+      margin: 4px 0 10px;
+      line-height: 1.45;
+    }
+
+    .small {
+      font-size: 10pt;
+    }
+
+    /* ========== LAYOUT HELPERS ========== */
+    .row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .row.space-between {
+      justify-content: space-between;
+    }
+
+    .col {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .grow {
+      flex: 1;
+    }
+
+    /* ========== HEADER AREA ========== */
+    .header-block {
+      border-bottom: 2px solid var(--soft-green-blue);
+      padding-bottom: 10px;
+      margin-bottom: 10px;
+    }
+
+    .brand-block {
+      font-size: 10pt;
+      color: var(--deep-slate);
+    }
+
+    .brand-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: #ffffff;
+      border: 1px solid var(--soft-green-blue);
+    }
+
+    .brand-name {
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--slate-blue);
+      font-size: 9pt;
+    }
+
+    .tagline {
+      font-size: 9pt;
+      color: var(--deep-slate);
+    }
+
+    .title-box {
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 10pt;
+      background: #ffffff;
+      min-width: 90mm;
+      border: 1px solid #d7e0e6;
+    }
+
+    .title-box label {
+      font-weight: 600;
+      display: inline-block;
+      min-width: 27mm;
+      color: var(--deep-slate);
+    }
+
+    .title-main {
+      font-weight: 700;
+      font-size: 12pt;
+      color: var(--slate-blue);
+      margin-bottom: 6px;
+    }
+
+    .meta-row {
+      margin-top: 3px;
+    }
+
+    /* ========== SECTION STYLING ========== */
+    .section {
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-top: 10px;
+      background: #ffffff;
+      border: 1px solid #dde3e8;
+      page-break-inside: avoid;
+    }
+
+    .section-heading {
+      font-weight: 700;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      color: var(--slate-blue);
+      font-size: 11pt;
+      text-transform: none;
+    }
+
+    .section-tag {
+      font-size: 9pt;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: var(--soft-green-blue);
+      color: var(--deep-slate);
+    }
+
+    .section-learning {
+      background: var(--soft-green-blue);
+      border: 1px solid var(--sage);
+    }
+
+    .section-warmup,
+    .section-guided,
+    .section-reflection,
+    .section-materials {
+      border: 1px solid #d7e0e6;
+      background: #ffffff;
+    }
+
+    .section-vocab,
+    .section-worked {
+      border: 1px solid var(--soft-green-blue);
+      background: #ffffff;
+    }
+
+    .section-teaching,
+    .section-independent,
+    .section-extension {
+      border: 1px solid #dde3e8;
+      background: #ffffff;
+    }
+
+    /* Lists & questions */
+    ol,
+    ul {
+      margin: 0 0 8px 20px;
+      padding: 0;
+    }
+
+    .questions li {
+      margin-bottom: 10px;
+    }
+
+    .line-space {
+      display: block;
+      border-bottom: 1px solid #cfd6dd;
+      margin: 6px 0 10px;
+      height: 16px;
+    }
+
+    .reflection-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+      font-size: 14pt;
+    }
+
+    .face {
+      text-align: center;
+      border: 1px solid var(--soft-green-blue);
+      border-radius: 6px;
+      padding: 4px;
+      background: #ffffff;
+    }
+
+    .meta-label {
+      font-weight: 600;
+      margin-top: 4px;
+    }
+
+    /* ---------- ANSWER BOXES FOR STUDENT WRITING ---------- */
+    .answer-box {
+      border: 1px solid #cfd6dd;
+      border-radius: 6px;
+      background: #ffffff;
+      min-height: 45px;
+      margin-top: 6px;
+      margin-bottom: 10px;
+      padding: 6px 8px;
+    }
+
+    .answer-box.big {
+      min-height: 75px;
+    }
+
+    .answer-box.xbig {
+      min-height: 110px;
+    }
+
+    /* Simple grid for fluency facts */
+    .fact-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .fact-cell {
+      border: 1px solid #cfd6dd;
+      border-radius: 6px;
+      padding: 6px 8px;
+      background: #ffffff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11pt;
+    }
+
+    .fact-cell span.question {
+      font-weight: 600;
+    }
+
+    .fact-cell span.answer-line {
+      border-bottom: 1px solid #cfd6dd;
+      flex: 0 0 26px;
+      margin-left: 6px;
+    }
+
+    /* ========== ANSWER KEY PAGE ========== */
+    .answer-page h1 {
+      text-align: left;
+      font-size: 16pt;
+    }
+
+    .answer-section {
+      margin-bottom: 12px;
+    }
+
+    .answer-section h2 {
+      font-size: 13pt;
+      margin-bottom: 6px;
+    }
+
+    /* ========== PRINT STYLES ========== */
+    @media print {
+      body {
+        background: #ffffff;
+      }
+
+      .page {
+        margin: 0;
+        width: auto;
+        min-height: auto;
+        box-shadow: none;
+        page-break-after: always;
+      }
+
+      .no-print {
+        display: none !important;
+      }
+
+      @page {
+        size: A4;
+        margin: 12mm;
+      }
+    }
+
+    .note-screen {
+      font-size: 9pt;
+      color: #777;
+      margin-bottom: 4px;
+    }
+  </style>
+</head>
+<body>
+  <!-- ===================== PAGE 1: MAIN WORKSHEET ===================== -->
+  <div class="page worksheet-page">
+    <!-- Header & Branding -->
+    <header class="header-block">
+      <div class="row space-between">
+        <div class="brand-block">
+          <div class="brand-pill">
+            <span class="brand-name">STUDYROOM AUSTRALIA</span>
+            <span class="tagline">Calm, structured practice</span>
+          </div>
+          <div class="small" style="margin-top:4px;">
+            Personalised tutoring &amp; learning support
+          </div>
+        </div>
+
+        <div class="title-box">
+          <div class="title-main">
+            Year 3–4 Number Fluency: Addition, Subtraction &amp; Early Multiplication
+          </div>
+          <div class="meta-row"><label>Subject:</label> Mathematics</div>
+          <div class="meta-row">
+            <label>Year level:</label> Year 3–4 bridge
+          </div>
+          <div class="meta-row">
+            <label>ACARA codes:</label>
+            AC9M3N03, AC9M3N04, AC9M3N06 (number facts, addition/subtraction strategies, x2/x5/x10)
+          </div>
+          <div class="meta-row">
+            <label>Skill focus:</label>
+            Build fluency with basic facts using mental strategies (doubles, make 10, bridging, x2/x5/x10)
+          </div>
+          <div class="meta-row">
+            <label>Support &amp; challenge:</label>
+            Concrete strategies &amp; modelling | Timed challenges &amp; strategy explanation
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <p class="note-screen no-print">
+      Print via your browser’s print dialog (Ctrl/Cmd + P). This worksheet is designed for a calm fluency boost:
+      focus on <strong>thinking first</strong>, then speed.
+    </p>
+
+    <!-- Section 1: Learning Intention & Success Criteria -->
+    <section class="section section-learning">
+      <div class="section-heading">
+        <span>Learning intention &amp; success criteria</span>
+        <span class="section-tag">Start here</span>
+      </div>
+
+      <h3>Learning intention</h3>
+      <p>
+        Today I am learning to <strong>use smart number strategies to answer facts more quickly and confidently</strong>.
+      </p>
+
+      <h3>Success criteria</h3>
+      <p>I can:</p>
+      <ul>
+        <li>use doubles, near doubles and make-10 facts to add quickly,</li>
+        <li>think of subtraction as “how much more” or “what’s missing?”,</li>
+        <li>use patterns in the 2, 5 and 10 times tables instead of skip-counting every time.</li>
+      </ul>
+
+      <div class="answer-box">
+        In my own words, today I am learning to…
+      </div>
+    </section>
+
+    <!-- Section 2: Warm-Up – Quick fact check (not timed yet) -->
+    <section class="section section-warmup">
+      <div class="section-heading">
+        <span>Warm-up / Prior knowledge</span>
+        <span class="section-tag">Quick check</span>
+      </div>
+      <p>
+        Answer these facts. You do <strong>not</strong> need to be fast yet – just try your best and show neat working if you need it.
+      </p>
+
+      <div class="fact-grid">
+        <div class="fact-cell">
+          <span class="question">6 + 7 =</span>
+          <span class="answer-line"></span>
+        </div>
+        <div class="fact-cell">
+          <span class="question">8 + 5 =</span>
+          <span class="answer-line"></span>
+        </div>
+        <div class="fact-cell">
+          <span class="question">9 + 6 =</span>
+          <span class="answer-line"></span>
+        </div>
+        <div class="fact-cell">
+          <span class="question">15 − 7 =</span>
+          <span class="answer-line"></span>
+        </div>
+
+        <div class="fact-cell">
+          <span class="question">14 − 9 =</span>
+          <span class="answer-line"></span>
+        </div>
+        <div class="fact-cell">
+          <span class="question">3 × 2 =</span>
+          <span class="answer-line"></span>
+        </div>
+        <div class="fact-cell">
+          <span class="question">5 × 4 =</span>
+          <span class="answer-line"></span>
+        </div>
+        <div class="fact-cell">
+          <span class="question">10 × 3 =</span>
+          <span class="answer-line"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 3: Vocabulary / Key Ideas -->
+    <section class="section section-vocab">
+      <div class="section-heading">
+        <span>Vocabulary / Key ideas</span>
+        <span class="section-tag">Language</span>
+      </div>
+      <ul>
+        <li>
+          <strong>Strategy</strong> – a <em>smart way</em> to work out the answer (not just counting by 1s).
+        </li>
+        <li>
+          <strong>Double</strong> – adding the same number to itself, like 6 + 6.
+        </li>
+        <li>
+          <strong>Near double</strong> – a fact close to a double, like 6 + 7 (double 6 and add 1).
+        </li>
+        <li>
+          <strong>Make 10</strong> – using pairs that make 10 (3 + 7, 4 + 6) to help with bigger facts.
+        </li>
+      </ul>
+    </section>
+
+    <!-- Section 4: Teaching Input – Strategy focus -->
+    <section class="section section-teaching">
+      <div class="section-heading">
+        <span>Teaching input – What you need to know</span>
+        <span class="section-tag">Read &amp; notice</span>
+      </div>
+      <p>
+        Fluent number thinkers do not count every time – they use patterns and known facts. Before trying to be fast,
+        we focus on choosing a <strong>good strategy</strong>. Speed comes later with practice.
+      </p>
+
+      <p class="meta-label">Example strategies:</p>
+      <ul>
+        <li><strong>Doubles &amp; near doubles:</strong> 7 + 7 = 14, so 7 + 8 = 15.</li>
+        <li><strong>Make 10:</strong> 9 + 6 → 9 + 1 + 5 = 10 + 5 = 15.</li>
+        <li><strong>Think addition for subtraction:</strong> 14 − 9 is “9 and how many more make 14?”</li>
+        <li><strong>Times tables patterns:</strong> 5× facts end in 0 or 5; 10× just add a zero.</li>
+      </ul>
+
+      <div class="answer-box big">
+        Write one strategy you already like using, and one you want to get better at.
+      </div>
+    </section>
+
+    <!-- Section 5: Worked Example – Make 10 & near doubles -->
+    <section class="section section-worked">
+      <div class="section-heading">
+        <span>Worked example</span>
+        <span class="section-tag">Model</span>
+      </div>
+
+      <p class="meta-label">Example question:</p>
+      <p>
+        <strong>Work out 9 + 7 using a “make 10” strategy, not fingers.</strong>
+      </p>
+
+      <p class="meta-label">Step-by-step solution:</p>
+      <ol>
+        <li>Start with 9. You know 9 needs <strong>1</strong> more to make 10.</li>
+        <li>Take 1 from the 7: split 7 into 1 and 6.</li>
+        <li>Now do 9 + 1 = 10, then 10 + 6 = 16.</li>
+      </ol>
+
+      <p class="meta-label">Why this works:</p>
+      <p>
+        It is easier to jump to 10 and then add what is left. 10 is a friendly number, so this strategy makes harder
+        facts feel simpler.
+      </p>
+
+      <div class="answer-box big">
+        Use the same idea to explain how you could solve 8 + 7 without counting by 1s.
+      </div>
+    </section>
+
+    <!-- Section 6: Guided Practice – Strategy first, then (optional) timing -->
+    <section class="section section-guided">
+      <div class="section-heading">
+        <span>Guided practice (We do)</span>
+        <span class="section-tag">Together</span>
+      </div>
+      <p>
+        Choose a <strong>strategy</strong> for each question (doubles, near doubles, make 10, or “how much more?”).
+        You can talk about your thinking with your tutor.
+      </p>
+
+      <ol class="questions">
+        <li>
+          Use a <strong>near double</strong> to solve 7 + 8.
+          <div class="answer-box big"></div>
+        </li>
+        <li>
+          Use <strong>make 10</strong> to solve 8 + 5.
+          <div class="answer-box big"></div>
+        </li>
+        <li>
+          Think “how much more?” to solve 13 − 9.
+          <div class="answer-box big"></div>
+        </li>
+        <li>
+          5 × 6 – use a pattern from the 5 times table to solve this without skip-counting by 1s.
+          <div class="answer-box big"></div>
+        </li>
+      </ol>
+
+      <p class="meta-label">Adjustments:</p>
+      <p>
+        <strong>Support:</strong> Use tens frames, number lines or counters to <em>see</em> the make-10 or near-double pattern.
+      </p>
+      <p>
+        <strong>Challenge:</strong> After solving, explain which strategy was quickest and why.
+      </p>
+    </section>
+
+    <!-- Section 7: Independent Practice – Calm fluency reps -->
+    <section class="section section-independent">
+      <div class="section-heading">
+        <span>Independent practice (You do)</span>
+        <span class="section-tag">Your turn</span>
+      </div>
+      <p>
+        Try to answer each fact using a <strong>strategy</strong> you choose. If you want, you can time how long the
+        whole section takes, then try again another day to beat your time calmly.
+      </p>
+
+      <p class="meta-label">a) Addition with make 10 / near doubles</p>
+      <div class="fact-grid">
+        <div class="fact-cell">
+          <span class="question">9 + 5</span>
+          <span class="answer-line"></span>
+        </div>
+        <div class="fact-cell">
+          <span class="question">7 + 7</span>
+          <span class="answer-line"></span>
+        </div>
+        <div class="fact-cell">
+          <span class="question">8 + 6</span>
+          <span class="answer-line"></span>
+        </div>
+        <div class="fact-cell">
+          <span class="question">6 + 9</span>
+          <span class="answer-line"></span>
+        </div>
+
+        <div class="fact-cell">
+          <span class="question">4 + 8</span>
+          <span class="answer-line"></span>
+        </div>
+        <div class="fact-cell">
+          <span class="question">3 + 9</span>
+          <span class="answer-line"></span>
+        </div>
+        <div class="fact-cell">
+          <span class="question">5 + 7</span>
+          <span class="answer-line"></span>
+        </div>
+        <div class="fact-cell">
+          <span class="question">6 + 6</span>
+          <span class="answer-line"></span>
+        </div>
+      </div>
+
+      <p class="meta-label">b) Subtraction as “how much more?”</p>
+      <ol class="questions">
+        <li>
+          15 − 8 =
+          <div class="answer-box"></div>
+        </li>
+        <li>
+          17 − 9 =
+          <div class="answer-box"></div>
+        </li>
+        <li>
+          14 − 6 =
+          <div class="answer-box"></div>
+        </li>
+      </ol>
+
+      <p class="meta-label">c) 2, 5 and 10 times tables</p>
+      <div class="fact-grid">
+        <div class="fact-cell">
+          <span class="question">2 × 7</span>
+          <span class="answer-line"></span>
+        </div>
+        <div class="fact-cell">
+          <span class="question">5 × 3</span>
+          <span class="answer-line"></span>
+        </div>
+        <div class="fact-cell">
+          <span class="question">10 × 4</span>
+          <span class="answer-line"></span>
+        </div>
+        <div class="fact-cell">
+          <span class="question">5 × 8</span>
+          <span class="answer-line"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 8: Extension -->
+    <section class="section section-extension">
+      <div class="section-heading">
+        <span>Extension / Enrichment (Optional)</span>
+        <span class="section-tag">Stretch</span>
+      </div>
+      <p>
+        Choose <strong>3 of your favourite facts</strong> from this page and:
+      </p>
+      <ol>
+        <li>Write the fact (for example, 8 + 6 = 14).</li>
+        <li>Write which strategy you used.</li>
+        <li>Explain in a sentence how your strategy works.</li>
+      </ol>
+      <div class="answer-box xbig"></div>
+    </section>
+
+    <!-- Section 9: Reflection -->
+    <section class="section section-reflection">
+      <div class="section-heading">
+        <span>Reflection</span>
+        <span class="section-tag">Check-in</span>
+      </div>
+
+      <h3>Years 3–4</h3>
+      <p>What did I do well today?</p>
+      <div class="answer-box"></div>
+      <p>What strategy helped me answer more quickly?</p>
+      <div class="answer-box"></div>
+      <p>What is one strategy I want to keep practising?</p>
+      <div class="answer-box"></div>
+    </section>
+
+    <!-- Section 10: Materials -->
+    <section class="section section-materials">
+      <div class="section-heading">
+        <span>Materials (if needed)</span>
+        <span class="section-tag">Set up</span>
+      </div>
+      <ul>
+        <li>Number line or hundreds chart (for support)</li>
+        <li>Tens frames, counters or blocks (for make-10 visualising)</li>
+        <li>Timer or watch (optional, for calm fluency timing)</li>
+        <li>Pencil and scrap paper for extra working out</li>
+      </ul>
+    </section>
+  </div>
+
+  <!-- ===================== PAGE 2: ANSWER KEY ===================== -->
+  <div class="page answer-page">
+    <h1>Answer key — For parents &amp; tutors</h1>
+
+    <div class="answer-section">
+      <h2>Warm-up answers</h2>
+      <ol>
+        <li>6 + 7 = 13</li>
+        <li>8 + 5 = 13</li>
+        <li>9 + 6 = 15</li>
+        <li>15 − 7 = 8</li>
+        <li>14 − 9 = 5</li>
+        <li>3 × 2 = 6</li>
+        <li>5 × 4 = 20</li>
+        <li>10 × 3 = 30</li>
+      </ol>
+    </div>
+
+    <div class="answer-section">
+      <h2>Guided practice answers</h2>
+      <ol>
+        <li>7 + 8 = 15 (near double of 7 + 7 or 8 + 8)</li>
+        <li>8 + 5 = 13 (8 + 2 + 3 = 10 + 3)</li>
+        <li>13 − 9 = 4 (9 and 4 make 13)</li>
+        <li>5 × 6 = 30</li>
+      </ol>
+    </div>
+
+    <div class="answer-section">
+      <h2>Independent practice answers</h2>
+      <h3>a) Addition</h3>
+      <ol>
+        <li>9 + 5 = 14</li>
+        <li>7 + 7 = 14</li>
+        <li>8 + 6 = 14</li>
+        <li>6 + 9 = 15</li>
+        <li>4 + 8 = 12</li>
+        <li>3 + 9 = 12</li>
+        <li>5 + 7 = 12</li>
+        <li>6 + 6 = 12</li>
+      </ol>
+
+      <h3>b) Subtraction</h3>
+      <ol start="9">
+        <li>15 − 8 = 7</li>
+        <li>17 − 9 = 8</li>
+        <li>14 − 6 = 8</li>
+      </ol>
+
+      <h3>c) 2, 5 and 10 times tables</h3>
+      <ol start="12">
+        <li>2 × 7 = 14</li>
+        <li>5 × 3 = 15</li>
+        <li>10 × 4 = 40</li>
+        <li>5 × 8 = 40</li>
+      </ol>
+    </div>
+
+    <div class="answer-section">
+      <h2>Notes for parents &amp; tutors</h2>
+      <p>
+        This worksheet is designed for a student who has <strong>solid accuracy</strong> but needs support with
+        <strong>fluency</strong>. The focus is on strategy-based thinking before speed:
+      </p>
+      <ul>
+        <li>Encourage the child to <em>say</em> their strategy out loud (“I made 10 then added the rest”).</li>
+        <li>Only add gentle timing once strategies feel secure and calm.</li>
+        <li>Repeat the same worksheet on a different day to notice growing confidence and fluency.</li>
+      </ul>
+    </div>
+  </div>
+</body>
+</html>

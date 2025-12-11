@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>{{WORKSHEET_TITLE}} – Studyroom Worksheet</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <style>
+    /* ========== STUDYROOM BRAND TOKENS ========== */
+    :root {
+      --slate-blue: #456071;
+      --deep-slate: #374f5e;
+      --sage: #82977e;
+      --soft-green-blue: #d6e5e3;
+      --off-white: #f8f8ff;
+
+      --font-heading: system-ui, -apple-system, "Segoe UI", sans-serif;
+      --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+
+    /* ========== GLOBAL / PAGE SETUP ========== */
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      background: #e5eaee;
+      color: var(--deep-slate);
+      font-family: var(--font-body);
+      font-size: 12pt;
+    }
+
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 10mm auto;
+      padding: 15mm 18mm;
+      background: var(--off-white);
+      box-shadow: 0 0 8px rgba(0, 0, 0, 0.15);
+      display: flex;
+      flex-direction: column;
+      gap: 12px; /* a bit more vertical space between sections */
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0 0 6px;
+      font-family: var(--font-heading);
+      color: var(--slate-blue);
+    }
+
+    h1 {
+      font-size: 18pt;
+    }
+
+    h2 {
+      font-size: 14pt;
+    }
+
+    h3 {
+      font-size: 12pt;
+    }
+
+    /* more breathing room between text */
+    p {
+      margin: 4px 0 10px;
+      line-height: 1.45;
+    }
+
+    .small {
+      font-size: 10pt;
+    }
+
+    /* ========== LAYOUT HELPERS ========== */
+    .row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .row.space-between {
+      justify-content: space-between;
+    }
+
+    .col {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .grow {
+      flex: 1;
+    }
+
+    /* ========== HEADER AREA ========== */
+    .header-block {
+      border-bottom: 2px solid var(--soft-green-blue);
+      padding-bottom: 10px;
+      margin-bottom: 10px;
+    }
+
+    .brand-block {
+      font-size: 10pt;
+      color: var(--deep-slate);
+    }
+
+    .brand-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: #ffffff;
+      border: 1px solid var(--soft-green-blue);
+    }
+
+    .brand-name {
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--slate-blue);
+      font-size: 9pt;
+    }
+
+    .tagline {
+      font-size: 9pt;
+      color: var(--deep-slate);
+    }
+
+    .title-box {
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 10pt;
+      background: #ffffff;
+      min-width: 90mm;
+      border: 1px solid #d7e0e6;
+    }
+
+    .title-box label {
+      font-weight: 600;
+      display: inline-block;
+      min-width: 27mm;
+      color: var(--deep-slate);
+    }
+
+    .title-main {
+      font-weight: 700;
+      font-size: 12pt;
+      color: var(--slate-blue);
+      margin-bottom: 6px;
+    }
+
+    .meta-row {
+      margin-top: 3px;
+    }
+
+    /* ========== SECTION STYLING ========== */
+    .section {
+      border-radius: 10px;
+      padding: 10px 12px; /* more padding inside sections */
+      margin-top: 10px;
+      background: #ffffff;
+      border: 1px solid #dde3e8;
+    }
+
+    .section-heading {
+      font-weight: 700;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      color: var(--slate-blue);
+      font-size: 11pt;
+      text-transform: none;
+    }
+
+    .section-tag {
+      font-size: 9pt;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: var(--soft-green-blue);
+      color: var(--deep-slate);
+    }
+
+    /* Key sections with soft background */
+    .section-learning {
+      background: var(--soft-green-blue);
+      border: 1px solid var(--sage);
+    }
+
+    .section-warmup,
+    .section-guided,
+    .section-reflection,
+    .section-materials {
+      border: 1px solid #d7e0e6;
+      background: #ffffff;
+    }
+
+    .section-vocab,
+    .section-worked {
+      border: 1px solid var(--soft-green-blue);
+      background: #ffffff;
+    }
+
+    .section-teaching,
+    .section-independent,
+    .section-extension {
+      border: 1px solid #dde3e8;
+      background: #ffffff;
+    }
+
+    /* Lists & questions */
+    ol,
+    ul {
+      margin: 0 0 8px 20px;
+      padding: 0;
+    }
+
+    .questions li {
+      margin-bottom: 10px; /* more space between questions */
+    }
+
+    .line-space {
+      display: block;
+      border-bottom: 1px solid #cfd6dd;
+      margin: 6px 0 10px;
+      height: 16px; /* slightly larger writing line */
+    }
+
+    .reflection-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+      font-size: 14pt;
+    }
+
+    .face {
+      text-align: center;
+      border: 1px solid var(--soft-green-blue);
+      border-radius: 6px;
+      padding: 4px;
+      background: #ffffff;
+    }
+
+    .meta-label {
+      font-weight: 600;
+      margin-top: 4px;
+    }
+
+    /* ---------- ANSWER BOXES FOR STUDENT WRITING ---------- */
+    .answer-box {
+      border: 1px solid #cfd6dd;
+      border-radius: 6px;
+      background: #ffffff;
+      min-height: 55px;      /* default space */
+      margin-top: 6px;
+      margin-bottom: 10px;
+      padding: 6px 8px;
+    }
+
+    .answer-box.big {
+      min-height: 90px;      /* for longer working / sentences */
+    }
+
+    .answer-box.xbig {
+      min-height: 130px;     /* for worded questions or explanations */
+    }
+
+    /* ========== ANSWER KEY PAGE ========== */
+    .answer-page h1 {
+      text-align: left;
+      font-size: 16pt;
+    }
+
+    .answer-section {
+      margin-bottom: 12px;
+    }
+
+    .answer-section h2 {
+      font-size: 13pt;
+      margin-bottom: 6px;
+    }
+
+    /* ========== PRINT STYLES ========== */
+    @media print {
+      body {
+        background: #ffffff;
+      }
+
+      .page {
+        margin: 0;
+        width: auto;
+        min-height: auto;
+        box-shadow: none;
+        page-break-after: always;
+      }
+
+      .no-print {
+        display: none !important;
+      }
+
+      @page {
+        size: A4;
+        margin: 12mm;
+      }
+    }
+
+    /* ========== SCREEN-ONLY HELPER ========== */
+    .note-screen {
+      font-size: 9pt;
+      color: #777;
+      margin-bottom: 4px;
+    }
+  </style>
+</head>
+<body>
+  <!-- ===================== PAGE 1: MAIN WORKSHEET ===================== -->
+  <div class="page worksheet-page">
+    <!-- Header & Branding -->
+    <header class="header-block">
+      <div class="row space-between">
+        <div class="brand-block">
+          <div class="brand-pill">
+            <span class="brand-name">STUDYROOM AUSTRALIA</span>
+            <span class="tagline">Calm, structured practice</span>
+          </div>
+          <div class="small" style="margin-top:4px;">
+            Personalised tutoring &amp; learning support
+          </div>
+        </div>
+
+        <div class="title-box">
+          <div class="title-main">
+            Year 7–8 Algebra Diagnostic (60-minute): Expressions, Equations &amp; Linear Relationships
+          </div>
+          <div class="meta-row"><label>Subject:</label> Mathematics</div>
+          <div class="meta-row">
+            <label>Year level:</label> Year 7–8 bridge
+          </div>
+          <div class="meta-row">
+            <label>ACARA codes:</label>
+            AC9M7A02, AC9M7A03, AC9M7A04, AC9M8A02 (expressions, equations, linear relations)
+          </div>
+          <div class="meta-row">
+            <label>Skill focus:</label>
+            Use variables, simplify &amp; expand expressions, solve 1–2-step equations, and describe linear patterns from tables &amp; stories
+          </div>
+          <div class="meta-row">
+            <label>Support &amp; challenge:</label>
+            Bar models &amp; trial tables | Graphing, generalising &amp; explaining structure
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <p class="note-screen no-print">
+      Print via your browser’s print dialog (Ctrl/Cmd + P). This worksheet is designed as a calm diagnostic for Years 7–8.
+    </p>
+
+    <!-- Section 1: Learning Intention & Success Criteria -->
+    <section class="section section-learning">
+      <div class="section-heading">
+        <span>Learning intention &amp; success criteria</span>
+        <span class="section-tag">Start here</span>
+      </div>
+
+      <h3>Learning intention</h3>
+      <p>
+        Today I am learning to
+        <strong>
+          represent unknowns with variables, simplify and expand algebraic expressions, and solve linear equations from worded situations
+        </strong>.
+      </p>
+
+      <h3>Success criteria</h3>
+      <p>I can:</p>
+      <ul>
+        <li>translate a short story, pattern or table into an expression or equation,</li>
+        <li>simplify and expand expressions using like terms and brackets,</li>
+        <li>solve and check 1–2 step linear equations, explaining what the solution means.</li>
+      </ul>
+
+      <div class="answer-box">
+        Tutor note: Invite the student to rewrite the learning intention in their own words.
+      </div>
+    </section>
+
+    <!-- Section 2: Warm-Up -->
+    <section class="section section-warmup">
+      <div class="section-heading">
+        <span>Warm-up / Prior knowledge</span>
+        <span class="section-tag">Quick check</span>
+      </div>
+      <p>Complete the questions below to get your brain ready.</p>
+      <ol class="questions">
+        <li>
+          Evaluate <strong>2n + 5</strong> when <strong>n = 7</strong>.
+          <div class="answer-box"></div>
+        </li>
+        <li>
+          Simplify: <strong>5x + 3x − 4</strong>.
+          <div class="answer-box"></div>
+        </li>
+        <li>
+          Expand: <strong>3(4y − 2)</strong>.
+          <div class="answer-box"></div>
+        </li>
+        <li>
+          Write an expression for: “<em>ten minus four times a number p</em>”.
+          <div class="answer-box"></div>
+        </li>
+      </ol>
+    </section>
+
+    <!-- Section 3: Vocabulary / Key Ideas -->
+    <section class="section section-vocab">
+      <div class="section-heading">
+        <span>Vocabulary / Key ideas</span>
+        <span class="section-tag">Language</span>
+      </div>
+      <ul>
+        <li>
+          <strong>Variable</strong> – a letter that stands for an unknown number (for example, <em>x</em> or <em>n</em>).
+        </li>
+        <li>
+          <strong>Equation</strong> – a number sentence with an equals sign that is true for some value(s) of the variable.
+        </li>
+        <li>
+          <strong>Solution</strong> – the value of the variable that makes the equation true.
+        </li>
+        <li>
+          <strong>Linear relationship</strong> – a pattern that increases or decreases by the same amount each step (straight line on a graph).
+        </li>
+      </ul>
+    </section>
+
+    <!-- Section 4: Teaching Input -->
+    <section class="section section-teaching">
+      <div class="section-heading">
+        <span>Teaching input – What you need to know</span>
+        <span class="section-tag">Read &amp; notice</span>
+      </div>
+      <p>
+        We can use algebra to model real-life situations. We choose a variable for the unknown, write an expression or
+        equation, then use <strong>inverse operations</strong> to solve and check our work.
+      </p>
+      <p class="meta-label">Steps for solving a simple linear equation:</p>
+      <ol>
+        <li>
+          <strong>Represent:</strong> Choose a variable for the unknown and write an equation from the story or pattern.
+        </li>
+        <li>
+          <strong>Solve:</strong> Use inverse operations to undo the equation step-by-step on both sides.
+        </li>
+        <li>
+          <strong>Check &amp; interpret:</strong> Substitute back in, check the equation is true, then explain what the answer means in the story.
+        </li>
+      </ol>
+      <div class="answer-box">
+        Write your own one-sentence story and matching equation below (include a joining fee or starting amount).
+      </div>
+    </section>
+
+    <!-- Section 5: Worked Example -->
+    <section class="section section-worked">
+      <div class="section-heading">
+        <span>Worked example</span>
+        <span class="section-tag">Model</span>
+      </div>
+
+      <p class="meta-label">Example question:</p>
+      <p>
+        <strong>
+          A music app charges a $6 sign-up fee plus $4 per month. Noah paid $38 in total. For how many months did he have the app?
+        </strong>
+      </p>
+
+      <p class="meta-label">Step-by-step solution:</p>
+      <ol>
+        <li>
+          Let <em>m</em> be the number of months. Total cost: <strong>4m + 6 = 38</strong>.
+        </li>
+        <li>
+          Subtract 6 from both sides: <strong>4m = 32</strong>. Divide both sides by 4: <strong>m = 8</strong>.
+        </li>
+        <li>
+          Check: <strong>4 &times; 8 + 6 = 32 + 6 = 38</strong>. This matches the total. So Noah had the app for
+          <strong>8 months</strong>.
+        </li>
+      </ol>
+
+      <p class="meta-label">Why this works:</p>
+      <p>
+        We represent a constant rate (<em>$4 per month</em>) with a coefficient and the sign-up fee as a constant. Using inverse
+        operations keeps both sides of the equation balanced so the solution is still true.
+      </p>
+
+      <div class="answer-box">
+        In your own words, explain why we subtract 6 before dividing by 4.
+      </div>
+    </section>
+
+    <!-- Section 6: Guided Practice -->
+    <section class="section section-guided">
+      <div class="section-heading">
+        <span>Guided practice (We do)</span>
+        <span class="section-tag">Together</span>
+      </div>
+      <p>Use the worked example to help you answer these questions.</p>
+      <ol class="questions">
+        <li>
+          A taxi charges a $5 flagfall plus $3 per kilometre. The fare was $26.
+          How many kilometres did the taxi travel? Let <em>k</em> be kilometres.
+          <div class="answer-box big"></div>
+        </li>
+        <li>
+          A sports club charges a $12 joining fee plus $7 per visit. Mia paid $54 in total.
+          How many visits did she make? Let <em>v</em> be visits.
+          <div class="answer-box big"></div>
+        </li>
+        <li>
+          You start with $10 on a travel card and lose $2 for each bus trip. After some trips you have $&nbsp;2 left.
+          How many trips did you take? Let <em>t</em> be trips.
+          <div class="answer-box big"></div>
+        </li>
+      </ol>
+
+      <p class="meta-label">Adjustments:</p>
+      <p>
+        <strong>Support:</strong> For each question, make a small trial table (input &rarr; output) to explore values before writing the equation.
+      </p>
+      <p>
+        <strong>Challenge:</strong> For Q1 and Q2, write the rule as an equation and sketch a quick graph showing the intercept and rate of change.
+      </p>
+    </section>
+
+    <!-- Section 7: Independent Practice -->
+    <section class="section section-independent">
+      <div class="section-heading">
+        <span>Independent practice (You do)</span>
+        <span class="section-tag">Your turn</span>
+      </div>
+      <p>Now try these on your own. Use the example and your notes to help.</p>
+      <ol class="questions">
+        <li>
+          Simplify: <strong>6a + 2a − 9</strong>.
+          <div class="answer-box big"></div>
+        </li>
+        <li>
+          Expand: <strong>4(3b − 1)</strong>.
+          <div class="answer-box big"></div>
+        </li>
+        <li>
+          Solve: <strong>2x + 7 = 19</strong>.
+          <div class="answer-box big"></div>
+        </li>
+        <li>
+          Solve: <strong>5y − 3 = 2</strong>.
+          <div class="answer-box big"></div>
+        </li>
+        <li>
+          Solve: <strong>t/4 + 6 = 11</strong>.
+          <div class="answer-box big"></div>
+        </li>
+        <li>
+          <strong>Cost story:</strong> A game costs $15 plus $4 per sticker pack. You pay $47 in total.
+          How many sticker packs did you buy? Let <em>s</em> be the number of sticker packs.
+          <div class="answer-box xbig"></div>
+        </li>
+        <li>
+          <strong>Table &rarr; rule:</strong><br />
+          Items (<em>x</em>): 0, 1, 2, 3<br />
+          Total (<em>y</em>): −2, 1, 4, 7
+          <br /><br />
+          (a) What is the rule for <em>y</em> in terms of <em>x</em>?<br />
+          (b) Use your rule to find <em>y</em> when <em>x = 10</em>.
+          <div class="answer-box xbig"></div>
+        </li>
+        <li>
+          <strong>Perimeter story:</strong> A rectangle has width 5&nbsp;cm and length
+          <strong>(3m + 2)</strong> cm. Its perimeter is 26&nbsp;cm.
+          Find the value of <em>m</em>.
+          <div class="answer-box xbig"></div>
+        </li>
+      </ol>
+    </section>
+
+    <!-- Section 8: Extension -->
+    <section class="section section-extension">
+      <div class="section-heading">
+        <span>Extension / Enrichment (Optional)</span>
+        <span class="section-tag">Stretch</span>
+      </div>
+      <p>
+        Create your own linear story involving a starting amount and a “per” amount (for example, streaming, rides,
+        savings, or fundraising).
+      </p>
+      <ol>
+        <li>Write a short story for the situation.</li>
+        <li>Write an equation using a variable to represent the unknown.</li>
+        <li>Choose a total and solve your equation.</li>
+        <li>Explain what the solution means in your story and sketch a quick graph of your rule.</li>
+      </ol>
+    </section>
+
+    <!-- Section 9: Reflection -->
+    <section class="section section-reflection">
+      <div class="section-heading">
+        <span>Reflection</span>
+        <span class="section-tag">Check-in</span>
+      </div>
+
+      <h3>Prep–Year 2</h3>
+      <p>Circle how you feel about today’s work:</p>
+      <div class="reflection-grid">
+        <div class="face">😊</div>
+        <div class="face">😐</div>
+        <div class="face">🙁</div>
+      </div>
+      <p>Today I learned…</p>
+      <span class="line-space"></span>
+
+      <h3>Years 3–12</h3>
+      <p>What did I do well?</p>
+      <div class="answer-box"></div>
+      <p>What was challenging?</p>
+      <div class="answer-box"></div>
+      <p>What strategy helped me succeed?</p>
+      <div class="answer-box"></div>
+    </section>
+
+    <!-- Section 10: Materials -->
+    <section class="section section-materials">
+      <div class="section-heading">
+        <span>Materials (if needed)</span>
+        <span class="section-tag">Set up</span>
+      </div>
+      <ul>
+        <li>Grid paper and ruler (for tables and quick graphs)</li>
+        <li>Coloured pencils or highlighters (to mark operations and like terms)</li>
+        <li>Calculator (optional, for checking)</li>
+        <li>Scrap paper for bar models or working out</li>
+      </ul>
+    </section>
+  </div>
+
+  <!-- ===================== PAGE 2: ANSWER KEY ===================== -->
+  <div class="page answer-page">
+    <h1>Answer key — For parents &amp; tutors</h1>
+
+    <div class="answer-section">
+      <h2>Warm-up answers</h2>
+      <ol>
+        <li>2n + 5 when n = 7: 2 &times; 7 + 5 = 14 + 5 = <strong>19</strong>.</li>
+        <li>5x + 3x − 4 = <strong>8x − 4</strong>.</li>
+        <li>3(4y − 2) = <strong>12y − 6</strong>.</li>
+        <li>“ten minus four times a number p”: <strong>10 − 4p</strong>.</li>
+      </ol>
+    </div>
+
+    <div class="answer-section">
+      <h2>Guided practice answers</h2>
+      <ol>
+        <li>
+          Taxi: 5 + 3k = 26 ⇒ 3k = 21 ⇒ k = <strong>7 km</strong>.
+        </li>
+        <li>
+          Sports club: 12 + 7v = 54 ⇒ 7v = 42 ⇒ v = <strong>6 visits</strong>.
+        </li>
+        <li>
+          Travel card: 10 − 2t = 2 ⇒ −2t = −8 ⇒ t = <strong>4 trips</strong>.
+        </li>
+      </ol>
+    </div>
+
+    <div class="answer-section">
+      <h2>Independent practice answers</h2>
+      <ol>
+        <li>
+          6a + 2a − 9 = <strong>8a − 9</strong>.
+        </li>
+        <li>
+          4(3b − 1) = <strong>12b − 4</strong>.
+        </li>
+        <li>
+          2x + 7 = 19 ⇒ 2x = 12 ⇒ x = <strong>6</strong>.
+        </li>
+        <li>
+          5y − 3 = 2 ⇒ 5y = 5 ⇒ y = <strong>1</strong>.
+        </li>
+        <li>
+          t/4 + 6 = 11 ⇒ t/4 = 5 ⇒ t = <strong>20</strong>.
+        </li>
+        <li>
+          15 + 4s = 47 ⇒ 4s = 32 ⇒ s = <strong>8 sticker packs</strong>.
+        </li>
+        <li>
+          Table: difference in y is +3 each time, so y = 3x − 2.<br />
+          (a) Rule: <strong>y = 3x − 2</strong>.<br />
+          (b) When x = 10, y = 3 &times; 10 − 2 = 30 − 2 = <strong>28</strong>.
+        </li>
+        <li>
+          Perimeter P = 2L + 2W.<br />
+          L = (3m + 2), W = 5, P = 26.<br />
+          2(3m + 2) + 2(5) = 26<br />
+          6m + 4 + 10 = 26 ⇒ 6m + 14 = 26 ⇒ 6m = 12 ⇒ m = <strong>2</strong>.<br />
+          (Length is then 3 &times; 2 + 2 = 8 cm.)
+        </li>
+      </ol>
+    </div>
+
+    <div class="answer-section">
+      <h2>Extension model response (sample)</h2>
+      <p>
+        Example: “A rideshare app charges a $5 booking fee plus $3 per kilometre.” Rule: <em>C = 3k + 5</em>.<br />
+        If the total cost is $26, then 3k + 5 = 26 ⇒ 3k = 21 ⇒ k = 7 km.<br />
+        On a graph, the y-intercept (5) shows the booking fee and the slope (3) shows the cost per kilometre.
+      </p>
+    </div>
+  </div>
+</body>
+</html>

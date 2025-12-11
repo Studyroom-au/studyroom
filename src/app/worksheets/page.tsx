@@ -70,6 +70,23 @@ const sampleDocs = [
     label: "Kangaroo Grade 4 reading & maths activity (sample PDF)",
     href: "/docs/kangaroo-grade4-reading-maths.docx",
   },
+    {
+    label: "Grade 7 algebra worksheet",
+    href: "/docs/grade7-algebra-worksheet.html",
+  },
+  {
+    label: "Grade 3–4 number fluency worksheet",
+    href: "/docs/grade3-4-number-fluency.html",
+  },
+  {
+    label: "Grade 3 reading fluency worksheet",
+    href: "/docs/grade3-reading-fluency.html",
+  },
+  {
+    label: "Grade 3 literacy fluency – Christmas theme",
+    href: "/docs/grade3-literacy-fluency-christmas.html",
+  },
+
 ];
 
 export default function WorksheetsPage() {

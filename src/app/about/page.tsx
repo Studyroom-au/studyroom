@@ -50,6 +50,7 @@ export default function AboutPage() {
               alt="Lily standing in front of colourful artwork"
               fill
               className="object-cover"
+              style={{ color: "transparent" }}
             />
           </div>
         </div>
@@ -151,6 +152,7 @@ export default function AboutPage() {
               alt="Lily receiving academic award"
               fill
               className="object-cover"
+              style={{ color: "transparent" }}
             />
           </div>
         </div>
@@ -168,6 +170,7 @@ export default function AboutPage() {
               alt="Portrait of Lily Smith"
               fill
               className="object-cover"
+              style={{ color: "transparent" }}
             />
           </div>
 

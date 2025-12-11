@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Year 3–4 Reading Fluency – Nature & Animals – Studyroom Worksheet</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <style>
+    /* ========== STUDYROOM BRAND TOKENS ========== */
+    :root {
+      --slate-blue: #456071;
+      --deep-slate: #374f5e;
+      --sage: #82977e;
+      --soft-green-blue: #d6e5e3;
+      --off-white: #f8f8ff;
+
+      --font-heading: system-ui, -apple-system, "Segoe UI", sans-serif;
+      --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+
+    /* ========== GLOBAL / PAGE SETUP ========== */
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      background: #e5eaee;
+      color: var(--deep-slate);
+      font-family: var(--font-body);
+      font-size: 12pt;
+    }
+
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 10mm auto;
+      padding: 15mm 18mm;
+      background: var(--off-white);
+      box-shadow: 0 0 8px rgba(0, 0, 0, 0.15);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0 0 6px;
+      font-family: var(--font-heading);
+      color: var(--slate-blue);
+    }
+
+    h1 {
+      font-size: 18pt;
+    }
+
+    h2 {
+      font-size: 14pt;
+    }
+
+    h3 {
+      font-size: 12pt;
+    }
+
+    p {
+      margin: 4px 0 10px;
+      line-height: 1.45;
+    }
+
+    .small {
+      font-size: 10pt;
+    }
+
+    /* ========== LAYOUT HELPERS ========== */
+    .row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .row.space-between {
+      justify-content: space-between;
+    }
+
+    .col {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .grow {
+      flex: 1;
+    }
+
+    /* ========== HEADER AREA ========== */
+    .header-block {
+      border-bottom: 2px solid var(--soft-green-blue);
+      padding-bottom: 10px;
+      margin-bottom: 10px;
+    }
+
+    .brand-block {
+      font-size: 10pt;
+      color: var(--deep-slate);
+    }
+
+    .brand-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: #ffffff;
+      border: 1px solid var(--soft-green-blue);
+    }
+
+    .brand-name {
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--slate-blue);
+      font-size: 9pt;
+    }
+
+    .tagline {
+      font-size: 9pt;
+      color: var(--deep-slate);
+    }
+
+    .title-box {
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 10pt;
+      background: #ffffff;
+      min-width: 90mm;
+      border: 1px solid #d7e0e6;
+    }
+
+    .title-box label {
+      font-weight: 600;
+      display: inline-block;
+      min-width: 27mm;
+      color: var(--deep-slate);
+    }
+
+    .title-main {
+      font-weight: 700;
+      font-size: 12pt;
+      color: var(--slate-blue);
+      margin-bottom: 6px;
+    }
+
+    .meta-row {
+      margin-top: 3px;
+    }
+
+    /* ========== SECTION STYLING ========== */
+    .section {
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-top: 10px;
+      background: #ffffff;
+      border: 1px solid #dde3e8;
+      page-break-inside: avoid;
+    }
+
+    .section-heading {
+      font-weight: 700;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      color: var(--slate-blue);
+      font-size: 11pt;
+      text-transform: none;
+    }
+
+    .section-tag {
+      font-size: 9pt;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: var(--soft-green-blue);
+      color: var(--deep-slate);
+    }
+
+    .section-learning {
+      background: var(--soft-green-blue);
+      border: 1px solid var(--sage);
+    }
+
+    .section-warmup,
+    .section-guided,
+    .section-reflection,
+    .section-materials {
+      border: 1px solid #d7e0e6;
+      background: #ffffff;
+    }
+
+    .section-vocab,
+    .section-worked {
+      border: 1px solid var(--soft-green-blue);
+      background: #ffffff;
+    }
+
+    .section-teaching,
+    .section-independent,
+    .section-extension {
+      border: 1px solid #dde3e8;
+      background: #ffffff;
+    }
+
+    /* Lists & questions */
+    ol,
+    ul {
+      margin: 0 0 8px 20px;
+      padding: 0;
+    }
+
+    .questions li {
+      margin-bottom: 10px;
+    }
+
+    .line-space {
+      display: block;
+      border-bottom: 1px solid #cfd6dd;
+      margin: 6px 0 10px;
+      height: 16px;
+    }
+
+    .reflection-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+      font-size: 14pt;
+    }
+
+    .face {
+      text-align: center;
+      border: 1px solid var(--soft-green-blue);
+      border-radius: 6px;
+      padding: 4px;
+      background: #ffffff;
+    }
+
+    .meta-label {
+      font-weight: 600;
+      margin-top: 4px;
+    }
+
+    /* ---------- ANSWER BOXES FOR STUDENT WRITING ---------- */
+    .answer-box {
+      border: 1px solid #cfd6dd;
+      border-radius: 6px;
+      background: #ffffff;
+      min-height: 55px;
+      margin-top: 6px;
+      margin-bottom: 10px;
+      padding: 6px 8px;
+    }
+
+    .answer-box.big {
+      min-height: 90px;
+    }
+
+    .answer-box.xbig {
+      min-height: 130px;
+    }
+
+    /* Simple table styling for fluency tracking */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 6px;
+      margin-bottom: 10px;
+      font-size: 11pt;
+    }
+
+    th,
+    td {
+      border: 1px solid #cfd6dd;
+      padding: 4px 6px;
+      text-align: left;
+    }
+
+    th {
+      background: #eef3f6;
+      font-weight: 600;
+    }
+
+    /* ========== ANSWER KEY PAGE ========== */
+    .answer-page h1 {
+      text-align: left;
+      font-size: 16pt;
+    }
+
+    .answer-section {
+      margin-bottom: 12px;
+    }
+
+    .answer-section h2 {
+      font-size: 13pt;
+      margin-bottom: 6px;
+    }
+
+    /* ========== PRINT STYLES ========== */
+    @media print {
+      body {
+        background: #ffffff;
+      }
+
+      .page {
+        margin: 0;
+        width: auto;
+        min-height: auto;
+        box-shadow: none;
+        page-break-after: always;
+      }
+
+      .no-print {
+        display: none !important;
+      }
+
+      @page {
+        size: A4;
+        margin: 12mm;
+      }
+    }
+
+    /* ========== SCREEN-ONLY HELPER ========== */
+    .note-screen {
+      font-size: 9pt;
+      color: #777;
+      margin-bottom: 4px;
+    }
+  </style>
+</head>
+<body>
+  <!-- ===================== PAGE 1: INTRO + WARM-UP ===================== -->
+  <div class="page worksheet-page">
+    <header class="header-block">
+      <div class="row space-between">
+        <div class="brand-block">
+          <div class="brand-pill">
+            <span class="brand-name">STUDYROOM AUSTRALIA</span>
+            <span class="tagline">Calm, structured practice</span>
+          </div>
+          <div class="small" style="margin-top:4px;">
+            Personalised tutoring &amp; learning support
+          </div>
+        </div>
+
+        <div class="title-box">
+          <div class="title-main">
+            Year 3–4 Reading Fluency: Nature &amp; Animals
+          </div>
+          <div class="meta-row"><label>Subject:</label> English – Reading Fluency</div>
+          <div class="meta-row">
+            <label>Year level:</label> Year 3–4 bridge
+          </div>
+          <div class="meta-row">
+            <label>Focus:</label>
+            Smooth, accurate and expressive reading (not just speed)
+          </div>
+          <div class="meta-row">
+            <label>Support &amp; challenge:</label>
+            Repeated reading &amp; modelled phrasing | Longer passages &amp; expression
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <p class="note-screen no-print">
+      Print via your browser’s print dialog (Ctrl/Cmd + P). This worksheet supports repeated reading and gentle fluency growth.
+    </p>
+
+    <!-- Section 1: Learning Intention -->
+    <section class="section section-learning">
+      <div class="section-heading">
+        <span>Learning intention &amp; success criteria</span>
+        <span class="section-tag">Start here</span>
+      </div>
+
+      <h3>Learning intention</h3>
+      <p>
+        Today I am learning to
+        <strong>
+          read a short passage about nature and animals smoothly, with accurate words, steady pace and expression
+        </strong>.
+      </p>
+
+      <h3>Success criteria</h3>
+      <p>I can:</p>
+      <ul>
+        <li>read most words correctly on the first try,</li>
+        <li>keep my voice flowing in phrases instead of stopping every word,</li>
+        <li>use my voice to show punctuation and feeling (full stops, commas, questions).</li>
+      </ul>
+
+      <div class="answer-box">
+        In my own words, today I am learning to…
+      </div>
+    </section>
+
+    <!-- Section 2: Fluency Warm-Up -->
+    <section class="section section-warmup">
+      <div class="section-heading">
+        <span>Fluency warm-up</span>
+        <span class="section-tag">Words &amp; phrases</span>
+      </div>
+
+      <p><strong>1. Read the words</strong> (3 times). Try to be a little smoother each time.</p>
+      <p class="small">(Tutor/parent: tick and time if you’d like.)</p>
+
+      <ul>
+        <li>forest &nbsp;&nbsp; creek &nbsp;&nbsp; branches &nbsp;&nbsp; feather &nbsp;&nbsp; whiskers</li>
+        <li>rustle &nbsp;&nbsp; sunset &nbsp;&nbsp; shadows &nbsp;&nbsp; paws &nbsp;&nbsp; wings</li>
+      </ul>
+
+      <table>
+        <tr>
+          <th></th>
+          <th>Read 1</th>
+          <th>Read 2</th>
+          <th>Read 3</th>
+        </tr>
+        <tr>
+          <td>Time (optional)</td>
+          <td>______ s</td>
+          <td>______ s</td>
+          <td>______ s</td>
+        </tr>
+        <tr>
+          <td>How smooth?</td>
+          <td>🙂 / 😐 / 😴</td>
+          <td>🙂 / 😐 / 😴</td>
+          <td>🙂 / 😐 / 😴</td>
+        </tr>
+      </table>
+
+      <p><strong>2. Read the phrases</strong>. Slide your voice through the whole phrase.</p>
+      <ul>
+        <li>the soft rustle of leaves</li>
+        <li>a bird resting on a branch</li>
+        <li>tiny paws at the water’s edge</li>
+        <li>the creek shining in the sun</li>
+      </ul>
+
+      <div class="answer-box">
+        Circle how your reading felt today: 😊 smooth &nbsp;&nbsp; 😐 sometimes bumpy &nbsp;&nbsp; 🙁 very bumpy
+      </div>
+    </section>
+  </div>
+
+  <!-- ===================== PAGE 2: PASSAGE 1 ===================== -->
+  <div class="page worksheet-page">
+    <!-- Section: Passage 1 -->
+    <section class="section section-teaching">
+      <div class="section-heading">
+        <span>Fluency passage 1 – The creek behind the gum tree</span>
+        <span class="section-tag">Nature</span>
+      </div>
+
+      <p>
+        Read this passage aloud. Then read it again two more times. Try to keep your voice flowing, not too fast and not too slow.
+      </p>
+
+      <p>
+        Behind the old gum tree, a narrow creek slid quietly over the rocks. A tiny
+        grey bird watched from a low branch. The water sparkled as the morning
+        sun climbed higher in the sky. A blue dragonfly hovered just above the
+        surface, its wings shining like glass. Now and then, a leaf landed in the
+        water and floated gently past. The bird tilted its head and listened to the
+        soft splashes and rustling leaves. Everything around the creek seemed calm
+        and awake at the same time.
+      </p>
+
+      <p class="small"><strong>Tutor tip:</strong> Model one read first if needed, then let the student try.</p>
+    </section>
+
+    <!-- Section: Fluency tracking – Passage 1 -->
+    <section class="section section-guided">
+      <div class="section-heading">
+        <span>Fluency tracking – Passage 1</span>
+        <span class="section-tag">We notice</span>
+      </div>
+
+      <p>After each read, pause and record how it went.</p>
+
+      <table>
+        <tr>
+          <th></th>
+          <th>Read 1</th>
+          <th>Read 2</th>
+          <th>Read 3</th>
+        </tr>
+        <tr>
+          <td>Time (seconds)</td>
+          <td>______</td>
+          <td>______</td>
+          <td>______</td>
+        </tr>
+        <tr>
+          <td>Did I keep going when I got stuck?</td>
+          <td>Yes / No</td>
+          <td>Yes / No</td>
+          <td>Yes / No</td>
+        </tr>
+        <tr>
+          <td>My reading felt…</td>
+          <td>😊 / 😐 / 🙁</td>
+          <td>😊 / 😐 / 🙁</td>
+          <td>😊 / 😐 / 🙁</td>
+        </tr>
+      </table>
+
+      <p class="meta-label">What changed between your first and third read?</p>
+      <div class="answer-box big"></div>
+    </section>
+  </div>
+
+  <!-- ===================== PAGE 3: PASSAGE 2 + COMPREHENSION ===================== -->
+  <div class="page worksheet-page">
+    <!-- Section: Passage 2 -->
+    <section class="section section-teaching">
+      <div class="section-heading">
+        <span>Fluency passage 2 – Night visitors</span>
+        <span class="section-tag">Animals</span>
+      </div>
+
+      <p>
+        Now read this passage about animals that are awake at night. Remember: smooth and steady is more important than fast.
+      </p>
+
+      <p>
+        As the sky grew darker, the backyard slowly changed. The bright flowers
+        closed their petals, and the noisy lorikeets flew away to roost. In the
+        quiet that followed, a soft scratching sound came from under the fence.
+        A small possum climbed carefully along the top rail, its tail curled for
+        balance. Moths fluttered around the porch light like tiny paper planes.
+        From a tall tree, an owl blinked its wide eyes and watched the garden
+        below. While most people were getting ready for bed, the night animals
+        were just beginning their busy work.
+      </p>
+
+      <p class="small"><strong>Optional:</strong> Tutor models one sentence, student echoes, then reads the whole passage.</p>
+    </section>
+
+    <!-- Section: Fluency tracking – Passage 2 -->
+    <section class="section section-guided">
+      <div class="section-heading">
+        <span>Fluency tracking – Passage 2</span>
+        <span class="section-tag">We notice</span>
+      </div>
+
+      <p>Read the passage 2–3 times. After each read, fill in the table.</p>
+
+      <table>
+        <tr>
+          <th></th>
+          <th>Read 1</th>
+          <th>Read 2</th>
+          <th>Read 3 (optional)</th>
+        </tr>
+        <tr>
+          <td>Time (seconds)</td>
+          <td>______</td>
+          <td>______</td>
+          <td>______</td>
+        </tr>
+        <tr>
+          <td>I followed punctuation (stopped at full stops, paused at commas)</td>
+          <td>Yes / No</td>
+          <td>Yes / No</td>
+          <td>Yes / No</td>
+        </tr>
+        <tr>
+          <td>I used expression (my voice changed when something exciting happened)</td>
+          <td>Yes / No</td>
+          <td>Yes / No</td>
+          <td>Yes / No</td>
+        </tr>
+      </table>
+    </section>
+
+    <!-- Section: Comprehension Check -->
+    <section class="section section-independent">
+      <div class="section-heading">
+        <span>Check your understanding</span>
+        <span class="section-tag">Quick questions</span>
+      </div>
+
+      <p class="small">Answer in full sentences where you can.</p>
+
+      <ol class="questions">
+        <li>
+          <strong>Literal:</strong> What animal climbed carefully along the fence?
+          <div class="answer-box"></div>
+        </li>
+        <li>
+          <strong>Literal:</strong> Where was the owl, and what was it doing?
+          <div class="answer-box big"></div>
+        </li>
+        <li>
+          <strong>Vocabulary in context:</strong> The moths are compared to “tiny paper planes”. What does this tell you about how they moved?
+          <div class="answer-box big"></div>
+        </li>
+        <li>
+          <strong>Inferential:</strong> Why do you think the author says “the night animals were just beginning their busy work”?
+          <div class="answer-box xbig"></div>
+        </li>
+      </ol>
+    </section>
+
+    <!-- Section: Reflection -->
+    <section class="section section-reflection">
+      <div class="section-heading">
+        <span>Reflection</span>
+        <span class="section-tag">Check-in</span>
+      </div>
+
+      <p>How do I feel about my reading today?</p>
+      <div class="reflection-grid">
+        <div class="face">😊</div>
+        <div class="face">😐</div>
+        <div class="face">🙁</div>
+      </div>
+
+      <p>One thing I did well:</p>
+      <div class="answer-box"></div>
+      <p>One thing I want to practise next time:</p>
+      <div class="answer-box"></div>
+    </section>
+  </div>
+
+  <!-- ===================== PAGE 4: PARENT/TUTOR NOTES + ANSWER KEY ===================== -->
+  <div class="page answer-page">
+    <h1>Answer key &amp; support notes — For parents &amp; tutors</h1>
+
+    <div class="answer-section">
+      <h2>How to use this fluency worksheet</h2>
+      <ul>
+        <li><strong>Focus on smoothness first, speed second.</strong> If accuracy drops, slow back down.</li>
+        <li><strong>Model, then echo.</strong> Read one sentence or paragraph aloud, then have your child echo your phrasing.</li>
+        <li><strong>Use 2–3 reads per passage.</strong> The goal is to notice that later reads feel easier and more confident.</li>
+        <li><strong>Celebrate small wins.</strong> Praise things like “You didn’t give up on that tricky word” or “I heard your voice flow more this time.”</li>
+        <li><strong>Timing is optional.</strong> It can be helpful data, but improve comfort and expression before worrying about speed.</li>
+      </ul>
+    </div>
+
+    <div class="answer-section">
+      <h2>Comprehension answers – Passage 2 (Night visitors)</h2>
+      <ol>
+        <li>
+          <strong>What animal climbed carefully along the fence?</strong><br />
+          A small possum climbed carefully along the top rail of the fence.
+        </li>
+        <li>
+          <strong>Where was the owl, and what was it doing?</strong><br />
+          The owl was in a tall tree. It was blinking its wide eyes and watching the garden below.
+        </li>
+        <li>
+          <strong>Moths compared to “tiny paper planes” – what does this tell us?</strong><br />
+          It suggests the moths were fluttering, gliding and looping gently around the light, not flying in straight, fast lines.
+        </li>
+        <li>
+          <strong>Why are the night animals “just beginning their busy work”?</strong><br />
+          Because many night animals (like possums, moths and owls) are awake and active at night. They come out to search for food, explore and move around while people are going to sleep.
+        </li>
+      </ol>
+    </div>
+
+    <div class="answer-section">
+      <h2>Fluency observations</h2>
+      <p>
+        There are no fixed “correct” times for these passages; each child’s pace is different. Look for changes such as:
+      </p>
+      <ul>
+        <li>later reads taking slightly less time <em>without</em> rushing or losing accuracy,</li>
+        <li>fewer word-by-word stops and more phrase-level reading,</li>
+        <li>clearer attention to punctuation (full stops, commas, questions),</li>
+        <li>increased confidence and willingness to reread.</li>
+      </ul>
+      <p>
+        Over several sessions, you might track the total time for Read 1 vs. Read 3 on new passages and notice gentle improvement.
+      </p>
+    </div>
+
+    <div class="answer-section">
+      <h2>Materials suggestions</h2>
+      <ul>
+        <li>Simple timer (phone, watch or sand timer)</li>
+        <li>Pencil or highlighter (to mark phrases or punctuation)</li>
+        <li>Quiet space with minimal distractions</li>
+      </ul>
+    </div>
+  </div>
+</body>
+</html>

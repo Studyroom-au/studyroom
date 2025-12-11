@@ -24,6 +24,7 @@ export default function Footer() {
                   width={160}
                   height={36}
                   className="h-full w-auto object-contain"
+                  suppressHydrationWarning
                 />
               </div>
 
@@ -57,8 +58,8 @@ export default function Footer() {
         <div>
           <h3 className="mb-3 text-sm font-semibold text-white">Contact</h3>
           <div className="space-y-2 text-sm text-[#d6e5e3]">
-            <p>hello@studyroom.au</p>
-            <p>Phone: 0400 123 456</p>
+            <p>contact.studyroomaustralia@gmail.com</p>
+            <p>Phone: 0447409747</p>
             <p>Logan & Brisbane South</p>
             <Link
               href="/contact"

@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Year 3–4 Reading Fluency – Christmas Set 2 – Studyroom Worksheet</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <style>
+    /* ========== STUDYROOM BRAND TOKENS ========== */
+    :root {
+      --slate-blue: #456071;
+      --deep-slate: #374f5e;
+      --sage: #82977e;
+      --soft-green-blue: #d6e5e3;
+      --off-white: #f8f8ff;
+
+      --font-heading: system-ui, -apple-system, "Segoe UI", sans-serif;
+      --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+
+    /* ========== GLOBAL / PAGE SETUP ========== */
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #e5eaee;
+      color: var(--deep-slate);
+      font-family: var(--font-body);
+      font-size: 12pt;
+    }
+
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 10mm auto;
+      padding: 15mm 18mm;
+      background: var(--off-white);
+      box-shadow: 0 0 8px rgba(0, 0, 0, 0.15);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    h1, h2, h3 {
+      margin: 0 0 6px;
+      font-family: var(--font-heading);
+      color: var(--slate-blue);
+    }
+
+    h1 { font-size: 18pt; }
+    h2 { font-size: 14pt; }
+    h3 { font-size: 12pt; }
+
+    p {
+      margin: 4px 0 10px;
+      line-height: 1.45;
+    }
+
+    .small { font-size: 10pt; }
+
+    /* ========== LAYOUT HELPERS ========== */
+    .row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .row.space-between {
+      justify-content: space-between;
+    }
+
+    .col {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .grow {
+      flex: 1;
+    }
+
+    /* ========== HEADER AREA ========== */
+    .header-block {
+      border-bottom: 2px solid var(--soft-green-blue);
+      padding-bottom: 10px;
+      margin-bottom: 10px;
+    }
+
+    .brand-block {
+      font-size: 10pt;
+      color: var(--deep-slate);
+    }
+
+    .brand-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: #ffffff;
+      border: 1px solid var(--soft-green-blue);
+    }
+
+    .brand-name {
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--slate-blue);
+      font-size: 9pt;
+    }
+
+    .tagline {
+      font-size: 9pt;
+      color: var(--deep-slate);
+    }
+
+    .title-box {
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 10pt;
+      background: #ffffff;
+      min-width: 90mm;
+      border: 1px solid #d7e0e6;
+    }
+
+    .title-main {
+      font-weight: 700;
+      font-size: 12pt;
+      color: var(--slate-blue);
+      margin-bottom: 6px;
+    }
+
+    .meta-row {
+      margin-top: 3px;
+    }
+
+    /* ========== SECTIONS ========== */
+    .section {
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: #ffffff;
+      border: 1px solid #dde3e8;
+      margin-top: 10px;
+      page-break-inside: avoid;
+    }
+
+    .section-heading {
+      font-weight: 700;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      color: var(--slate-blue);
+    }
+
+    .section-tag {
+      font-size: 9pt;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: var(--soft-green-blue);
+      color: var(--deep-slate);
+    }
+
+    .section-learning {
+      background: var(--soft-green-blue);
+      border: 1px solid var(--sage);
+    }
+
+    /* Answer boxes */
+    .answer-box {
+      border: 1px solid #cfd6dd;
+      border-radius: 6px;
+      background: #ffffff;
+      min-height: 55px;
+      margin-top: 6px;
+      margin-bottom: 10px;
+      padding: 6px 8px;
+    }
+    .answer-box.big { min-height: 90px; }
+    .answer-box.xbig { min-height: 130px; }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 6px;
+      margin-bottom: 10px;
+      font-size: 11pt;
+    }
+    th, td {
+      border: 1px solid #cfd6dd;
+      padding: 4px 6px;
+      vertical-align: top;
+    }
+    th {
+      background: #eef3f6;
+      font-weight: 600;
+    }
+
+    /* Reflection emojis */
+    .reflection-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      font-size: 14pt;
+    }
+    .face {
+      text-align: center;
+      border: 1px solid #cfd6dd;
+      padding: 4px;
+      background: white;
+      border-radius: 6px;
+    }
+
+    /* Passage text – bigger for students */
+    .passage-text.student {
+      font-size: 13pt;
+      line-height: 1.55;
+    }
+
+    .passage-text.tutor {
+      font-size: 12pt;
+      line-height: 1.45;
+    }
+
+    /* Print */
+    @media print {
+      body {
+        background: #ffffff;
+      }
+      .page {
+        page-break-after: always;
+        box-shadow: none;
+        width: auto;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+<!-- ========================== PAGE 1 – INTRO & WARMUP ========================== -->
+<div class="page">
+  <header class="header-block">
+    <div class="row space-between">
+      <div class="brand-block">
+        <div class="brand-pill">
+          <span class="brand-name">STUDYROOM AUSTRALIA</span>
+          <span class="tagline">Calm, structured practice</span>
+        </div>
+        <div class="small" style="margin-top:4px;">
+          Personalised tutoring &amp; learning support
+        </div>
+      </div>
+
+      <div class="title-box">
+        <div class="title-main">
+          Year 3–4 Reading Fluency – Christmas Stories (Set 2)
+        </div>
+        <div class="meta-row"><label>Focus:</label> Smooth, steady, expressive reading</div>
+        <div class="meta-row"><label>Theme:</label> Christmas morning &amp; Christmas Eve</div>
+        <div class="meta-row"><label>For:</label> Student copy (larger text)</div>
+      </div>
+    </div>
+  </header>
+
+  <section class="section section-learning">
+    <div class="section-heading">
+      <span>Learning intention &amp; success criteria</span>
+      <span class="section-tag">Start here</span>
+    </div>
+    <p>
+      Today I am learning to <strong>read Christmas stories in a smooth voice</strong>.
+      I will try not to stop at every word, and I will use my voice to show
+      punctuation and feeling.
+    </p>
+    <p><strong>Success criteria – I can:</strong></p>
+    <ul>
+      <li>read most words correctly on the first or second try,</li>
+      <li>keep my voice flowing in phrases (not robot reading),</li>
+      <li>make my voice softer, louder, slower or faster to match the story.</li>
+    </ul>
+    <div class="answer-box">
+      In my own words, today I am learning to…
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-heading">
+      <span>Fluency warm-up – words and phrases</span>
+      <span class="section-tag">Warm up your voice</span>
+    </div>
+    <p>Read each group of words 2 or 3 times. Try to get smoother each time.</p>
+    <ul>
+      <li>snowy &nbsp;&nbsp; tinsel &nbsp;&nbsp; chimney &nbsp;&nbsp; present &nbsp;&nbsp; cookies</li>
+      <li>reindeer &nbsp;&nbsp; jolly &nbsp;&nbsp; sleigh &nbsp;&nbsp; sparkle &nbsp;&nbsp; stocking</li>
+    </ul>
+
+    <p>Now read these phrases. Try to slide your voice through the whole phrase.</p>
+    <ul>
+      <li>the soft glow of Christmas lights</li>
+      <li>a quiet house on Christmas Eve</li>
+      <li>tiny footprints near the tree</li>
+      <li>the warm smell of gingerbread</li>
+    </ul>
+
+    <table>
+      <tr>
+        <th></th>
+        <th>Read 1</th>
+        <th>Read 2</th>
+        <th>Read 3</th>
+      </tr>
+      <tr>
+        <td>Time (seconds)</td>
+        <td>___</td>
+        <td>___</td>
+        <td>___</td>
+      </tr>
+      <tr>
+        <td>How smooth?</td>
+        <td>😊 / 😐 / 🙁</td>
+        <td>😊 / 😐 / 🙁</td>
+        <td>😊 / 😐 / 🙁</td>
+      </tr>
+    </table>
+  </section>
+</div>
+
+<!-- ========================== PAGE 2 – PASSAGE 1 (STUDENT) ========================== -->
+<div class="page">
+  <section class="section">
+    <div class="section-heading">
+      <span>Passage 1 – The Christmas Morning Trail</span>
+      <span class="section-tag">Read 3 times</span>
+    </div>
+
+    <p class="small">
+      Read this story out loud 3 times. Each time, try to sound a little smoother and more confident.
+    </p>
+
+    <p class="passage-text student">
+      It was early Christmas morning, and the sky was still a soft, pale blue.
+      The house was quiet, but Mia was wide awake. She slipped out of bed and
+      padded down the hallway in her fluffy socks. When she reached the lounge
+      room, she stopped and stared. A sparkling trail of red and gold glitter
+      ran across the carpet. It started near the front door and led all the way
+      to the Christmas tree. Under the tree, small lights blinked gently. Mia
+      could see a big box wrapped in green paper and tied with a silver bow.
+      Her ginger cat, Willow, sat beside the box, swishing her tail. Mia smiled
+      and whispered, “Did you make this trail, Willow, or was it someone else?”
+    </p>
+
+    <table>
+      <tr>
+        <th></th>
+        <th>Read 1</th>
+        <th>Read 2</th>
+        <th>Read 3</th>
+      </tr>
+      <tr>
+        <td>Time (seconds)</td>
+        <td>___</td>
+        <td>___</td>
+        <td>___</td>
+      </tr>
+      <tr>
+        <td>I kept going even if I was unsure</td>
+        <td>Yes / No</td>
+        <td>Yes / No</td>
+        <td>Yes / No</td>
+      </tr>
+      <tr>
+        <td>My reading felt…</td>
+        <td>😊 / 😐 / 🙁</td>
+        <td>😊 / 😐 / 🙁</td>
+        <td>😊 / 😐 / 🙁</td>
+      </tr>
+    </table>
+
+    <p><strong>What changed between your first and third read?</strong></p>
+    <div class="answer-box big"></div>
+  </section>
+</div>
+
+<!-- ========================== PAGE 3 – PASSAGE 2 (STUDENT) ========================== -->
+<div class="page">
+  <section class="section">
+    <div class="section-heading">
+      <span>Passage 2 – Christmas Eve Snowfall</span>
+      <span class="section-tag">Read 2–3 times</span>
+    </div>
+
+    <p class="small">
+      Now read this story about Christmas Eve. Remember: smooth and steady reading is more important than reading fast.
+    </p>
+
+    <p class="passage-text student">
+      Late on Christmas Eve, Tom lay in bed and listened to the wind outside.
+      At first, the night sounded quiet. Then he heard a soft tapping on his
+      window. Tom sat up and pulled back the curtain. Tiny snowflakes were
+      falling from the dark sky. They landed on the glass and melted into tiny
+      drops of water. Tom gasped. It almost never snowed where he lived. He
+      grabbed his slippers and crept to the back door. When he stepped outside,
+      the grass was dusted with a thin, white blanket. The garden light made
+      the snow shine. A little reindeer ornament on the lawn looked like it was
+      standing in a real winter forest. Tom took a deep breath and felt the cool
+      air on his face. “It feels like the whole world is waiting for Christmas,”
+      he whispered.
+    </p>
+
+    <table>
+      <tr>
+        <th></th>
+        <th>Read 1</th>
+        <th>Read 2</th>
+        <th>Read 3</th>
+      </tr>
+      <tr>
+        <td>Time (seconds)</td>
+        <td>___</td>
+        <td>___</td>
+        <td>___</td>
+      </tr>
+      <tr>
+        <td>I paused at commas and full stops</td>
+        <td>Yes / No</td>
+        <td>Yes / No</td>
+        <td>Yes / No</td>
+      </tr>
+      <tr>
+        <td>I used expression to match the feelings</td>
+        <td>Yes / No</td>
+        <td>Yes / No</td>
+        <td>Yes / No</td>
+      </tr>
+    </table>
+  </section>
+</div>
+
+<!-- ========================== PAGE 4 – COMPREHENSION & REFLECTION ========================== -->
+<div class="page">
+  <section class="section">
+    <div class="section-heading">
+      <span>Comprehension – Christmas Morning Trail</span>
+      <span class="section-tag">Check understanding</span>
+    </div>
+
+    <ol>
+      <li>
+        <strong>Literal:</strong> Where did the glitter trail start and where did it end?
+        <div class="answer-box big"></div>
+      </li>
+      <li>
+        <strong>Literal:</strong> What was under the tree that caught Mia’s eye?
+        <div class="answer-box"></div>
+      </li>
+      <li>
+        <strong>Inferential:</strong> Why do you think someone left a glitter trail for Mia to follow?
+        <div class="answer-box xbig"></div>
+      </li>
+    </ol>
+  </section>
+
+  <section class="section">
+    <div class="section-heading">
+      <span>Comprehension – Christmas Eve Snowfall</span>
+      <span class="section-tag">Quick questions</span>
+    </div>
+
+    <ol>
+      <li>
+        <strong>Literal:</strong> What sound woke Tom up?
+        <div class="answer-box"></div>
+      </li>
+      <li>
+        <strong>Vocabulary in context:</strong> The garden light made the snow “shine”. What picture does this word create in your mind?
+        <div class="answer-box big"></div>
+      </li>
+      <li>
+        <strong>Inferential:</strong> Why does Tom say it feels like “the whole world is waiting for Christmas”?
+        <div class="answer-box xbig"></div>
+      </li>
+    </ol>
+  </section>
+
+  <section class="section">
+    <div class="section-heading">
+      <span>Reflection</span>
+      <span class="section-tag">How did it feel?</span>
+    </div>
+
+    <p>How do I feel about my reading today?</p>
+    <div class="reflection-grid">
+      <div class="face">😊</div>
+      <div class="face">😐</div>
+      <div class="face">🙁</div>
+    </div>
+
+    <p>Something I did well today:</p>
+    <div class="answer-box"></div>
+    <p>Something I want to keep practising:</p>
+    <div class="answer-box"></div>
+  </section>
+</div>
+
+<!-- ========================== PAGE 5 – TUTOR COPY: PASSAGES ========================== -->
+<div class="page answer-page">
+  <h1>Tutor Fluency Copy – Christmas Set 2</h1>
+
+  <section class="section">
+    <div class="section-heading">
+      <span>Passage 1 – The Christmas Morning Trail</span>
+      <span class="section-tag">Tutor copy</span>
+    </div>
+    <p class="small">
+      Use this copy to mark miscues, note phrasing, and calculate WCPM.
+    </p>
+
+    <p class="passage-text tutor">
+      It was early Christmas morning, and the sky was still a soft, pale blue.
+      The house was quiet, but Mia was wide awake. She slipped out of bed and
+      padded down the hallway in her fluffy socks. When she reached the lounge
+      room, she stopped and stared. A sparkling trail of red and gold glitter
+      ran across the carpet. It started near the front door and led all the way
+      to the Christmas tree. Under the tree, small lights blinked gently. Mia
+      could see a big box wrapped in green paper and tied with a silver bow.
+      Her ginger cat, Willow, sat beside the box, swishing her tail. Mia smiled
+      and whispered, "Did you make this trail, Willow, or was it someone else?"
+    </p>
+
+    <table>
+      <tr>
+        <th>Read</th>
+        <th>Date</th>
+        <th>Time (sec)</th>
+        <th>Errors</th>
+        <th>Total words</th>
+        <th>WCPM</th>
+        <th>Notes (phrasing, expression, self-corrections)</th>
+      </tr>
+      <tr>
+        <td>1</td><td>______</td><td>______</td><td>______</td><td>~150</td><td>______</td><td>___________________________</td>
+      </tr>
+      <tr>
+        <td>2</td><td>______</td><td>______</td><td>______</td><td>~150</td><td>______</td><td>___________________________</td>
+      </tr>
+      <tr>
+        <td>3</td><td>______</td><td>______</td><td>______</td><td>~150</td><td>______</td><td>___________________________</td>
+      </tr>
+    </table>
+  </section>
+</div>
+
+<!-- ========================== PAGE 6 – TUTOR COPY: PASSAGE 2 ========================== -->
+<div class="page answer-page">
+  <section class="section">
+    <div class="section-heading">
+      <span>Passage 2 – Christmas Eve Snowfall</span>
+      <span class="section-tag">Tutor copy</span>
+    </div>
+    <p class="small">
+      Use this copy for fluency marking (errors, phrasing, WCPM) over multiple sessions.
+    </p>
+
+    <p class="passage-text tutor">
+      Late on Christmas Eve, Tom lay in bed and listened to the wind outside.
+      At first, the night sounded quiet. Then he heard a soft tapping on his
+      window. Tom sat up and pulled back the curtain. Tiny snowflakes were
+      falling from the dark sky. They landed on the glass and melted into tiny
+      drops of water. Tom gasped. It almost never snowed where he lived. He
+      grabbed his slippers and crept to the back door. When he stepped outside,
+      the grass was dusted with a thin, white blanket. The garden light made
+      the snow shine. A little reindeer ornament on the lawn looked like it was
+      standing in a real winter forest. Tom took a deep breath and felt the cool
+      air on his face. "It feels like the whole world is waiting for Christmas,"
+      he whispered.
+    </p>
+
+    <table>
+      <tr>
+        <th>Read</th>
+        <th>Date</th>
+        <th>Time (sec)</th>
+        <th>Errors</th>
+        <th>Total words</th>
+        <th>WCPM</th>
+        <th>Notes</th>
+      </tr>
+      <tr>
+        <td>1</td><td>______</td><td>______</td><td>______</td><td>~170</td><td>______</td><td>___________________________</td>
+      </tr>
+      <tr>
+        <td>2</td><td>______</td><td>______</td><td>______</td><td>~170</td><td>______</td><td>___________________________</td>
+      </tr>
+      <tr>
+        <td>3</td><td>______</td><td>______</td><td>______</td><td>~170</td><td>______</td><td>___________________________</td>
+      </tr>
+    </table>
+  </section>
+
+  <section class="section">
+    <div class="section-heading">
+      <span>Comprehension & fluency notes</span>
+      <span class="section-tag">Tutor only</span>
+    </div>
+    <p><strong>Suggested comprehension answers:</strong></p>
+    <ul>
+      <li>
+        Glitter trail (Passage 1): It starts near the front door and ends at the Christmas tree.
+      </li>
+      <li>
+        Under the tree (Passage 1): A big box wrapped in green paper with a silver bow.
+      </li>
+      <li>
+        Reason for glitter trail (Passage 1): To lead Mia to a special present / surprise and build excitement.
+      </li>
+      <li>
+        Sound that woke Tom (Passage 2): A soft tapping on his window.
+      </li>
+      <li>
+        “Shine” (Passage 2): Suggests that the snow looked bright, glowing or sparkling in the light.
+      </li>
+      <li>
+        “World is waiting for Christmas” (Passage 2): The quiet, snowy scene feels calm and still, as if everything is ready and just waiting for Christmas to begin.
+      </li>
+    </ul>
+
+    <p><strong>Fluency focus:</strong> praise self-corrections, attention to punctuation, and any growth in smoothness between Read 1 and Read 3, not just raw speed.</p>
+  </section>
+</div>
+
+</body>
+</html>

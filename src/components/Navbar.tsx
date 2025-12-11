@@ -56,19 +56,18 @@ export default function Navbar() {
     <header className="sticky top-0 z-30 border-b border-[#374f5e] bg-[#456071] backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 md:px-6">
         {/* Logo + tagline */}
-        <Link href="/" className="flex items-center gap-3">
-          <div className="relative h-9 w-40">
+        <Link href="/" className="flex items-center gap-2">
+          <div className="h-9 w-40 flex items-center">
             <Image
               src="/logo.png"
               alt="Studyroom"
-              fill
-              className="object-contain"
+              width={160}
+              height={36}
+              className="h-full w-auto object-contain"
               priority
+              suppressHydrationWarning
             />
           </div>
-          <span className="hidden text-xs font-medium text-[#d6e5e3] sm:block">
-            Calm, confidence-first tutoring
-          </span>
         </Link>
 
         {/* Desktop nav */}
