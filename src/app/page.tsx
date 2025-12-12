@@ -114,7 +114,7 @@ const testimonials = [
   },
   {
     quote:
-      "Before tutoring with lily, I was struggling immensely with mathematics, to a point where i would simply give up on trying. Lily helped explain problems with much more clarity than the questions in my textbook, and after 1 term of tutoring, I went from a D to a B- on my exam. I can now confidently try my best at maths, and not be intimidated by attempting difficult and confusing questions. If you are having trouble with anything, I can't recomment Lily enough! She's kind, patient and 100% perfect for helping people like you and me! Thank you Lily!!",
+      "Before tutoring with lily, I was struggling immensely with mathematics, to a point where i would simply give up on trying. Lily helped explain problems with much more clarity than the questions in my textbook, and after 1 term of tutoring, I went from a D to a B- on my exam. I can now confidently try my best at maths, and not be intimidated by attempting difficult and confusing questions. If you are having trouble with anything, I can't recommend Lily enough! She's kind, patient and 100% perfect for helping people like you and me! Thank you Lily!!",
     name: "Grade 8 student",
   },
   {

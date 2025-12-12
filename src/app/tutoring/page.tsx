@@ -46,7 +46,7 @@ const pricing = [
   {
     label: "In-home tutoring",
     detail:
-      "From $60 per hour for one to one sessions, depending on location and year level. Discounts available for siblings and regular bookings.",
+      "From $60 per hour for one to one sessions, depending on location and year level. Siblings and small groups are $40 per child per hour.",
   },
   {
     label: "Online tutoring",
