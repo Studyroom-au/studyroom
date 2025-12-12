@@ -341,7 +341,7 @@ export default function SignInForm() {
           >
             I agree to the{" "}
             <a
-              href="/terms"
+              href="/legal/terms"
               className="text-[color:var(--sr-primary)] underline"
               target="_blank"
             >
@@ -349,7 +349,7 @@ export default function SignInForm() {
             </a>{" "}
             and{" "}
             <a
-              href="/privacy"
+              href="/legal/privacy"
               className="text-[color:var(--sr-primary)] underline"
               target="_blank"
             >
