@@ -80,7 +80,7 @@ const tutors = [
     name: "Scarlett",
     role: "Tutor",
     blurb:
-      "Primary specialist focused on literacy, reading confidence and growth mindset with gentle accountability each session.",
+      "Primary school tutor focused on literacy, reading confidence and growth mindset with gentle accountability each session.",
   },
 ];
 
@@ -150,8 +150,7 @@ export default function HomePage() {
             {/* Hero Paragraphs */}
             <p className="text-base text-[color:var(--muted)] md:text-lg">
               Studyroom gives students the structure, clarity and confidence they need to move forward at school.
-              We specialise in supporting anxious learners and neurodivergent students including autistic and ADHD learners
-              so they can understand their work, stay organised and feel in control without pressure.
+              We support anxious and neurodivergent learners through calm, personalised teaching that helps them understand their work, stay organised and feel confident in their learning, without pressure.
             </p>
 
             <p className="text-sm text-[color:var(--muted)]">
