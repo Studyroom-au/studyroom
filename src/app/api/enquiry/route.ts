@@ -105,6 +105,9 @@ Email: ${opts.email}
 Message:
 ${opts.message}`;
 
+  const formspreeEndpoint =
+    process.env.FORMSPREE_ENQUIRY_ENDPOINT || process.env.FORMSPREE_ENDPOINT || "";
+
   const resendKey = process.env.RESEND_API_KEY;
   const resendFrom = process.env.RESEND_FROM;
   if (resendKey && resendFrom) {
@@ -131,7 +134,24 @@ ${opts.message}`;
   const hasSmtp =
     !!process.env.SMTP_HOST && !!process.env.SMTP_USER && !!process.env.SMTP_PASS;
   if (!hasSmtp) {
-    console.warn("[/api/enquiry] No Resend/SMTP config for internal enquiry alert.");
+    if (formspreeEndpoint) {
+      const f = await fetch(formspreeEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channel: "enquiry",
+          subject,
+          name: opts.name,
+          email: opts.email,
+          message: opts.message,
+          raw: text,
+        }),
+      });
+      if (f.ok) return;
+      const errText = await f.text().catch(() => "");
+      console.error("[/api/enquiry] Formspree alert failed:", f.status, errText);
+    }
+    console.warn("[/api/enquiry] No Resend/SMTP/Formspree config for internal enquiry alert.");
     return;
   }
 
@@ -145,13 +165,38 @@ ${opts.message}`;
     },
   });
 
-  await transporter.sendMail({
-    from: `"Studyroom Website" <${process.env.SMTP_USER}>`,
-    to: mailTo,
-    subject,
-    text,
-    html: text.replace(/\n/g, "<br />"),
-  });
+  try {
+    await transporter.sendMail({
+      from: `"Studyroom Website" <${process.env.SMTP_USER}>`,
+      to: mailTo,
+      subject,
+      text,
+      html: text.replace(/\n/g, "<br />"),
+    });
+    return;
+  } catch (smtpErr) {
+    console.error("[/api/enquiry] SMTP alert failed:", smtpErr);
+  }
+
+  if (formspreeEndpoint) {
+    const f = await fetch(formspreeEndpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        channel: "enquiry",
+        subject,
+        name: opts.name,
+        email: opts.email,
+        message: opts.message,
+        raw: text,
+      }),
+    });
+    if (f.ok) return;
+    const errText = await f.text().catch(() => "");
+    console.error("[/api/enquiry] Formspree alert failed:", f.status, errText);
+  }
+
+  throw new Error("All enquiry alert providers failed.");
 }
 
 export async function POST(req: Request) {

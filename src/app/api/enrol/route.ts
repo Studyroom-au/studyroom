@@ -116,6 +116,8 @@ ${opts.goals || "-"}
 Challenges:
 ${opts.challenges || "-"}
 `;
+  const formspreeEndpoint =
+    process.env.FORMSPREE_ENROL_ENDPOINT || process.env.FORMSPREE_ENDPOINT || "";
 
   const resendKey = process.env.RESEND_API_KEY;
   const resendFrom = process.env.RESEND_FROM;
@@ -143,7 +145,38 @@ ${opts.challenges || "-"}
   const hasSmtp =
     !!process.env.SMTP_HOST && !!process.env.SMTP_USER && !!process.env.SMTP_PASS;
   if (!hasSmtp) {
-    console.warn("[/api/enrol] No Resend/SMTP config for enrolment alert.");
+    if (formspreeEndpoint) {
+      const f = await fetch(formspreeEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channel: "enrol",
+          subject: "New enrolment from Studyroom website",
+          leadId: opts.leadId,
+          source: opts.source,
+          parentName: opts.parentName,
+          parentEmail: opts.parentEmail,
+          parentPhone: opts.parentPhone,
+          studentName: opts.studentName,
+          yearLevel: opts.yearLevel,
+          school: opts.school,
+          subjects: opts.subjects,
+          mode: opts.mode,
+          suburb: opts.suburb,
+          addressLine1: opts.addressLine1,
+          postcode: opts.postcode,
+          package: packageLabel(opts.pkg),
+          availabilityBlocks: opts.availabilityBlocks,
+          goals: opts.goals,
+          challenges: opts.challenges,
+          raw: textBody,
+        }),
+      });
+      if (f.ok) return;
+      const errText = await f.text().catch(() => "");
+      console.error("[/api/enrol] Formspree alert failed:", f.status, errText);
+    }
+    console.warn("[/api/enrol] No Resend/SMTP/Formspree config for enrolment alert.");
     return;
   }
 
@@ -157,13 +190,52 @@ ${opts.challenges || "-"}
     },
   });
 
-  await transporter.sendMail({
-    from: `"Studyroom Website" <${process.env.SMTP_USER}>`,
-    to: mailTo,
-    subject: "New enrolment from Studyroom website",
-    text: textBody,
-    html: textBody.replace(/\n/g, "<br />"),
-  });
+  try {
+    await transporter.sendMail({
+      from: `"Studyroom Website" <${process.env.SMTP_USER}>`,
+      to: mailTo,
+      subject: "New enrolment from Studyroom website",
+      text: textBody,
+      html: textBody.replace(/\n/g, "<br />"),
+    });
+    return;
+  } catch (smtpErr) {
+    console.error("[/api/enrol] SMTP alert failed:", smtpErr);
+  }
+
+  if (formspreeEndpoint) {
+    const f = await fetch(formspreeEndpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        channel: "enrol",
+        subject: "New enrolment from Studyroom website",
+        leadId: opts.leadId,
+        source: opts.source,
+        parentName: opts.parentName,
+        parentEmail: opts.parentEmail,
+        parentPhone: opts.parentPhone,
+        studentName: opts.studentName,
+        yearLevel: opts.yearLevel,
+        school: opts.school,
+        subjects: opts.subjects,
+        mode: opts.mode,
+        suburb: opts.suburb,
+        addressLine1: opts.addressLine1,
+        postcode: opts.postcode,
+        package: packageLabel(opts.pkg),
+        availabilityBlocks: opts.availabilityBlocks,
+        goals: opts.goals,
+        challenges: opts.challenges,
+        raw: textBody,
+      }),
+    });
+    if (f.ok) return;
+    const errText = await f.text().catch(() => "");
+    console.error("[/api/enrol] Formspree alert failed:", f.status, errText);
+  }
+
+  throw new Error("All enrolment alert providers failed.");
 }
 
 export async function POST(req: Request) {
