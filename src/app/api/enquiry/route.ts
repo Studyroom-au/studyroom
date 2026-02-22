@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import * as admin from "firebase-admin";
+import nodemailer from "nodemailer";
 import { getAdminApp } from "@/lib/firebaseAdmin";
 
 type EnquiryPayload = {
@@ -89,6 +90,70 @@ Founder, Studyroom Australia`;
   }
 }
 
+async function sendInternalEnquiryAlert(opts: { name: string; email: string; message: string }) {
+  const mailTo =
+    process.env.ENQUIRY_ALERT_TO ||
+    process.env.MAIL_TO ||
+    "contactstudyroomaustralia@gmail.com";
+
+  const subject = "New enquiry from Studyroom website";
+  const text = `New Studyroom enquiry
+
+Name: ${opts.name}
+Email: ${opts.email}
+
+Message:
+${opts.message}`;
+
+  const resendKey = process.env.RESEND_API_KEY;
+  const resendFrom = process.env.RESEND_FROM;
+  if (resendKey && resendFrom) {
+    const r = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resendKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: resendFrom,
+        to: mailTo,
+        subject,
+        text,
+        html: `<pre style="font-family:Arial,sans-serif;white-space:pre-wrap;">${text}</pre>`,
+      }),
+    });
+
+    if (r.ok) return;
+    const errText = await r.text().catch(() => "");
+    console.error("[/api/enquiry] internal alert via Resend failed:", r.status, errText);
+  }
+
+  const hasSmtp =
+    !!process.env.SMTP_HOST && !!process.env.SMTP_USER && !!process.env.SMTP_PASS;
+  if (!hasSmtp) {
+    console.warn("[/api/enquiry] No Resend/SMTP config for internal enquiry alert.");
+    return;
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT) || 587,
+    secure: false,
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+
+  await transporter.sendMail({
+    from: `"Studyroom Website" <${process.env.SMTP_USER}>`,
+    to: mailTo,
+    subject,
+    text,
+    html: text.replace(/\n/g, "<br />"),
+  });
+}
+
 export async function POST(req: Request) {
   const app = getAdminApp();
   if (!app) {
@@ -129,8 +194,19 @@ export async function POST(req: Request) {
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    // Auto reply with enrol link + timeframe
-    await sendAutoReplyEmail({ to: email, parentName: name });
+    // Internal alert should include full enquiry contents.
+    try {
+      await sendInternalEnquiryAlert({ name, email, message });
+    } catch (mailErr) {
+      console.error("[/api/enquiry] internal alert failed (non-fatal):", mailErr);
+    }
+
+    // Auto reply with enrol link + timeframe.
+    try {
+      await sendAutoReplyEmail({ to: email, parentName: name });
+    } catch (mailErr) {
+      console.error("[/api/enquiry] auto-reply failed (non-fatal):", mailErr);
+    }
 
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (err) {

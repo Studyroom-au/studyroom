@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import * as admin from "firebase-admin";
 import nodemailer from "nodemailer";
 import { getAdminApp } from "@/lib/firebaseAdmin";
@@ -60,6 +60,112 @@ function packageLabel(p: PackagePlan) {
   return "Casual sessions";
 }
 
+async function sendEnrolmentAlert(opts: {
+  leadId: string;
+  source: "direct-enrol" | "contact";
+  parentName: string;
+  parentEmail: string;
+  parentPhone: string;
+  studentName: string;
+  yearLevel: string;
+  school: string;
+  subjects: string[];
+  mode: "online" | "in-home";
+  suburb: string;
+  addressLine1: string;
+  postcode: string;
+  pkg: PackagePlan;
+  availabilityBlocks: string[];
+  goals: string;
+  challenges: string;
+}) {
+  const mailTo =
+    process.env.ENROL_ALERT_TO ||
+    process.env.MAIL_TO ||
+    "contactstudyroomaustralia@gmail.com";
+
+  const textBody = `
+New Studyroom enrolment
+
+Lead ID: ${opts.leadId}
+Source: ${opts.source}
+
+Parent name: ${opts.parentName}
+Email: ${opts.parentEmail}
+Phone: ${opts.parentPhone}
+
+Student name: ${opts.studentName}
+Year level: ${opts.yearLevel}
+School: ${opts.school || "Not provided"}
+
+Subjects: ${opts.subjects.join(", ")}
+
+Mode: ${opts.mode === "in-home" ? "In-home" : "Online"}
+Suburb: ${opts.suburb || "Not provided"}
+Address line: ${opts.addressLine1 || "Not provided"}
+Postcode: ${opts.postcode || "Not provided"}
+
+Package: ${packageLabel(opts.pkg)}
+
+Availability:
+- ${opts.availabilityBlocks.join("\n- ")}
+
+Goals:
+${opts.goals || "-"}
+
+Challenges:
+${opts.challenges || "-"}
+`;
+
+  const resendKey = process.env.RESEND_API_KEY;
+  const resendFrom = process.env.RESEND_FROM;
+  if (resendKey && resendFrom) {
+    const r = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resendKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: resendFrom,
+        to: mailTo,
+        subject: "New enrolment from Studyroom website",
+        text: textBody,
+        html: textBody.replace(/\n/g, "<br />"),
+      }),
+    });
+
+    if (r.ok) return;
+    const errText = await r.text().catch(() => "");
+    console.error("[/api/enrol] Resend alert failed:", r.status, errText);
+  }
+
+  const hasSmtp =
+    !!process.env.SMTP_HOST && !!process.env.SMTP_USER && !!process.env.SMTP_PASS;
+  if (!hasSmtp) {
+    console.warn("[/api/enrol] No Resend/SMTP config for enrolment alert.");
+    return;
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT) || 587,
+    secure: false,
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+
+  await transporter.sendMail({
+    from: `"Studyroom Website" <${process.env.SMTP_USER}>`,
+    to: mailTo,
+    subject: "New enrolment from Studyroom website",
+    text: textBody,
+    html: textBody.replace(/\n/g, "<br />"),
+  });
+}
+
 export async function POST(req: Request) {
   const app = getAdminApp();
   if (!app) {
@@ -104,7 +210,6 @@ export async function POST(req: Request) {
   const consent = body.consent === true;
   const source = body.source === "contact" ? "contact" : "direct-enrol";
 
-  // Validation
   if (parentName.length < 2) {
     return NextResponse.json({ ok: false, error: "Parent name is required." }, { status: 400 });
   }
@@ -134,7 +239,6 @@ export async function POST(req: Request) {
   }
 
   try {
-    // 1) Save lead (ALWAYS)
     const ref = await db.collection("leads").add({
       parentName,
       parentEmail,
@@ -162,13 +266,11 @@ export async function POST(req: Request) {
 
       status: "new",
 
-      // marketplace claim fields
       claimedTutorId: null,
       claimedTutorName: null,
       claimedTutorEmail: null,
       claimedAt: null,
 
-      // compatibility fields (your existing tutor/student logic)
       assignedTutorId: null,
       assignedTutorName: null,
       assignedTutorEmail: null,
@@ -179,67 +281,26 @@ export async function POST(req: Request) {
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    // 2) Email notification (BEST EFFORT — DO NOT FAIL enrolment if SMTP breaks)
     try {
-      const hasSmtp =
-        !!process.env.SMTP_HOST && !!process.env.SMTP_USER && !!process.env.SMTP_PASS;
-
-      if (hasSmtp) {
-        const transporter = nodemailer.createTransport({
-          host: process.env.SMTP_HOST,
-          port: Number(process.env.SMTP_PORT) || 587,
-          secure: false,
-          auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS,
-          },
-        });
-
-        const mailTo = process.env.MAIL_TO || "contactstudyroomaustralia@gmail.com";
-
-        const textBody = `
-New Studyroom enrolment
-
-Lead ID: ${ref.id}
-Source: ${source}
-
-Parent name: ${parentName}
-Email: ${parentEmail}
-Phone: ${parentPhone}
-
-Student name: ${studentName}
-Year level: ${yearLevel}
-School: ${school || "Not provided"}
-
-Subjects: ${subjects.join(", ")}
-
-Mode: ${mode === "in-home" ? "In-home" : "Online"}
-Suburb: ${suburb || "Not provided"}
-Address line: ${addressLine1 || "Not provided"}
-Postcode: ${postcode || "Not provided"}
-
-Package: ${packageLabel(pkg)}
-
-Availability:
-- ${availabilityBlocks.join("\n- ")}
-
-Goals:
-${goals || "—"}
-
-Challenges:
-${challenges || "—"}
-`;
-
-        await transporter.sendMail({
-          from: `"Studyroom Website" <${process.env.SMTP_USER}>`,
-          to: mailTo,
-          subject: "New enrolment from Studyroom website",
-          text: textBody,
-          html: textBody.replace(/\n/g, "<br />"),
-        });
-      } else {
-        console.warn("[/api/enrol] SMTP not configured. Skipping email.");
-      }
+      await sendEnrolmentAlert({
+        leadId: ref.id,
+        source,
+        parentName,
+        parentEmail,
+        parentPhone,
+        studentName,
+        yearLevel,
+        school,
+        subjects,
+        mode,
+        suburb,
+        addressLine1,
+        postcode,
+        pkg,
+        availabilityBlocks,
+        goals,
+        challenges,
+      });
     } catch (mailErr) {
       console.error("[/api/enrol] email failed (non-fatal):", mailErr);
     }
