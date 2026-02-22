@@ -112,17 +112,22 @@ const tutors = [
   {
     name: "Lily",
     focus:
-      "Founder and tutor. Education student specialising in Maths and personalised learning. Focused on confidence, routines and helping students feel genuinely proud of their progress.",
+      "Founder and tutor. Education student specialising in Maths and personalised learning across Prep to Year 12. Lily works with students who feel anxious, behind or unsure of themselves, using clear routines, structured scaffolds and explicit teaching to rebuild confidence. She focuses on deep understanding rather than memorising, helping students feel calm, capable and genuinely proud of their academic progress.",
   },
   {
     name: "Katarina",
     focus:
-      "Calm, organised tutor who supports students with Maths, executive function and study skills. Especially supportive of anxious learners who need steady pacing.",
+      "Maths and executive function tutor supporting primary and junior secondary students. Katarina combines calm delivery with clear structure, helping students break tasks into manageable steps and develop stronger organisation skills. She is especially supportive of anxious learners who need steady pacing, predictable routines and gentle accountability to build lasting confidence.",
   },
   {
     name: "Scarlett",
     focus:
-      "Primary specialist with a focus on literacy, reading confidence and growth mindset. Gentle accountability and encouragement every session.",
+      "Primary specialist with a strong focus on literacy, reading fluency and foundational skills. Scarlett supports students in building decoding, comprehension and written expression through explicit instruction and consistent practice. Her sessions balance encouragement with structure, helping students strengthen core skills while developing independence, resilience and a genuine belief in their ability.",
+  },
+  {
+    name: "Casey (He/Him)",
+    focus:
+      "Maths tutor supporting all year levels, with additional expertise in senior assessment and assignment work across all subjects. Uses clear explanations, structured strategies and a calm approach to make complex tasks feel manageable. Students build genuine understanding and lasting confidence, helping them feel prepared, capable and proud of their progress.",
   },
 ];
 

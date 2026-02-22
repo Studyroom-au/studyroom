@@ -49,10 +49,10 @@ export default function Navbar() {
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(`${href}/`);
 
-  // ✅ Only close if currently open (prevents warning + extra renders)
+  // Close the mobile menu after route changes.
   useEffect(() => {
-    if (mobileOpen) setMobileOpen(false);
-  }, [pathname, mobileOpen]);
+    setMobileOpen(false);
+  }, [pathname]);
 
   return (
     <header className="sticky top-0 z-30 border-b border-[#374f5e] bg-[#456071] backdrop-blur">

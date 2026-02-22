@@ -60,6 +60,23 @@ function packageLabel(p: PackagePlan) {
   return "Casual sessions";
 }
 
+function getSmtpTransporter() {
+  const hasSmtp =
+    !!process.env.SMTP_HOST && !!process.env.SMTP_USER && !!process.env.SMTP_PASS;
+  if (!hasSmtp) return null;
+
+  const smtpPort = Number(process.env.SMTP_PORT) || 587;
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: smtpPort,
+    secure: smtpPort === 465,
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+}
+
 async function sendEnrolmentAlert(opts: {
   leadId: string;
   source: "direct-enrol" | "contact";
@@ -142,65 +159,21 @@ ${opts.challenges || "-"}
     console.error("[/api/enrol] Resend alert failed:", r.status, errText);
   }
 
-  const hasSmtp =
-    !!process.env.SMTP_HOST && !!process.env.SMTP_USER && !!process.env.SMTP_PASS;
-  if (!hasSmtp) {
-    if (formspreeEndpoint) {
-      const f = await fetch(formspreeEndpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          channel: "enrol",
-          subject: "New enrolment from Studyroom website",
-          leadId: opts.leadId,
-          source: opts.source,
-          parentName: opts.parentName,
-          parentEmail: opts.parentEmail,
-          parentPhone: opts.parentPhone,
-          studentName: opts.studentName,
-          yearLevel: opts.yearLevel,
-          school: opts.school,
-          subjects: opts.subjects,
-          mode: opts.mode,
-          suburb: opts.suburb,
-          addressLine1: opts.addressLine1,
-          postcode: opts.postcode,
-          package: packageLabel(opts.pkg),
-          availabilityBlocks: opts.availabilityBlocks,
-          goals: opts.goals,
-          challenges: opts.challenges,
-          raw: textBody,
-        }),
+  const transporter = getSmtpTransporter();
+
+  if (transporter) {
+    try {
+      await transporter.sendMail({
+        from: `"Studyroom Website" <${process.env.SMTP_USER}>`,
+        to: mailTo,
+        subject: "New enrolment from Studyroom website",
+        text: textBody,
+        html: textBody.replace(/\n/g, "<br />"),
       });
-      if (f.ok) return;
-      const errText = await f.text().catch(() => "");
-      console.error("[/api/enrol] Formspree alert failed:", f.status, errText);
+      return;
+    } catch (smtpErr) {
+      console.error("[/api/enrol] SMTP alert failed:", smtpErr);
     }
-    console.warn("[/api/enrol] No Resend/SMTP/Formspree config for enrolment alert.");
-    return;
-  }
-
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT) || 587,
-    secure: false,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  });
-
-  try {
-    await transporter.sendMail({
-      from: `"Studyroom Website" <${process.env.SMTP_USER}>`,
-      to: mailTo,
-      subject: "New enrolment from Studyroom website",
-      text: textBody,
-      html: textBody.replace(/\n/g, "<br />"),
-    });
-    return;
-  } catch (smtpErr) {
-    console.error("[/api/enrol] SMTP alert failed:", smtpErr);
   }
 
   if (formspreeEndpoint) {
@@ -240,14 +213,7 @@ ${opts.challenges || "-"}
 
 export async function POST(req: Request) {
   const app = getAdminApp();
-  if (!app) {
-    return NextResponse.json(
-      { ok: false, error: "Server is not configured for enrolment submissions yet." },
-      { status: 500 }
-    );
-  }
-
-  const db = admin.firestore(app);
+  const db = app ? admin.firestore(app) : null;
 
   let body: EnrolPayload;
   try {
@@ -311,51 +277,57 @@ export async function POST(req: Request) {
   }
 
   try {
-    const ref = await db.collection("leads").add({
-      parentName,
-      parentEmail,
-      parentPhone,
+    let leadId = `no-db-${Date.now()}`;
+    if (db) {
+      const ref = await db.collection("leads").add({
+        parentName,
+        parentEmail,
+        parentPhone,
 
-      studentName,
-      yearLevel,
-      school: school || null,
+        studentName,
+        yearLevel,
+        school: school || null,
 
-      subjects,
+        subjects,
 
-      mode,
-      suburb: suburb || null,
-      addressLine1: addressLine1 || null,
-      postcode: postcode || null,
+        mode,
+        suburb: suburb || null,
+        addressLine1: addressLine1 || null,
+        postcode: postcode || null,
 
-      availabilityBlocks,
+        availabilityBlocks,
 
-      goals: goals || null,
-      challenges: challenges || null,
+        goals: goals || null,
+        challenges: challenges || null,
 
-      package: pkg,
+        package: pkg,
 
-      consent: true,
+        consent: true,
 
-      status: "new",
+        status: "new",
 
-      claimedTutorId: null,
-      claimedTutorName: null,
-      claimedTutorEmail: null,
-      claimedAt: null,
+        claimedTutorId: null,
+        claimedTutorName: null,
+        claimedTutorEmail: null,
+        claimedAt: null,
 
-      assignedTutorId: null,
-      assignedTutorName: null,
-      assignedTutorEmail: null,
+        assignedTutorId: null,
+        assignedTutorName: null,
+        assignedTutorEmail: null,
 
-      source,
+        source,
 
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      leadId = ref.id;
+    } else {
+      console.warn("[/api/enrol] Firebase Admin not configured; skipping Firestore write.");
+    }
 
     try {
       await sendEnrolmentAlert({
-        leadId: ref.id,
+        leadId,
         source,
         parentName,
         parentEmail,
@@ -374,10 +346,18 @@ export async function POST(req: Request) {
         challenges,
       });
     } catch (mailErr) {
-      console.error("[/api/enrol] email failed (non-fatal):", mailErr);
+      console.error("[/api/enrol] email failed:", mailErr);
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Your enrolment was received, but email delivery failed. Please email contactstudyroomaustralia@gmail.com directly.",
+        },
+        { status: 502 }
+      );
     }
 
-    return NextResponse.json({ ok: true, leadId: ref.id }, { status: 200 });
+    return NextResponse.json({ ok: true, leadId }, { status: 200 });
   } catch (err) {
     console.error("[/api/enrol] failed:", err);
     return NextResponse.json({ ok: false, error: "Failed to submit enrolment. Please try again." }, { status: 500 });

@@ -18,22 +18,29 @@ function isEmail(s: string) {
   return typeof s === "string" && s.includes("@") && s.length <= 200;
 }
 
+function getSmtpTransporter() {
+  const hasSmtp =
+    !!process.env.SMTP_HOST && !!process.env.SMTP_USER && !!process.env.SMTP_PASS;
+  if (!hasSmtp) return null;
+
+  const smtpPort = Number(process.env.SMTP_PORT) || 587;
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: smtpPort,
+    secure: smtpPort === 465,
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+}
+
 async function sendAutoReplyEmail(opts: {
   to: string;
   parentName: string;
 }) {
   const enrolUrl = "https://studyroom.au/enrol";
-
-  // Recommended: Resend (simple + reliable)
-  const resendKey = process.env.RESEND_API_KEY;
-  const from = process.env.RESEND_FROM; // e.g. "Studyroom <hello@studyroom.au>"
-
-  if (!resendKey || !from) {
-    console.warn("[/api/enquiry] RESEND_API_KEY or RESEND_FROM missing — skipping email send.");
-    return;
-  }
-
-  const subject = "Thanks for reaching out to Studyroom 🌿";
+  const subject = "Thanks for reaching out to Studyroom";
 
   const text = `Hi ${opts.parentName || "there"},
 
@@ -42,13 +49,12 @@ Thank you for getting in touch with Studyroom.
 To help us match your child with the right tutor, please complete our enrolment form here:
 ${enrolUrl}
 
-Once we receive it, we’ll personally review your enquiry and respond within 1–3 business days.
+Once we receive it, we will personally review your enquiry and respond within 1-3 business days.
 
 Warmly,
 Lily
 Founder, Studyroom Australia`;
 
-  // Minimal HTML (safe + clean)
   const html = `
     <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #1b1b1b;">
       <p>Hi ${opts.parentName || "there"},</p>
@@ -59,7 +65,7 @@ Founder, Studyroom Australia`;
         <a href="${enrolUrl}" style="color: #1f6f5b; font-weight: 700;">${enrolUrl}</a>
       </p>
       <p>
-        Once we receive it, we’ll personally review your enquiry and respond within <strong>1–3 business days</strong>.
+        Once we receive it, we will personally review your enquiry and respond within <strong>1-3 business days</strong>.
       </p>
       <p style="margin-top: 18px;">
         Warmly,<br/>
@@ -69,25 +75,42 @@ Founder, Studyroom Australia`;
     </div>
   `;
 
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${resendKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to: opts.to,
-      subject,
-      text,
-      html,
-    }),
-  });
+  const resendKey = process.env.RESEND_API_KEY;
+  const from = process.env.RESEND_FROM;
 
-  if (!res.ok) {
+  if (resendKey && from) {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resendKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: opts.to,
+        subject,
+        text,
+        html,
+      }),
+    });
+
+    if (res.ok) return;
     const errText = await res.text().catch(() => "");
-    console.error("[/api/enquiry] Resend error:", res.status, errText);
+    console.error("[/api/enquiry] Resend auto-reply failed:", res.status, errText);
   }
+
+  const transporter = getSmtpTransporter();
+  if (!transporter) {
+    throw new Error("No email provider configured for auto-reply.");
+  }
+
+  await transporter.sendMail({
+    from: `"Studyroom" <${process.env.SMTP_USER}>`,
+    to: opts.to,
+    subject,
+    text,
+    html,
+  });
 }
 
 async function sendInternalEnquiryAlert(opts: { name: string; email: string; message: string }) {
@@ -131,51 +154,20 @@ ${opts.message}`;
     console.error("[/api/enquiry] internal alert via Resend failed:", r.status, errText);
   }
 
-  const hasSmtp =
-    !!process.env.SMTP_HOST && !!process.env.SMTP_USER && !!process.env.SMTP_PASS;
-  if (!hasSmtp) {
-    if (formspreeEndpoint) {
-      const f = await fetch(formspreeEndpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          channel: "enquiry",
-          subject,
-          name: opts.name,
-          email: opts.email,
-          message: opts.message,
-          raw: text,
-        }),
+  const transporter = getSmtpTransporter();
+  if (transporter) {
+    try {
+      await transporter.sendMail({
+        from: `"Studyroom Website" <${process.env.SMTP_USER}>`,
+        to: mailTo,
+        subject,
+        text,
+        html: text.replace(/\n/g, "<br />"),
       });
-      if (f.ok) return;
-      const errText = await f.text().catch(() => "");
-      console.error("[/api/enquiry] Formspree alert failed:", f.status, errText);
+      return;
+    } catch (smtpErr) {
+      console.error("[/api/enquiry] SMTP alert failed:", smtpErr);
     }
-    console.warn("[/api/enquiry] No Resend/SMTP/Formspree config for internal enquiry alert.");
-    return;
-  }
-
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT) || 587,
-    secure: false,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  });
-
-  try {
-    await transporter.sendMail({
-      from: `"Studyroom Website" <${process.env.SMTP_USER}>`,
-      to: mailTo,
-      subject,
-      text,
-      html: text.replace(/\n/g, "<br />"),
-    });
-    return;
-  } catch (smtpErr) {
-    console.error("[/api/enquiry] SMTP alert failed:", smtpErr);
   }
 
   if (formspreeEndpoint) {
@@ -201,14 +193,7 @@ ${opts.message}`;
 
 export async function POST(req: Request) {
   const app = getAdminApp();
-  if (!app) {
-    return NextResponse.json(
-      { ok: false, error: "Server is not configured for enquiries yet." },
-      { status: 500 }
-    );
-  }
-
-  const db = admin.firestore(app);
+  const db = app ? admin.firestore(app) : null;
 
   let body: EnquiryPayload;
   try {
@@ -232,21 +217,31 @@ export async function POST(req: Request) {
   }
 
   try {
-    await db.collection("enquiries").add({
-      name,
-      email,
-      message,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+    if (db) {
+      await db.collection("enquiries").add({
+        name,
+        email,
+        message,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } else {
+      console.warn("[/api/enquiry] Firebase Admin not configured; skipping Firestore write.");
+    }
 
-    // Internal alert should include full enquiry contents.
     try {
       await sendInternalEnquiryAlert({ name, email, message });
     } catch (mailErr) {
-      console.error("[/api/enquiry] internal alert failed (non-fatal):", mailErr);
+      console.error("[/api/enquiry] internal alert failed:", mailErr);
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Your message was received, but email delivery failed. Please email contactstudyroomaustralia@gmail.com directly.",
+        },
+        { status: 502 }
+      );
     }
 
-    // Auto reply with enrol link + timeframe.
     try {
       await sendAutoReplyEmail({ to: email, parentName: name });
     } catch (mailErr) {
