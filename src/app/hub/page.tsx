@@ -48,7 +48,6 @@ function Card({
   );
 }
 
-// ✅ Keep in sync with Lobby defaults
 const DEFAULT_ROOMS = [
   { id: "room-1", label: "Room 1" },
   { id: "room-2", label: "Room 2" },
@@ -59,12 +58,10 @@ const DEFAULT_ROOMS = [
 export default function HubPage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
-  const role = useUserRole(); // "student" | "tutor" | "admin" | null
+  const role = useUserRole(); // "student" | "tutor" | "tutor_pending" | "admin" | null
 
-  // Avoid hydration issues by only rendering after mount
   useEffect(() => setMounted(true), []);
 
-  // Auth guard: if not logged in, send to landing
   useEffect(() => {
     const off = onAuthStateChanged(auth, (u) => {
       if (!u) router.replace("/");
@@ -83,16 +80,25 @@ export default function HubPage() {
   if (!mounted) return <div className="min-h-screen" />;
 
   const roleLabel =
-    role === "admin" ? "Admin" : role === "tutor" ? "Tutor" : "Student";
+    role === "admin"
+      ? "Admin"
+      : role === "tutor"
+      ? "Tutor"
+      : role === "tutor_pending"
+      ? "Tutor (Pending)"
+      : "Student";
 
   const navButtonBase =
-    "rounded-xl px-3 py-1.5 text-xs font-medium shadow-sm transition";
+    "rounded-xl px-3 py-1.5 text-xs font-semibold shadow-sm transition";
   const navInactive =
     navButtonBase +
-    " border border-[color:var(--ring)] bg-[color:var(--card)] text-[color:var(--ink)]/80 hover:bg-white";
+    " border border-[color:var(--ring)] bg-white text-[color:var(--brand)] hover:bg-[#d6e5e3]/40";
   const navActive =
     navButtonBase +
     " bg-[color:var(--brand)] text-[color:var(--brand-contrast)]";
+
+  const canSeeTutorPortal = role === "tutor" || role === "admin" || role === "tutor_pending";
+  const canSeeAdminPortal = role === "admin";
 
   return (
     <div className="app-bg min-h-[100svh]">
@@ -100,7 +106,7 @@ export default function HubPage() {
         {/* Top Bar */}
         <header className="mb-6 flex flex-col gap-3 rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
-            <Link href="/" className="flex items-center gap-3">
+            <Link href="/hub" className="flex items-center gap-3">
               <div className="relative h-9 w-9 rounded-xl bg-[color:var(--brand)] shadow-sm">
                 <Image
                   src="/logo.png"
@@ -114,7 +120,7 @@ export default function HubPage() {
                   Studyroom
                 </span>
                 <span className="text-sm font-semibold text-[color:var(--ink)]">
-                  Student Hub
+                  Hub
                 </span>
               </div>
             </Link>
@@ -125,9 +131,7 @@ export default function HubPage() {
             </div>
           </div>
 
-          {/* Right side nav */}
           <div className="flex flex-wrap items-center gap-2">
-            {/* Main tabs */}
             <button
               type="button"
               className={navActive}
@@ -135,6 +139,7 @@ export default function HubPage() {
             >
               Hub
             </button>
+
             <button
               type="button"
               className={navInactive}
@@ -142,6 +147,7 @@ export default function HubPage() {
             >
               Studyrooms
             </button>
+
             <button
               type="button"
               className={navInactive}
@@ -150,31 +156,57 @@ export default function HubPage() {
               Profile
             </button>
 
-            {role === "admin" && (
+            {canSeeTutorPortal && (
               <button
                 type="button"
                 className={navInactive}
-                onClick={() => router.push("/admin")}
+                onClick={() => router.push("/hub/tutor")}
+              >
+                Tutor Portal
+              </button>
+            )}
+
+            {canSeeAdminPortal && (
+              <button
+                type="button"
+                className={navInactive}
+                onClick={() => router.push("/hub/admin")}
               >
                 Control Panel
               </button>
             )}
 
-            {/* Role pill */}
-            <span className="ml-1 inline-flex items-center rounded-xl border border-[color:var(--ring)] bg-white px-3 py-1 text-xs font-medium text-[color:var(--muted)]">
+            <span className="ml-1 inline-flex items-center rounded-xl border border-[color:var(--ring)] bg-white px-3 py-1 text-xs font-semibold text-[color:var(--muted)]">
               {roleLabel}
             </span>
 
-            {/* Sign out */}
             <button
               type="button"
               onClick={handleSignOut}
-              className="ml-1 rounded-xl border border-[color:var(--ring)] bg-[color:var(--card)] px-3 py-1.5 text-xs font-medium text-[color:var(--muted)] shadow-sm transition hover:bg-white"
+              className="ml-1 rounded-xl border border-[color:var(--ring)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--muted)] shadow-sm transition hover:bg-[#d6e5e3]/40"
             >
               Sign out
             </button>
           </div>
         </header>
+
+        {role === "tutor_pending" && (
+          <section className="mb-8 rounded-2xl border border-amber-200 bg-amber-50 px-6 py-5">
+            <h2 className="text-lg font-semibold text-amber-900">Tutor Portal Pending Approval</h2>
+            <p className="mt-1 text-sm text-amber-800">
+              Tutor access is temporarily unavailable. Open Tutor Portal and submit your in-app access request.
+            </p>
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={() => router.push("/hub/tutor")}
+                className="rounded-xl border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition hover:bg-amber-100"
+              >
+                Open Tutor Portal
+              </button>
+            </div>
+          </section>
+        )}
 
         {/* Study Rooms Section */}
         <section className="mb-8 rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] px-6 py-5 shadow-sm">
@@ -207,7 +239,6 @@ export default function HubPage() {
               </div>
             </div>
 
-            {/* Quick default room buttons */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-2">
               {DEFAULT_ROOMS.map((room) => (
                 <button
@@ -227,35 +258,22 @@ export default function HubPage() {
           </div>
         </section>
 
-        {/* Main Grid */}
         <main className="grid grid-cols-1 gap-5 md:grid-cols-2">
-          <Card
-            title="Private Pomodoro"
-            subtitle="Stay focused with gentle intervals."
-          >
+          <Card title="Private Pomodoro" subtitle="Stay focused with gentle intervals.">
             <div className="rounded-xl border border-[color:var(--ring)] bg-[color:var(--card)] p-3">
               <PomoWidget />
             </div>
           </Card>
 
-          <Card
-            title="Quick Study Plan"
-            subtitle="Write a few tasks you'll complete today."
-          >
+          <Card title="Quick Study Plan" subtitle="Write a few tasks you'll complete today.">
             <TaskListWidget />
           </Card>
 
-          <Card
-            title="Coming Up Soon"
-            subtitle="Track upcoming assessments, exams, and deadlines."
-          >
+          <Card title="Coming Up Soon" subtitle="Track upcoming assessments, exams, and deadlines.">
             <DailyPlannerWidget />
           </Card>
 
-          <Card
-            title="Mood Tracker"
-            subtitle="Check in with how you feel and see your history."
-          >
+          <Card title="Mood Tracker" subtitle="Check in with how you feel and see your history.">
             <MoodTrackerWidget />
           </Card>
         </main>

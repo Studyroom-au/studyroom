@@ -74,7 +74,7 @@ const tutors = [
     name: "Katarina",
     role: "Tutor",
     blurb:
-      "Calm, organised tutor who supports students with clear routines, encouragement and step by step teaching.",
+      "Calm, organised Education student who supports students with clear routines, encouragement and step by step teaching.",
   },
   {
     name: "Scarlett",
@@ -144,34 +144,34 @@ export default function HomePage() {
 
             {/* Heading */}
             <h1 className="text-3xl font-semibold leading-snug text-[color:var(--ink)] md:text-4xl">
-              Calm tutoring that helps students feel capable, organised and proud of their progress.
+              Calm tutoring that helps students feel capable, organised and proud
+              of their progress.
             </h1>
 
             {/* Hero Paragraphs */}
             <p className="text-base text-[color:var(--muted)] md:text-lg">
-              Studyroom gives students the structure, clarity and confidence they need to move forward at school.
-              We support anxious and neurodivergent learners through calm, personalised teaching that helps them understand their work, stay organised and feel confident in their learning, without pressure.
+              Studyroom gives students the structure, clarity and confidence they
+              need to move forward at school. We support anxious and
+              neurodivergent learners through calm, personalised teaching that
+              helps them understand their work, stay organised and feel
+              confident in their learning, without pressure.
             </p>
 
             <p className="text-sm text-[color:var(--muted)]">
-              Some students come to us to catch up and feel proud again. Others want to stay on top or push for top marks.
-              We build a plan that fits where they are now and where they want to go next.
+              Some students come to us to catch up and feel proud again. Others
+              want to stay on top or push for top marks. We build a plan that
+              fits where they are now and where they want to go next.
             </p>
 
-            {/* Buttons */}
+            {/* Buttons (updated CTA language, keeping the layout) */}
             <div className="flex flex-wrap gap-3">
               <Link
                 href="/contact"
                 className="brand-cta inline-flex items-center justify-center rounded-lg px-5 py-3 text-sm font-semibold shadow-sm"
               >
-                Enquire now
+                Apply for a spot
               </Link>
-              <Link
-                href="/login"
-                className="inline-flex items-center justify-center rounded-lg border border-[color:var(--ring)] bg-white px-5 py-3 text-sm font-semibold text-[color:var(--brand)] transition hover:bg-[#d6e5e3]/60"
-              >
-                Student login
-              </Link>
+              
             </div>
 
             {/* Clean chips */}
@@ -195,7 +195,10 @@ export default function HomePage() {
           {/* IMAGE SIDE */}
           <div className="flex-1">
             <div className="overflow-hidden rounded-xl border border-[color:var(--ring)] bg-[#fdfdff] shadow-sm">
-              <div className="h-64 w-full overflow-hidden rounded-xl" suppressHydrationWarning>
+              <div
+                className="h-64 w-full overflow-hidden rounded-xl"
+                suppressHydrationWarning
+              >
                 <Image
                   src="/long-lily-teaching.png"
                   alt="Lily teaching a small group in a calm classroom setting"
@@ -206,6 +209,168 @@ export default function HomePage() {
                 />
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* NEW: WHAT'S NEW / LEARNING PLANS (Term 1 2026) */}
+      <section className="px-4 md:px-6">
+        <div className="mx-auto max-w-6xl space-y-6">
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--brand)]">
+              What’s new for Term 1, 2026
+            </p>
+            <h2 className="text-2xl font-semibold text-[color:var(--ink)]">
+              Introducing Studyroom learning packages
+            </h2>
+            <p className="text-sm text-[color:var(--muted)] md:text-base">
+              Studyroom is moving from week-by-week bookings to structured
+              learning packages. This creates consistency for students, clarity
+              for parents, and measurable progress across the term.
+            </p>
+          </div>
+
+          <div className="grid gap-5 md:grid-cols-3">
+            {/* 5-week */}
+            <div className="rounded-xl bg-[color:var(--card)] p-5 shadow-sm ring-1 ring-[color:var(--ring)]">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-base font-semibold text-[color:var(--ink)]">
+                    5-Week Learning Package
+                  </p>
+                  <p className="mt-1 text-xs font-medium text-[color:var(--muted)]">
+                    Best for a clear short cycle + confidence rebuild
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-full bg-[#d6e5e3] px-3 py-1 text-xs font-semibold text-[color:var(--brand)]">
+                  $375
+                </span>
+              </div>
+              <div className="mt-4 space-y-2 text-sm text-[color:var(--muted)]">
+                {[
+                  "Weekly 1:1 session",
+                  "Weekly homework provided",
+                  "Structured session notes",
+                  "End-of-cycle parent progress update",
+                ].map((item) => (
+                  <div key={item} className="flex items-start gap-3">
+                    <span className="mt-1 h-5 w-5 rounded-full bg-[color:var(--brand-soft)] text-center text-xs leading-5 text-[color:var(--brand)]">
+                      ✓
+                    </span>
+                    <p className="text-sm text-[color:var(--ink)]">{item}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 12-week */}
+            <div className="rounded-xl bg-[color:var(--card)] p-5 shadow-sm ring-1 ring-[color:var(--ring)]">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-base font-semibold text-[color:var(--ink)]">
+                    12-Week Term Package
+                  </p>
+                  <p className="mt-1 text-xs font-medium text-[color:var(--muted)]">
+                    Best for steady progress + reporting across the term
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-full bg-[#d6e5e3] px-3 py-1 text-xs font-semibold text-[color:var(--brand)]">
+                  $900
+                </span>
+              </div>
+              <div className="mt-4 space-y-2 text-sm text-[color:var(--muted)]">
+                {[
+                  "Weekly 1:1 session",
+                  "Weekly homework",
+                  "Mid-term update",
+                  "End-of-term written report",
+                ].map((item) => (
+                  <div key={item} className="flex items-start gap-3">
+                    <span className="mt-1 h-5 w-5 rounded-full bg-[color:var(--brand-soft)] text-center text-xs leading-5 text-[color:var(--brand)]">
+                      ✓
+                    </span>
+                    <p className="text-sm text-[color:var(--ink)]">{item}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Casual */}
+            <div className="rounded-xl bg-[color:var(--card)] p-5 shadow-sm ring-1 ring-[color:var(--ring)]">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-base font-semibold text-[color:var(--ink)]">
+                    Casual sessions (limited)
+                  </p>
+                  <p className="mt-1 text-xs font-medium text-[color:var(--muted)]">
+                    Available in small numbers when timetable allows
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-full bg-white px-3 py-1 text-xs font-semibold text-[color:var(--brand)] ring-1 ring-[color:var(--ring)]">
+                  $75
+                </span>
+              </div>
+              <div className="mt-4 space-y-2 text-sm text-[color:var(--muted)]">
+                {[
+                  "One-off support when needed",
+                  "No structured reporting included",
+                  "Limited spots each week",
+                ].map((item) => (
+                  <div key={item} className="flex items-start gap-3">
+                    <span className="mt-1 h-5 w-5 rounded-full bg-[color:var(--brand-soft)] text-center text-xs leading-5 text-[color:var(--brand)]">
+                      ✓
+                    </span>
+                    <p className="text-sm text-[color:var(--ink)]">{item}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Mini FAQ row (kept short, not salesy) */}
+          <div className="grid gap-4 md:grid-cols-3">
+            {[
+              {
+                q: "Why packages?",
+                a: "Consistency drives progress. Packages allow planning, weekly homework, and clear tracking.",
+              },
+              {
+                q: "Can we still do casual?",
+                a: "Yes — limited spots, and casual sessions don’t include structured reporting.",
+              },
+              {
+                q: "What if we miss a week?",
+                a: "If you give notice, we’ll try to reschedule within the week or adjust the plan where possible.",
+              },
+            ].map((item) => (
+              <div
+                key={item.q}
+                className="rounded-xl bg-[#f8f8ff] p-4 ring-1 ring-[color:var(--ring)]"
+              >
+                <p className="text-xs font-semibold uppercase text-[color:var(--brand)]">
+                  {item.q}
+                </p>
+                <p className="mt-2 text-sm text-[color:var(--muted)]">
+                  {item.a}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {/* CTA row under new section */}
+          <div className="flex flex-wrap gap-3 pt-1">
+            <Link
+              href="/contact"
+              className="inline-flex items-center justify-center rounded-lg bg-[color:var(--brand)] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:shadow-md"
+            >
+              Enquire about packages
+            </Link>
+            <Link
+              href="/tutoring"
+              className="inline-flex items-center justify-center rounded-lg border border-[color:var(--ring)] bg-white px-5 py-3 text-sm font-semibold text-[color:var(--brand)] transition hover:bg-[#d6e5e3]/60"
+            >
+              View tutoring options →
+            </Link>
           </div>
         </div>
       </section>
@@ -271,11 +436,13 @@ export default function HomePage() {
               Learning is personal, and we treat it that way.
             </h2>
             <p className="text-sm text-white/85">
-              We believe every student, including anxious and neurodivergent learners, can make strong progress
-              when the environment is calm, the plan is clear and the teaching fits how they learn.
+              We believe every student, including anxious and neurodivergent
+              learners, can make strong progress when the environment is calm,
+              the plan is clear and the teaching fits how they learn.
             </p>
             <p className="text-sm text-white/85">
-              We do not rush. We remove the panic. We focus on small, steady wins that add up to real confidence.
+              We do not rush. We remove the panic. We focus on small, steady wins
+              that add up to real confidence.
             </p>
           </div>
           <div className="space-y-3">
@@ -300,8 +467,9 @@ export default function HomePage() {
               Who we help
             </h2>
             <p className="text-sm text-[color:var(--muted)]">
-              Studyroom is where families turn when school starts to feel stressful, confusing or stuck.
-              We support anxious learners, autistic and ADHD students and other neurodivergent young people,
+              Studyroom is where families turn when school starts to feel
+              stressful, confusing or stuck. We support anxious learners,
+              autistic and ADHD students and other neurodivergent young people,
               as well as students who are simply ready to grow.
             </p>
             <div className="space-y-3">
@@ -364,8 +532,9 @@ export default function HomePage() {
             Results and stories
           </h2>
           <p className="text-sm text-[color:var(--muted)]">
-            Some students just want to pass and feel proud again. Others are aiming for top marks.
-            We focus on confidence, clarity and steady progress for both.
+            Some students just want to pass and feel proud again. Others are
+            aiming for top marks. We focus on confidence, clarity and steady
+            progress for both.
           </p>
           <div className="grid gap-4 md:grid-cols-3">
             {testimonials.map((t) => (
@@ -409,7 +578,10 @@ export default function HomePage() {
             </div>
           </div>
           <div className="overflow-hidden rounded-xl border border-[color:var(--ring)] bg-[#f8f8ff] shadow-sm">
-            <div className="h-64 w-full overflow-hidden rounded-xl" suppressHydrationWarning>
+            <div
+              className="h-64 w-full overflow-hidden rounded-xl"
+              suppressHydrationWarning
+            >
               <Image
                 src="/workshop-group.jpeg"
                 alt="Studyroom workshop group smiling together"
@@ -432,8 +604,8 @@ export default function HomePage() {
                 Meet your tutors
               </h2>
               <p className="mt-1 text-xs text-[color:var(--muted)]">
-                We are a small, vetted team, not a big marketplace.
-                You will always know exactly who is working with your child.
+                We are a small, vetted team, not a big marketplace. You will
+                always know exactly who is working with your child.
               </p>
             </div>
             <Link
@@ -471,7 +643,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* FINAL CTA */}
+      {/* FINAL CTA (updated button label, keeping the section) */}
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-6xl rounded-xl bg-[color:var(--brand)] px-6 py-8 text-white shadow-md">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -480,11 +652,13 @@ export default function HomePage() {
                 Next step
               </p>
               <h2 className="text-2xl font-semibold">
-                Tell us about your child and we will reply within 1-3 business days.
+                Tell us about your child and we will reply within 1-3 business
+                days.
               </h2>
               <p className="text-sm text-white/85">
-                Whether they want to pass and feel proud or are aiming for an A plus,
-                we will help map out a clear, calm plan for moving forward.
+                Whether they want to pass and feel proud or are aiming for an A
+                plus, we will help map out a clear, calm plan for moving
+                forward.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -492,7 +666,7 @@ export default function HomePage() {
                 href="/contact"
                 className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-[color:var(--brand)] shadow-sm transition hover:shadow-md"
               >
-                Enquire now
+                Apply for a spot
               </Link>
             </div>
           </div>

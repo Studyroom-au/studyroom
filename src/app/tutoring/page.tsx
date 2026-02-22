@@ -42,21 +42,63 @@ const howItWorks = [
   },
 ];
 
+/**
+ * NEW (Term 1 2026): package-based service model
+ * - kept separate so it’s easy to edit later
+ */
+const packages = [
+  {
+    title: "5-Week Learning Package",
+    price: "$375",
+    desc: "A short, structured cycle to rebuild confidence, tighten skills and create momentum.",
+    points: [
+      "Weekly 1:1 session",
+      "Weekly homework provided",
+      "Structured session notes",
+      "End-of-cycle parent progress update",
+    ],
+    tag: "Most popular for a focused reset",
+  },
+  {
+    title: "12-Week Term Package",
+    price: "$900",
+    desc: "A full-term learning plan for steady progress, routines and clear reporting.",
+    points: [
+      "Weekly 1:1 session",
+      "Weekly homework",
+      "Mid-term update",
+      "End-of-term written report",
+    ],
+    tag: "Best for consistent term progress",
+  },
+  {
+    title: "Casual sessions (limited)",
+    price: "$75",
+    desc: "Limited spots for families who need a one-off session or short-term support.",
+    points: [
+      "Single-session support when available",
+      "No structured reporting included",
+      "Limited spots each week",
+    ],
+    tag: "For occasional support only",
+  },
+];
+
 const pricing = [
   {
-    label: "In-home tutoring",
+    label: "Learning packages (recommended)",
     detail:
-      "From $60 per hour for one to one sessions, depending on location and year level. Siblings and small groups are $40 per child per hour.",
+      "Studyroom now operates on structured learning packages designed for consistency, clarity and measurable progress across the term.",
   },
   {
-    label: "Online tutoring",
+    label: "Casual sessions (limited availability)",
     detail:
-      "From $50 per hour for one to one sessions. Flexible afternoon and evening spots available.",
+      "$75 per session. Casual sessions do not include structured reporting and are offered in limited numbers.",
   },
   {
-    label: "HeadStart holiday blocks",
+    label: "Group tutoring (optional)",
     detail:
-      "Small group workshops and value packages across organisation, study skills and subject refreshers.",
+      "$40 per student per session. Best suited to siblings or small groups who work well together and benefit from shared routine.",
   },
 ];
 
@@ -138,6 +180,7 @@ const sessionFlow = [
 ];
 
 const faqs = [
+  // Existing FAQs (kept)
   {
     q: "How long are sessions?",
     a: "Most families choose 60 minute sessions once a week. Some students benefit from 45 minute sessions, especially younger or very anxious learners, or two sessions a week during busy assessment periods.",
@@ -154,6 +197,28 @@ const faqs = [
     q: "How will I know if my child is improving?",
     a: "You will receive regular check ins about progress, challenges and next steps. We also keep an eye on school feedback, grades and how your child feels about learning.",
   },
+
+  // NEW FAQs (Term 1 2026 package model)
+  {
+    q: "Why are you moving to packages?",
+    a: "Because consistency is what drives progress. Packages allow structured planning, weekly homework, clear session notes and progress updates, so students don’t feel like they are starting over each week.",
+  },
+  {
+    q: "Can I still book casual sessions?",
+    a: "Yes — but spots are limited. Casual sessions don’t include structured reporting and are offered when the timetable allows.",
+  },
+  {
+    q: "When do packages and new pricing start?",
+    a: "From Term 1, 2026.",
+  },
+  {
+    q: "What happens if we need to pause?",
+    a: "If something comes up, we’ll work with you to pause where possible and keep your child’s learning plan steady.",
+  },
+  {
+    q: "What if we miss a session?",
+    a: "If you give notice, we’ll aim to reschedule within the same week where possible or adjust the plan. Missed sessions without notice may be forfeited due to limited availability.",
+  },
 ];
 
 export default function TutoringPage() {
@@ -169,24 +234,28 @@ export default function TutoringPage() {
             Calm, confidence first tutoring
           </div>
           <h1 className="text-3xl font-semibold leading-tight text-[color:var(--ink)] md:text-4xl">
-            One-on-one tutoring that brings structure, confidence and clarity back into school.
+            One-on-one tutoring that brings structure, confidence and clarity
+            back into school.
           </h1>
           <p className="text-base text-[color:var(--muted)] md:max-w-3xl md:text-lg">
-            Studyroom provides personalised, gentle tutoring for anxious learners and neurodivergent
-            students, including autistic and ADHD learners, as well as high achievers who want to
-            extend themselves. We focus on understanding, not memorising, with clear steps and
-            routines so students know what to do and how to do it.
+            Studyroom provides personalised, gentle tutoring for anxious learners
+            and neurodivergent students, including autistic and ADHD learners, as
+            well as high achievers who want to extend themselves. We focus on
+            understanding, not memorising, with clear steps and routines so
+            students know what to do and how to do it.
           </p>
           <p className="text-sm text-[color:var(--muted)] md:max-w-3xl">
-            Sessions are available in home across Logan, Beenleigh and Brisbane Southside, or online
-            via the Studyroom WebApp.
+            Sessions are available in home across Logan, Beenleigh and Brisbane
+            Southside, or online via the Studyroom WebApp.
           </p>
+
+          {/* Buttons (updated CTA language, keeping layout) */}
           <div className="flex flex-wrap gap-3">
             <Link
               href="/contact"
               className="brand-cta inline-flex items-center justify-center rounded-lg px-5 py-3 text-sm font-semibold shadow-sm"
             >
-              Start an enquiry
+              Apply for a spot
             </Link>
             <Link
               href="/worksheets"
@@ -198,13 +267,87 @@ export default function TutoringPage() {
         </div>
       </section>
 
+      {/* NEW: WHAT'S NEW / LEARNING PACKAGES */}
+      <section className="px-4 md:px-6">
+        <div className="mx-auto max-w-6xl space-y-6">
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--brand)]">
+              What’s new for Term 1, 2026
+            </p>
+            <h2 className="text-2xl font-semibold text-[color:var(--ink)]">
+              Introducing Studyroom learning packages
+            </h2>
+            <p className="text-sm text-[color:var(--muted)] md:max-w-3xl md:text-base">
+              Studyroom is moving from week-by-week bookings to structured
+              learning packages. This creates consistency for students, clarity
+              for parents, and measurable progress across the term.
+            </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            {packages.map((pkg) => (
+              <div
+                key={pkg.title}
+                className="rounded-2xl bg-[color:var(--card)] p-5 shadow-sm ring-1 ring-[color:var(--ring)]"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-lg font-semibold text-[color:var(--ink)]">
+                      {pkg.title}
+                    </div>
+                    <p className="mt-1 text-sm text-[color:var(--muted)]">
+                      {pkg.desc}
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-[#d6e5e3] px-3 py-1 text-xs font-semibold text-[color:var(--brand)]">
+                    {pkg.price}
+                  </span>
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  {pkg.points.map((pt) => (
+                    <div key={pt} className="flex items-start gap-3">
+                      <span className="mt-1 h-5 w-5 rounded-full bg-[color:var(--brand)]/10 text-center text-xs leading-5 text-[color:var(--brand)]">
+                        ✓
+                      </span>
+                      <p className="text-sm text-[color:var(--ink)]">{pt}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <p className="mt-4 text-xs font-semibold text-[color:var(--muted)]">
+                  {pkg.tag}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <Link
+              href="/contact"
+              className="inline-flex items-center justify-center rounded-lg bg-[color:var(--brand)] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:shadow-md"
+            >
+              Enquire about packages
+            </Link>
+            <Link
+              href="#pricing"
+              className="inline-flex items-center justify-center rounded-lg border border-[color:var(--ring)] bg-white px-5 py-3 text-sm font-semibold text-[color:var(--brand)] transition hover:bg-[#d6e5e3]/60"
+            >
+              View pricing →
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* WHAT WE OFFER */}
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-6xl space-y-6">
-          <h2 className="text-2xl font-semibold text-[color:var(--ink)]">What we offer</h2>
+          <h2 className="text-2xl font-semibold text-[color:var(--ink)]">
+            What we offer
+          </h2>
           <p className="text-sm text-[color:var(--muted)] md:max-w-3xl">
-            Every student’s plan is personalised, but most families begin with weekly one to one
-            support in one of these formats.
+            Every student’s plan is personalised, but most families begin with
+            weekly one to one support in one of these formats.
           </p>
           <div className="grid gap-4 md:grid-cols-3">
             {offers.map((item) => (
@@ -215,7 +358,9 @@ export default function TutoringPage() {
                 <div className="text-lg font-semibold text-[color:var(--ink)]">
                   {item.title}
                 </div>
-                <p className="mt-2 text-sm text-[color:var(--muted)]">{item.desc}</p>
+                <p className="mt-2 text-sm text-[color:var(--muted)]">
+                  {item.desc}
+                </p>
               </div>
             ))}
           </div>
@@ -229,8 +374,9 @@ export default function TutoringPage() {
             Subjects and focus areas
           </h2>
           <p className="text-sm text-[color:var(--muted)] md:max-w-3xl">
-            We do more than help with homework. Each session is anchored to clear skills and aligned
-            with the Australian Curriculum and your child’s current units at school.
+            We do more than help with homework. Each session is anchored to clear
+            skills and aligned with the Australian Curriculum and your child’s
+            current units at school.
           </p>
           <div className="grid gap-4 md:grid-cols-3">
             {subjectBlocks.map((block) => (
@@ -264,9 +410,10 @@ export default function TutoringPage() {
                 Who tutoring is for
               </h2>
               <p className="mt-3 text-sm text-[color:var(--muted)]">
-                Studyroom suits learners who do best with calm, consistent support rather than
-                pressure. We work with students who feel anxious, overwhelmed or left behind in busy
-                classrooms, as well as students who are ready to extend themselves and aim higher.
+                Studyroom suits learners who do best with calm, consistent
+                support rather than pressure. We work with students who feel
+                anxious, overwhelmed or left behind in busy classrooms, as well
+                as students who are ready to extend themselves and aim higher.
               </p>
             </div>
             <div className="grid gap-3">
@@ -278,7 +425,9 @@ export default function TutoringPage() {
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[color:var(--brand)]/10 text-[color:var(--brand)]">
                     ✓
                   </div>
-                  <div className="text-sm font-semibold text-[color:var(--ink)]">{item}</div>
+                  <div className="text-sm font-semibold text-[color:var(--ink)]">
+                    {item}
+                  </div>
                 </div>
               ))}
             </div>
@@ -293,8 +442,9 @@ export default function TutoringPage() {
             How Studyroom tutoring works
           </h2>
           <p className="text-sm text-[color:var(--muted)] md:max-w-3xl">
-            The process is simple and supportive from the start. No pushy sales calls, just a
-            genuine conversation about what your child needs and what is realistic for your family.
+            The process is simple and supportive from the start. No pushy sales
+            calls, just a genuine conversation about what your child needs and
+            what is realistic for your family.
           </p>
           <div className="grid gap-4 md:grid-cols-4">
             {howItWorks.map((item, index) => (
@@ -308,7 +458,9 @@ export default function TutoringPage() {
                 <div className="mt-1 text-base font-semibold text-[color:var(--ink)]">
                   {item.title}
                 </div>
-                <p className="mt-2 text-sm text-[color:var(--muted)]">{item.desc}</p>
+                <p className="mt-2 text-sm text-[color:var(--muted)]">
+                  {item.desc}
+                </p>
               </div>
             ))}
           </div>
@@ -322,8 +474,9 @@ export default function TutoringPage() {
             What a typical session feels like
           </h2>
           <p className="text-sm text-[color:var(--muted)] md:max-w-3xl">
-            Every tutor has their own style, but all Studyroom sessions follow a calm, predictable
-            rhythm so students know what to expect each week and do not feel surprised or unprepared.
+            Every tutor has their own style, but all Studyroom sessions follow a
+            calm, predictable rhythm so students know what to expect each week
+            and do not feel surprised or unprepared.
           </p>
           <div className="grid gap-4 md:grid-cols-5">
             {sessionFlow.map((step) => (
@@ -334,7 +487,9 @@ export default function TutoringPage() {
                 <div className="text-xs font-semibold uppercase text-[color:var(--brand)]">
                   {step.title}
                 </div>
-                <p className="mt-2 text-xs text-[color:var(--muted)]">{step.text}</p>
+                <p className="mt-2 text-xs text-[color:var(--muted)]">
+                  {step.text}
+                </p>
               </div>
             ))}
           </div>
@@ -342,14 +497,16 @@ export default function TutoringPage() {
       </section>
 
       {/* PRICING AND LOCATIONS */}
-      <section className="px-4 md:px-6">
+      <section className="px-4 md:px-6" id="pricing">
         <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-2">
           {/* PRICING */}
           <div className="rounded-3xl bg-[color:var(--card)] p-8 shadow-sm ring-1 ring-[color:var(--ring)]">
-            <h3 className="text-xl font-semibold text-[color:var(--ink)]">Pricing</h3>
+            <h3 className="text-xl font-semibold text-[color:var(--ink)]">
+              Pricing
+            </h3>
             <p className="mt-2 text-sm text-[color:var(--muted)]">
-              Transparent rates with options for regular bookings and families who need a little
-              extra flexibility.
+              Transparent options designed for consistency, clarity and flexible
+              support when needed.
             </p>
             <div className="mt-4 space-y-3">
               {pricing.map((item) => (
@@ -360,22 +517,26 @@ export default function TutoringPage() {
                   <div className="text-sm font-semibold text-[color:var(--ink)]">
                     {item.label}
                   </div>
-                  <div className="text-sm text-[color:var(--muted)]">{item.detail}</div>
+                  <div className="text-sm text-[color:var(--muted)]">
+                    {item.detail}
+                  </div>
                 </div>
               ))}
             </div>
             <p className="mt-4 text-xs text-[color:var(--muted)]">
-              Exact pricing is confirmed during your enquiry based on location, year level and
-              session length.
+              Pricing is confirmed during your enquiry based on location, year
+              level and session length.
             </p>
           </div>
 
           {/* LOCATIONS */}
           <div className="rounded-3xl bg-[color:var(--card)] p-8 shadow-sm ring-1 ring-[color:var(--ring)]">
-            <h3 className="text-xl font-semibold text-[color:var(--ink)]">Locations</h3>
+            <h3 className="text-xl font-semibold text-[color:var(--ink)]">
+              Locations
+            </h3>
             <p className="mt-2 text-sm text-[color:var(--muted)]">
-              We keep travel reasonable for tutors and convenient for families while offering online
-              options for everyone else.
+              We keep travel reasonable for tutors and convenient for families
+              while offering online options for everyone else.
             </p>
             <div className="mt-4 space-y-3">
               {locations.map((loc) => (
@@ -386,7 +547,9 @@ export default function TutoringPage() {
                   <div className="h-8 w-8 rounded-full bg-[color:var(--brand)]/10 text-center text-sm font-semibold leading-8 text-[color:var(--brand)]">
                     •
                   </div>
-                  <div className="text-sm font-semibold text-[color:var(--ink)]">{loc}</div>
+                  <div className="text-sm font-semibold text-[color:var(--ink)]">
+                    {loc}
+                  </div>
                 </div>
               ))}
             </div>
@@ -401,8 +564,8 @@ export default function TutoringPage() {
             Common questions from families
           </h2>
           <p className="text-sm text-[color:var(--muted)] md:max-w-3xl">
-            If you are unsure whether tutoring is the right step, you are not alone. These are some
-            of the questions we hear most often.
+            If you are unsure whether tutoring is the right step, you are not
+            alone. These are some of the questions we hear most often.
           </p>
           <div className="grid gap-4 md:grid-cols-2">
             {faqs.map((item) => (
@@ -410,7 +573,9 @@ export default function TutoringPage() {
                 key={item.q}
                 className="rounded-2xl bg-[color:var(--card)] p-5 shadow-sm ring-1 ring-[color:var(--ring)]"
               >
-                <div className="text-sm font-semibold text-[color:var(--ink)]">{item.q}</div>
+                <div className="text-sm font-semibold text-[color:var(--ink)]">
+                  {item.q}
+                </div>
                 <p className="mt-2 text-sm text-[color:var(--muted)]">{item.a}</p>
               </div>
             ))}
@@ -423,10 +588,12 @@ export default function TutoringPage() {
         <div className="mx-auto max-w-6xl space-y-6">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <h2 className="text-2xl font-semibold text-[color:var(--ink)]">Tutor profiles</h2>
+              <h2 className="text-2xl font-semibold text-[color:var(--ink)]">
+                Tutor profiles
+              </h2>
               <p className="mt-1 text-xs text-[color:var(--muted)]">
-                Studyroom is a small, vetted team, not a large marketplace. You will always know who
-                is working with your child.
+                Studyroom is a small, vetted team, not a large marketplace. You
+                will always know who is working with your child.
               </p>
             </div>
             <Link
@@ -455,7 +622,9 @@ export default function TutoringPage() {
                     </div>
                   </div>
                 </div>
-                <p className="mt-3 text-sm text-[color:var(--muted)]">{tutor.focus}</p>
+                <p className="mt-3 text-sm text-[color:var(--muted)]">
+                  {tutor.focus}
+                </p>
               </div>
             ))}
           </div>
@@ -471,12 +640,13 @@ export default function TutoringPage() {
                 Let’s plan together
               </p>
               <h2 className="text-3xl font-semibold leading-tight">
-                Ready to match with the right tutor?
+                Ready to join a learning plan?
               </h2>
               <p className="text-sm text-white/85 md:max-w-2xl">
-                Tell us about your child’s goals, challenges and learning style. We will recommend
-                a tutor who fits their pace, whether they are catching up, keeping up or aiming for
-                top marks.
+                Tell us about your child’s goals, challenges and learning style.
+                We’ll recommend the right learning package and match them with a
+                tutor who fits their pace — whether they are catching up, keeping
+                up or aiming for top marks.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -484,11 +654,11 @@ export default function TutoringPage() {
                 href="/contact"
                 className="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-[color:var(--brand)] shadow-sm transition hover:shadow-md"
               >
-                Start an enquiry
+                Apply for a spot
               </Link>
               <Link
                 href="/worksheets"
-                className="rounded-xl border border-white/60 px-5 py-3 text-sm font-semibold text-white transition hover:bg白/10"
+                className="rounded-xl border border-white/60 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
               >
                 Explore worksheets
               </Link>

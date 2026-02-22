@@ -1,11 +1,23 @@
 import { NextResponse } from "next/server";
-import { getAdminAuth } from "@/lib/firebaseAdmin";
+import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
+import * as admin from "firebase-admin";
 
-const ALLOWED_EMAIL = "lily.studyroom@gmail.com"; // <-- CHANGE THIS!
+const ALLOWED_ROLES = new Set(["student", "tutor", "admin"] as const);
+const ALLOWED_ADMIN_EMAILS = new Set(["lily.studyroom@gmail.com"]);
 
-export async function GET() {
+type AllowedRole = "student" | "tutor" | "admin";
+
+function readBearerToken(req: Request) {
+  const h = req.headers.get("authorization") || "";
+  const m = h.match(/^Bearer\s+(.+)$/i);
+  return m?.[1] || null;
+}
+
+export async function POST(req: Request) {
   const adminAuth = getAdminAuth();
-  if (!adminAuth) {
+  const db = getAdminDb();
+
+  if (!adminAuth || !db) {
     return NextResponse.json(
       { error: "Admin SDK missing environment vars." },
       { status: 500 }
@@ -13,21 +25,57 @@ export async function GET() {
   }
 
   try {
-    // Find the user by email
-    const userRecord = await adminAuth.getUserByEmail(ALLOWED_EMAIL);
+    const body = (await req.json().catch(() => ({}))) as {
+      idToken?: string;
+      targetUid?: string;
+      role?: string;
+    };
 
-    // Apply the admin role
-    await adminAuth.setCustomUserClaims(userRecord.uid, { role: "admin" });
+    const actorToken = readBearerToken(req) || body.idToken;
+    if (!actorToken) {
+      return NextResponse.json({ error: "Missing auth token." }, { status: 401 });
+    }
 
-    return NextResponse.json({
-      ok: true,
-      email: ALLOWED_EMAIL,
-      role: "admin",
-      message: "Admin role applied successfully.",
-    });
+    const decoded = await adminAuth.verifyIdToken(actorToken);
+    const actorEmail = (decoded.email || "").toLowerCase();
+
+    const isAdmin =
+      decoded.role === "admin" ||
+      ALLOWED_ADMIN_EMAILS.has(actorEmail);
+
+    if (!isAdmin) {
+      return NextResponse.json({ error: "Insufficient permissions." }, { status: 403 });
+    }
+
+    const targetUid = String(body.targetUid || "").trim();
+    const role = String(body.role || "").trim() as AllowedRole;
+
+    if (!targetUid || !ALLOWED_ROLES.has(role)) {
+      return NextResponse.json(
+        { error: "Missing or invalid targetUid/role." },
+        { status: 400 }
+      );
+    }
+
+    await adminAuth.setCustomUserClaims(targetUid, { role });
+
+    const batch = db.batch();
+    batch.set(
+      db.collection("roles").doc(targetUid),
+      { role, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+    batch.set(
+      db.collection("users").doc(targetUid),
+      { role, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+    await batch.commit();
+
+    return NextResponse.json({ ok: true, targetUid, role });
   } catch (err: any) {
     return NextResponse.json(
-      { error: "Failed to promote user", details: String(err) },
+      { error: err?.message ?? "Failed to set role" },
       { status: 500 }
     );
   }

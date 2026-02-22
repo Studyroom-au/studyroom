@@ -1,0 +1,344 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------- HELPERS ----------------
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return isAuthed() && request.auth.uid == uid;
+    }
+
+    // Your login is always admin
+    function isAdmin() {
+      return isAuthed() && request.auth.token.email == "lily.studyroom@gmail.com";
+    }
+
+    function roleDoc() {
+      return get(/databases/$(database)/documents/roles/$(request.auth.uid));
+    }
+
+    function role() {
+      return isAuthed() ? roleDoc().data.role : null;
+    }
+
+    function isTutor() {
+      return isAuthed() && role() == "tutor";
+    }
+
+    function isTutorOrAdmin() {
+      return isAuthed() && (isAdmin() || role() in ["tutor", "admin"]);
+    }
+
+    function authedEmail() {
+      return isAuthed() ? request.auth.token.email : null;
+    }
+
+    // For docs that contain assignedTutorId / assignedTutorEmail
+    function isAssignedTutorDoc(docData) {
+      return isAuthed() && (
+        (docData.assignedTutorId != null && docData.assignedTutorId == request.auth.uid) ||
+        (docData.assignedTutorEmail != null && authedEmail() != null && docData.assignedTutorEmail == authedEmail())
+      );
+    }
+
+    function sessionTutorMatch(sessionData) {
+      return isAuthed() && (
+        isAdmin() ||
+        (sessionData.tutorId != null && sessionData.tutorId == request.auth.uid) ||
+        (sessionData.tutorEmail != null && authedEmail() != null && sessionData.tutorEmail == authedEmail())
+      );
+    }
+
+    // ---------------- ROOMS ----------------
+    match /rooms/{roomId} {
+      allow read: if isAuthed();
+
+      allow create: if isAuthed()
+        && request.resource.data.keys().hasOnly([
+          "title","createdBy","createdAt","lastActiveAt","isActive","participantCount"
+        ])
+        && request.resource.data.createdBy == request.auth.uid;
+
+      allow update: if isAuthed()
+        && request.resource.data.keys().hasOnly([
+          "title","createdBy","createdAt","lastActiveAt","isActive","participantCount"
+        ])
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.title == resource.data.title
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          "lastActiveAt",
+          "isActive",
+          "participantCount"
+        ]);
+
+      allow delete: if false;
+
+      match /chat/{msgId} {
+        allow read: if isAuthed();
+
+        allow create: if isAuthed()
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.email == authedEmail()
+          && request.resource.data.keys().hasOnly(["uid","email","text","fileUrl","fileName","createdAt"])
+          && (!("text" in request.resource.data) || request.resource.data.text.size() <= 2000)
+          && (!("fileUrl" in request.resource.data) || (request.resource.data.fileUrl == null || request.resource.data.fileUrl.size() <= 300))
+          && (!("fileName" in request.resource.data) || (request.resource.data.fileName == null || request.resource.data.fileName.size() <= 200));
+
+        allow delete: if isAuthed() && (
+          resource.data.uid == request.auth.uid ||
+          isTutorOrAdmin()
+        );
+
+        allow update: if false;
+      }
+
+      match /whiteboard/{strokeId} {
+        allow read, write: if isAuthed();
+      }
+    }
+
+    // ---------------- USERS + SUBCOLLECTIONS ----------------
+    match /users/{uid} {
+      allow read: if isSelf(uid) || isTutorOrAdmin();
+      allow create: if isSelf(uid);
+      allow update: if isSelf(uid);
+      allow delete: if false;
+
+      match /pomoState/{docId} {
+        allow read, create, update, delete: if isSelf(uid) && docId == "state";
+      }
+      match /tasks/{taskId} {
+        allow read, create, update, delete: if isSelf(uid);
+      }
+      match /pomoSessions/{pomoId} {
+        allow read, create, update, delete: if isSelf(uid);
+      }
+      match /moodLogs/{logId} {
+        allow read, create, update, delete: if isSelf(uid);
+      }
+      match /upcoming/{itemId} {
+        allow read, create, update, delete: if isSelf(uid);
+      }
+    }
+
+    // ---------------- ROLES ----------------
+    match /roles/{uid} {
+      allow read: if isSelf(uid) || isTutorOrAdmin();
+
+      // Users can create their own initial non-privileged role document.
+      allow create: if isSelf(uid)
+        && request.resource.data.keys().hasOnly(["role"])
+        && request.resource.data.role in ["student", "parent", "tutor_pending"];
+
+      // Users cannot self-promote; they may only keep their existing role.
+      allow update: if isSelf(uid)
+        && request.resource.data.keys().hasOnly(["role"])
+        && request.resource.data.role == resource.data.role;
+
+      allow delete: if false;
+
+      // Admin can manage roles.
+      allow write: if isAdmin();
+    }
+
+    // ---------------- REPORTS ----------------
+    match /reports/{reportId} {
+      allow create: if isAuthed()
+        && request.resource.data.keys().hasOnly([
+          "roomId","messageId","reportedBy",
+          "messageText","messageOwnerId","reason","createdAt"
+        ]);
+      allow read: if isTutorOrAdmin();
+      allow update, delete: if false;
+    }
+
+    // ---------------- LEADS ----------------
+    match /leads/{leadId} {
+      // Admin can do anything
+      allow read, write: if isAdmin();
+
+      // Tutor can read:
+      // - open marketplace leads (new + unclaimed)
+      // - leads they claimed
+      allow read: if isTutor() && (
+        (resource.data.status == "new" && resource.data.claimedTutorId == null) ||
+        (resource.data.claimedTutorId != null && resource.data.claimedTutorId == request.auth.uid)
+      );
+
+      // No tutor writes directly (claim happens via API)
+      allow write: if false;
+
+      allow create, delete: if false;
+    }
+
+    // ---------------- ENQUIRIES ----------------
+    match /enquiries/{enquiryId} {
+      allow read, write: if isTutorOrAdmin();
+    }
+
+    // ---------------- CLIENTS ----------------
+    match /clients/{clientId} {
+      allow read, write: if isAdmin();
+
+      // Tutor read only if assigned (client doc must contain assignedTutorId/email)
+      allow read: if isTutor() && isAssignedTutorDoc(resource.data);
+
+      // Optional: allow tutor to update only tutor notes
+      allow update: if isTutor()
+        && isAssignedTutorDoc(resource.data)
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          "tutorNotes",
+          "updatedAt"
+        ]);
+
+      allow create, delete: if false;
+    }
+
+    // ---------------- STUDENTS ----------------
+    match /students/{studentId} {
+      allow read, write: if isAdmin();
+
+      allow read: if isTutor() && isAssignedTutorDoc(resource.data);
+
+      // Tutor confirms only
+      allow update: if isTutor()
+        && isAssignedTutorDoc(resource.data)
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          "tutorConfirmedAt",
+          "tutorConfirmedBy",
+          "updatedAt"
+        ]);
+
+      allow create, delete: if false;
+
+      // ---- Subcollection: student session notes/history ----
+      match /sessions/{noteId} {
+        allow read, write: if isAdmin();
+
+        // Tutor can read/write notes ONLY if they are assigned to this student
+        allow read, create, update: if isTutor()
+          && isAssignedTutorDoc(
+            get(/databases/$(database)/documents/students/$(studentId)).data
+          );
+
+        allow delete: if false;
+      }
+    }
+
+    // ---------------- TOP-LEVEL SESSIONS (CALENDAR) ----------------
+    match /sessions/{sessionId} {
+      // Admin override
+      allow read, write: if isAdmin();
+
+      // Tutor reads own sessions
+      allow read: if isTutor() && sessionTutorMatch(resource.data);
+
+      // Tutor creates own sessions (restricted fields)
+      allow create: if isTutor() && (
+        request.resource.data.tutorId == request.auth.uid
+        && request.resource.data.keys().hasAll([
+          "tutorId",
+          "studentId",
+          "clientId",
+          "startAt",
+          "endAt",
+          "durationMinutes",
+          "modality",
+          "status",
+          "billingStatus"
+        ])
+      );
+
+      // Tutor updates own sessions safely (NO payable/pay rate edits)
+      allow update: if isTutor()
+        && resource.data.tutorId == request.auth.uid
+        && request.resource.data.tutorId == resource.data.tutorId
+        && request.resource.data.clientId == resource.data.clientId
+        && request.resource.data.studentId == resource.data.studentId
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          "startAt",
+          "endAt",
+          "durationMinutes",
+          "status",
+          "notes",
+          "updatedAt",
+          "completedAt",
+          "cancelledAt",
+          "cancelReason"
+        ]);
+
+      allow delete: if false;
+
+      // ---- Session logs subcollection (admin + tutor owner) ----
+      match /logs/{logId} {
+        allow read, write: if isAdmin();
+
+        allow read, create, update: if isTutor()
+          && get(/databases/$(database)/documents/sessions/$(sessionId)).data.tutorId == request.auth.uid;
+
+        allow delete: if false;
+      }
+    }
+
+    // ---------------- INVOICES ----------------
+    match /invoices/{invoiceId} {
+      // Admin owns invoices
+      allow read, write: if isAdmin();
+
+      // Tutors can read their own invoices (optional)
+      allow read: if isTutor()
+        && resource.data.tutorId == request.auth.uid;
+
+      // Tutors can cancel only draft invoices (optional)
+      allow update: if isTutor()
+        && resource.data.tutorId == request.auth.uid
+        && resource.data.status == "DRAFT"
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          "status",
+          "tutorNote",
+          "updatedAt",
+          "cancelReason"
+        ])
+        && request.resource.data.status in ["CANCELLED_BY_TUTOR"];
+
+      allow create, delete: if false;
+    }
+
+    // ---------------- PACKAGES ----------------
+    match /packages/{packageId} {
+      allow read, write: if isAdmin();
+
+      allow read: if isTutor() && resource.data.assignedTutorId == request.auth.uid;
+
+      allow update: if isTutor()
+        && resource.data.assignedTutorId == request.auth.uid
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          "sessionsUsed",
+          "sessionsRemaining",
+          "status",
+          "updatedAt"
+        ]);
+
+      allow create, delete: if false;
+    }
+
+    // ---------------- INTEGRATIONS ----------------
+    match /integrations/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ---------------- studentPlans ----------------
+    match /studentPlans/{studentId} {
+      allow read, write: if isTutorOrAdmin();
+    }
+
+    // ---------------- TUTOR PRIVATE DATA ----------------
+    match /tutors/{uid}/{sub=**}/{doc} {
+      allow read, write: if isSelf(uid) || isAdmin();
+    }
+  }
+}

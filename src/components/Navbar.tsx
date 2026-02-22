@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/set-state-in-effect */
+// src/components/Navbar.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -47,15 +49,14 @@ export default function Navbar() {
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(`${href}/`);
 
-  // Close mobile menu whenever the route changes
+  // ✅ Only close if currently open (prevents warning + extra renders)
   useEffect(() => {
-    setMobileOpen(false);
-  }, [pathname]);
+    if (mobileOpen) setMobileOpen(false);
+  }, [pathname, mobileOpen]);
 
   return (
     <header className="sticky top-0 z-30 border-b border-[#374f5e] bg-[#456071] backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 md:px-6">
-        {/* Logo + tagline */}
         <Link href="/" className="flex items-center gap-2">
           <div className="h-9 w-40 flex items-center">
             <Image
@@ -70,7 +71,6 @@ export default function Navbar() {
           </div>
         </Link>
 
-        {/* Desktop nav */}
         <nav className="hidden items-center gap-1 md:flex">
           {navLinks.map((link) => (
             <NavLink
@@ -82,13 +82,12 @@ export default function Navbar() {
           ))}
         </nav>
 
-        {/* Desktop actions */}
         <div className="hidden items-center gap-2 md:flex">
           <Link
             href="/login"
             className="rounded-lg px-3 py-2 text-sm font-semibold text-[#f8f8ff] transition hover:bg-[#374f5e]"
           >
-            Student Login
+            Login
           </Link>
           <Link
             href="/contact"
@@ -96,23 +95,25 @@ export default function Navbar() {
           >
             Enquire
           </Link>
+          <Link
+            href="/enrol"
+            className="rounded-lg bg-[#f8f8ff] px-4 py-2 text-sm font-semibold text-[#456071] shadow-sm transition hover:bg-[#eaeaea]"
+          >
+            Enrol
+          </Link>
         </div>
 
-        {/* Mobile menu button */}
-      <button
-  type="button"
-  onClick={() => setMobileOpen((v) => !v)}
-  className="inline-flex items-center justify-center rounded-lg border border-white/20 px-2 py-1 text-xs font-medium text-[#f8f8ff] md:hidden"
-  aria-label="Toggle navigation menu"
-  aria-expanded={mobileOpen}   // ✅ keep it like this
->
-  {mobileOpen ? "Close" : "Menu"}
-</button>
-
-
+        <button
+          type="button"
+          onClick={() => setMobileOpen((v) => !v)}
+          className="inline-flex items-center justify-center rounded-lg border border-white/20 px-2 py-1 text-xs font-medium text-[#f8f8ff] md:hidden"
+          aria-label="Toggle navigation menu"
+          aria-expanded={mobileOpen}
+        >
+          {mobileOpen ? "Close" : "Menu"}
+        </button>
       </div>
 
-      {/* Mobile menu panel */}
       {mobileOpen && (
         <div className="border-t border-[#374f5e] bg-[#456071] md:hidden">
           <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-3">
@@ -132,7 +133,7 @@ export default function Navbar() {
                 onClick={() => setMobileOpen(false)}
                 className="rounded-lg px-3 py-2 text-sm font-semibold text-[#f8f8ff] ring-1 ring-white/20 transition hover:bg-[#374f5e]"
               >
-                Student Login
+                Login
               </Link>
               <Link
                 href="/contact"
@@ -140,6 +141,13 @@ export default function Navbar() {
                 className="rounded-lg bg-[#f8f8ff] px-3 py-2 text-sm font-semibold text-[#456071] shadow-sm transition hover:bg-[#eaeaea]"
               >
                 Enquire
+              </Link>
+              <Link
+                href="/enrol"
+                onClick={() => setMobileOpen(false)}
+                className="rounded-lg bg-[#f8f8ff] px-3 py-2 text-sm font-semibold text-[#456071] shadow-sm transition hover:bg-[#eaeaea]"
+              >
+                Enrol
               </Link>
             </div>
           </div>

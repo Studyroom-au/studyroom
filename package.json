@@ -11,14 +11,20 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@fullcalendar/core": "^6.1.20",
+    "@fullcalendar/daygrid": "^6.1.20",
+    "@fullcalendar/interaction": "^6.1.20",
+    "@fullcalendar/react": "^6.1.20",
+    "@fullcalendar/timegrid": "^6.1.20",
     "@livekit/components-react": "^2.9.14",
     "@livekit/components-styles": "^1.1.6",
     "axios": "^1.11.0",
     "cors": "^2.8.5",
+    "date-fns": "^4.1.0",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
-    "firebase": "^12.1.0",
-    "firebase-admin": "^13.4.0",
+    "firebase": "^12.9.0",
+    "firebase-admin": "^13.6.1",
     "gray-matter": "^4.0.3",
     "livekit-client": "^2.15.7",
     "livekit-server-sdk": "^2.13.2",
@@ -27,7 +33,8 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "remark": "^15.0.1",
-    "remark-html": "^16.0.1"
+    "remark-html": "^16.0.1",
+    "xero-node": "^13.4.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
@@ -39,7 +46,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "autoprefixer": "^10.4.21",
-    "baseline-browser-mapping": "^2.9.5",
+    "baseline-browser-mapping": "^2.9.19",
     "concurrently": "^9.2.1",
     "eslint": "^9",
     "eslint-config-next": "^16.0.5",

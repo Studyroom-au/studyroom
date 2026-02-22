@@ -94,6 +94,26 @@ export default function SignInForm() {
         });
 
         const uid = cred.user.uid;
+        const accessRole = role === "tutor" ? "tutor_pending" : "student";
+        const tutorAccessRequest =
+          role === "tutor"
+            ? {
+                status: "draft",
+                application: {
+                  subjects: [],
+                  yearLevels: [],
+                  modes: [],
+                  serviceArea: "",
+                  abn: "",
+                  wwccStatus: "",
+                },
+                note: "",
+                submittedAt: null,
+                reviewedAt: null,
+                reviewedByEmail: null,
+                decisionReason: null,
+              }
+            : null;
 
         // Create Firestore profile
         await setDoc(doc(db, "users", uid), {
@@ -101,13 +121,20 @@ export default function SignInForm() {
           email: trimmedEmail,
           role,
           parentEmail: role === "student" ? trimmedParentEmail : null,
+          tutorAccessRequest,
           createdAt: serverTimestamp(),
         });
 
         // Create Firestore role doc (used by security rules)
         await setDoc(doc(db, "roles", uid), {
-          role,
+          role: accessRole,
         });
+
+        if (role === "tutor") {
+          setInfo(
+            "Tutor signup created. Open Tutor Portal to complete your application for admin approval."
+          );
+        }
 
         // Redirect still handled by onAuthStateChanged in login/page.tsx
       }

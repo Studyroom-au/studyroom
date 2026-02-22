@@ -16,7 +16,7 @@ const ADMIN_EMAILS = [
   // "another-admin@example.com", // you can add more later if needed
 ] as const;
 
-type Role = "student" | "tutor" | "admin";
+type Role = "student" | "tutor" | "tutor_pending" | "admin";
 
 /**
  * Watches the user's role in real time (roles/{uid}).
@@ -53,7 +53,7 @@ export function useUserRole() {
           const data = snap.data();
           const r = (data?.role as string | undefined) ?? "student";
           // Clamp to the allowed set
-          if (r === "admin" || r === "tutor" || r === "student") {
+          if (r === "admin" || r === "tutor" || r === "tutor_pending" || r === "student") {
             setRole(r);
           } else {
             setRole("student");

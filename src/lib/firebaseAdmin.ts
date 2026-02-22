@@ -29,18 +29,20 @@ export function getAdminApp(): admin.app.App | null {
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL as string;
   const rawKey = process.env.FIREBASE_PRIVATE_KEY as string;
 
-  const privateKey = rawKey.includes("\\n")
-    ? rawKey.replace(/\\n/g, "\n")
-    : rawKey;
+  const privateKey = rawKey.includes("\\n") ? rawKey.replace(/\\n/g, "\n") : rawKey;
 
   try {
-    app = admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId,
-        clientEmail,
-        privateKey,
-      }),
-    });
+    if (admin.apps.length === 0) {
+      app = admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId,
+          clientEmail,
+          privateKey,
+        }),
+      });
+    } else {
+      app = admin.app();
+    }
   } catch (err) {
     console.error("[firebaseAdmin] init failed:", err);
     return null;
@@ -52,4 +54,25 @@ export function getAdminApp(): admin.app.App | null {
 export function getAdminAuth(): admin.auth.Auth | null {
   const a = getAdminApp();
   return a ? admin.auth(a) : null;
+}
+
+export function getAdminDb(): admin.firestore.Firestore | null {
+  const a = getAdminApp();
+  return a ? admin.firestore(a) : null;
+}
+
+function getBearerToken(req: Request) {
+  const h = req.headers.get("authorization") || "";
+  const m = h.match(/^Bearer (.+)$/i);
+  return m?.[1] || null;
+}
+
+export async function verifyIdTokenFromRequest(req: Request) {
+  const auth = getAdminAuth();
+  if (!auth) throw new Error("Firebase Admin not configured.");
+
+  const token = getBearerToken(req);
+  if (!token) throw new Error("Missing Authorization token.");
+
+  return await auth.verifyIdToken(token);
 }
