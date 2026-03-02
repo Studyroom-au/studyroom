@@ -12,9 +12,17 @@ import {
   limit,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
   where,
 } from "firebase/firestore";
+import {
+  getDefaultSessionRateCents,
+  getEntitlementSeed,
+  inferTermId,
+  normalizeMode,
+  normalizePlanType,
+} from "@/lib/studyroom/billing";
 
 type TutorOption = {
   uid: string;
@@ -201,8 +209,12 @@ export default function AdminAddExistingStudentPage() {
       const tutorName = selectedTutor?.name ?? null;
       const tutorEmail = selectedTutor?.email ?? null;
       const normalizedEmail = form.parentEmail.trim().toLowerCase();
+      const normalizedPlan = normalizePlanType(form.package);
+      const normalizedMode = normalizeMode(form.mode);
+      const termId = inferTermId(new Date());
 
       let clientId = form.selectedClientId.trim();
+      let planId = "";
 
       if (!clientId && form.reuseClientByEmail) {
         const q = query(collection(db, "clients"), where("parentEmail", "==", normalizedEmail), limit(1));
@@ -278,6 +290,49 @@ export default function AdminAddExistingStudentPage() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+
+      const planRef = await addDoc(collection(db, "plans"), {
+        clientId,
+        studentId: sRef.id,
+        tutorId: form.selectedTutorId,
+        tutorEmail,
+        type: normalizedPlan,
+        mode: normalizedMode,
+        status: "active",
+        termId,
+        sessionRateCents: getDefaultSessionRateCents(normalizedMode),
+        graceUsedThisTerm: false,
+        graceTermId: termId,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      planId = planRef.id;
+
+      await Promise.all([
+        updateDoc(doc(db, "clients", clientId), {
+          activePlanId: planId,
+          updatedAt: serverTimestamp(),
+        }),
+        updateDoc(doc(db, "students", sRef.id), {
+          activePlanId: planId,
+          updatedAt: serverTimestamp(),
+        }),
+      ]);
+
+      const entitlementSeed = getEntitlementSeed(normalizedPlan);
+      if (entitlementSeed.remainingSessions > 0 || entitlementSeed.bonusRemaining > 0) {
+        await setDoc(doc(db, "entitlements", planId), {
+          planId,
+          tutorId: form.selectedTutorId,
+          tutorEmail,
+          remainingSessions: entitlementSeed.remainingSessions,
+          bonusRemaining: entitlementSeed.bonusRemaining,
+          termId,
+          bonusNonTransferable: true,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
 
       setCreatedStudentId(sRef.id);
       setResolvedClientId(clientId);

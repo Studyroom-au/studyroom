@@ -47,12 +47,6 @@ export async function POST(req: Request) {
     }
 
     const duration = minutesBetween(start, end);
-    if (duration < 15) {
-      return NextResponse.json({ code: "INVALID_TIME_RANGE", error: "Min duration is 15 minutes" }, { status: 400 });
-    }
-    if (duration > 240) {
-      return NextResponse.json({ code: "MAX_DURATION_EXCEEDED", error: "Max duration is 4 hours" }, { status: 400 });
-    }
 
     const db = getFirestore();
     const ref = db.collection("sessions").doc(String(sessionId));
@@ -67,6 +61,20 @@ export async function POST(req: Request) {
     // Permission: tutor can only reschedule their own session; admin can reschedule any.
     if (!admin && session.tutorId !== uid) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const existingDuration = Number(session.durationMinutes ?? 60);
+    if (!admin && duration !== existingDuration) {
+      return NextResponse.json(
+        { code: "TUTOR_DURATION_LOCKED", error: "Tutors can reschedule time only. Duration changes are admin-only." },
+        { status: 403 }
+      );
+    }
+    if (duration < 15) {
+      return NextResponse.json({ code: "INVALID_TIME_RANGE", error: "Min duration is 15 minutes" }, { status: 400 });
+    }
+    if (duration > 240) {
+      return NextResponse.json({ code: "MAX_DURATION_EXCEEDED", error: "Max duration is 4 hours" }, { status: 400 });
     }
 
     // Overlap protection (buffer of 10 min)

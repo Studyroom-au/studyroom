@@ -1,133 +1,178 @@
 import Link from "next/link";
 
+/**
+ * TERM 2 PACKAGE SALE
+ * Toggle on/off when needed.
+ */
+const TERM2_SALE_ACTIVE = true;
+const TERM2_SALE_ENDS = "31 March";
+const TERM2_SALE_LABEL = `Term 2 Early Enrolment Offer ends ${TERM2_SALE_ENDS}`;
+
 const offers = [
   {
     title: "In-home tutoring",
-    desc: "Calm, confidence-first support at your kitchen table with clear steps, steady pacing and consistent routines.",
+    desc: "1:1 support delivered in-home across Logan, Beenleigh and Brisbane Southside.",
   },
   {
     title: "Online tutoring",
-    desc: "Live 1:1 sessions via the Studyroom WebApp with shared worksheets, notes and accountability, all from home.",
-  },
-  {
-    title: "Subjects and skills",
-    desc: "Literacy, numeracy, study skills, executive function and catch up plans tailored to your child’s goals and year level.",
+    desc: "Live 1:1 sessions delivered online via the Studyroom WebApp from anywhere.",
   },
 ];
 
 const whoFor = [
-  "Prep to Year 12 students who do best with clear explanations and structure around their learning",
-  "Anxious and neurodivergent learners, including autistic and ADHD students who feel safer with routine and predictable support",
-  "Students rebuilding confidence after setbacks, school avoidance or a run of low marks",
-  "High achievers aiming for A or A plus results, extension work, or scholarships",
-  "Families who value gentle communication, honest feedback and regular progress updates",
+  "Prep to Year 12 students who benefit from clear explanations and predictable learning routines",
+  "Anxious and neurodivergent learners, including autistic and ADHD students",
+  "Students catching up after setbacks, school avoidance or a run of low marks",
+  "High achievers aiming for extension, scholarships or top results",
+  "Families who value clear communication, steady progress and consistent support",
 ];
 
 const howItWorks = [
   {
-    title: "Meet and plan",
-    desc: "We learn about your child’s goals, school context, learning style and what has or has not worked before.",
+    title: "Enquire",
+    desc: "Share your child’s year level, goals, and what support would help most right now.",
   },
   {
-    title: "Tutor match",
-    desc: "We match your child with a calm, patient tutor who fits their personality, needs and preferred mode, in home or online.",
+    title: "Plan",
+    desc: "We confirm focus areas, preferred mode (in-home or online) and a realistic weekly plan.",
   },
   {
-    title: "Weekly sessions",
-    desc: "One to one sessions with clear scaffolds, repetition and routines so learning feels safe, predictable and achievable.",
+    title: "Match",
+    desc: "We match your child with a tutor who fits their level, needs and learning style.",
   },
   {
-    title: "Review and adjust",
-    desc: "Short updates for parents and regular check ins so we can celebrate wins, notice patterns and adjust the plan where needed.",
+    title: "Start weekly sessions",
+    desc: "60-minute sessions that build skill, consistency and measurable progress over time.",
   },
 ];
 
 /**
- * NEW (Term 1 2026): package-based service model
- * - kept separate so it’s easy to edit later
+ * Packages are the PRIMARY model.
+ * Prices shown for in-home and online.
+ * Term package = 10 weekly term sessions + 2 bonus sessions (same term only).
  */
 const packages = [
   {
-    title: "5-Week Learning Package",
-    price: "$375",
-    desc: "A short, structured cycle to rebuild confidence, tighten skills and create momentum.",
+    title: "5-Week Package (mid-term block)",
+    priceInHome: "$375",
+    priceOnline: "$300",
+    desc: "A structured 5-week block to strengthen core skills and build momentum.",
     points: [
-      "Weekly 1:1 session",
-      "Weekly homework provided",
-      "Structured session notes",
-      "End-of-cycle parent progress update",
+      "5 x 60-minute sessions",
+      "Clear weekly focus and skills tracking",
+      "Session notes + next steps",
+      "Light home practice where helpful",
     ],
-    tag: "Most popular for a focused reset",
+    tag: TERM2_SALE_ACTIVE ? TERM2_SALE_LABEL : "Most popular for a focused reset",
   },
   {
-    title: "12-Week Term Package",
-    price: "$900",
-    desc: "A full-term learning plan for steady progress, routines and clear reporting.",
+    title: "12-Session Term Package (10 + 2 bonus)",
+    priceInHome: "$900",
+    priceOnline: "$720",
+    desc: "A term-based structure for consistent progress and assessment support.",
     points: [
-      "Weekly 1:1 session",
-      "Weekly homework",
-      "Mid-term update",
-      "End-of-term written report",
+      "10 weekly term sessions",
+      "+ 2 bonus sessions (same term only)",
+      "Bonus sessions can be used in term or holidays",
+      "Clear planning across the term",
     ],
-    tag: "Best for consistent term progress",
+    tag: TERM2_SALE_ACTIVE ? TERM2_SALE_LABEL : "Best for term consistency",
   },
   {
     title: "Casual sessions (limited)",
-    price: "$75",
-    desc: "Limited spots for families who need a one-off session or short-term support.",
+    priceInHome: "$75",
+    priceOnline: "$60",
+    desc: "One-off sessions when availability allows.",
     points: [
-      "Single-session support when available",
-      "No structured reporting included",
-      "Limited spots each week",
+      "60-minute session (in-home or online)",
+      "Best for short-term or urgent support",
+      "Limited weekly availability",
     ],
-    tag: "For occasional support only",
-  },
-];
-
-const pricing = [
-  {
-    label: "Learning packages (recommended)",
-    detail:
-      "Studyroom now operates on structured learning packages designed for consistency, clarity and measurable progress across the term.",
-  },
-  {
-    label: "Casual sessions (limited availability)",
-    detail:
-      "$75 per session. Casual sessions do not include structured reporting and are offered in limited numbers.",
-  },
-  {
-    label: "Group tutoring (optional)",
-    detail:
-      "$40 per student per session. Best suited to siblings or small groups who work well together and benefit from shared routine.",
+    tag: "Limited availability",
   },
 ];
 
 const locations = [
-  "Logan, Beenleigh and Brisbane Southside for in home visits",
-  "Online sessions available across Queensland and interstate",
-  "School, library and community hub sessions by arrangement",
+  "In-home: Logan, Beenleigh and Brisbane Southside",
+  "Online: Queensland and interstate",
+  "School, library and community sessions by arrangement",
+];
+
+/**
+ * SINGLE SOURCE OF TRUTH:
+ * Pricing + policies live here only (not repeated in packages/FAQ).
+ */
+const pricingAndPolicies = [
+  {
+    label: "Session length",
+    detail: "All standard sessions are 60 minutes.",
+  },
+  {
+    label: "Standard pricing",
+    detail: "In-home: $75 · Online: $60 · Group (same time): $45 per child",
+  },
+  {
+    label: "Packages (primary model)",
+    detail:
+      "Packages are prepaid and secure your weekly time slot. Payment is required upfront to confirm enrolment.",
+  },
+  {
+    label: "Casual sessions (invoice after session)",
+    detail:
+      "Casual sessions are invoiced after session completion is logged. Payment is due under invoice terms.",
+  },
+  {
+    label: "Late payment",
+    detail:
+      "If an invoice is 7 days overdue, a $5 late fee applies. Services may be suspended or withdrawn for unpaid invoices.",
+  },
+  {
+    label: "Cancellations and rescheduling",
+    detail:
+      "We require 24 hours notice to reschedule. Sessions cancelled with less than 24 hours notice are forfeited due to reserved time and limited availability.",
+  },
+  {
+    label: "School holidays",
+    detail:
+      "Weekly sessions continue year-round by default. Families may pause during school holidays with notice and will not be penalised for pausing during holidays.",
+  },
+  {
+    label: "Tutor cancellations",
+    detail:
+      "If a tutor cancels, we offer a reschedule. If we can’t find a suitable time, the session value is held as credit.",
+  },
+  {
+    label: "Withdrawals and refunds",
+    detail:
+      "No refunds if a student withdraws mid-block. Term package bonus sessions must be used within the same term and are not transferable to the next term.",
+  },
+  {
+    label: "Siblings and group sessions",
+    detail:
+      "No sibling discounts. If siblings are tutored at the same time, it is priced as a group session at $45 per child.",
+  },
 ];
 
 const tutors = [
   {
     name: "Lily",
     focus:
-      "Founder and tutor. Education student specialising in Maths and personalised learning across Prep to Year 12. Lily works with students who feel anxious, behind or unsure of themselves, using clear routines, structured scaffolds and explicit teaching to rebuild confidence. She focuses on deep understanding rather than memorising, helping students feel calm, capable and genuinely proud of their academic progress.",
+      "Founder and tutor. Education student specialising in Maths and personalised learning across Prep to Year 12. Lily works with students who feel anxious, behind or unsure of themselves, using explicit teaching, clear routines and structured scaffolds to build genuine understanding and confidence over time.",
   },
   {
     name: "Katarina",
     focus:
-      "Maths and executive function tutor supporting primary and junior secondary students. Katarina combines calm delivery with clear structure, helping students break tasks into manageable steps and develop stronger organisation skills. She is especially supportive of anxious learners who need steady pacing, predictable routines and gentle accountability to build lasting confidence.",
+      "Maths and executive function tutor supporting primary and junior secondary students. Katarina helps students break work into manageable steps and develop stronger organisation skills, with steady pacing and clear expectations that support anxious learners.",
   },
   {
     name: "Scarlett",
     focus:
-      "Primary specialist with a strong focus on literacy, reading fluency and foundational skills. Scarlett supports students in building decoding, comprehension and written expression through explicit instruction and consistent practice. Her sessions balance encouragement with structure, helping students strengthen core skills while developing independence, resilience and a genuine belief in their ability.",
+      "Primary specialist focused on literacy, reading fluency and foundational skills. Scarlett supports decoding, comprehension and written expression through explicit instruction and consistent practice, helping students build independence and resilience alongside core skill growth.",
   },
   {
     name: "Casey (He/Him)",
     focus:
-      "Maths tutor supporting all year levels, with additional expertise in senior assessment and assignment work across all subjects. Uses clear explanations, structured strategies and a calm approach to make complex tasks feel manageable. Students build genuine understanding and lasting confidence, helping them feel prepared, capable and proud of their progress.",
+      "Maths tutor supporting all year levels, with additional expertise in senior assessment and assignment support across subjects. Casey uses clear explanations, structured strategies and a calm approach to make complex tasks feel manageable. Students build genuine understanding and lasting confidence so they feel prepared, capable and proud of their progress.",
   },
 ];
 
@@ -136,93 +181,76 @@ const subjectBlocks = [
     level: "Primary, Prep to Year 6",
     points: [
       "Phonics, reading fluency, comprehension and spelling",
-      "Number facts, place value, basic operations and problem solving",
-      "Building classroom confidence, participation and organisation",
-      "Homework support and a gentle introduction to study habits",
+      "Number facts, place value, operations and problem solving",
+      "Confidence with classroom participation and routines",
+      "Homework support and early study habits",
     ],
   },
   {
     level: "Junior Secondary, Years 7 to 10",
     points: [
-      "English, including essay writing, paragraph structure and exam responses",
-      "Maths, including algebra, linear graphs, fractions, indices and skills gaps",
-      "Science, including consolidating core concepts and assessment preparation",
-      "Study skills, time management and assessment planning",
+      "English: writing structure, paragraphs, exams and comprehension",
+      "Maths: gaps, algebra, graphs, fractions, indices and core skills",
+      "Science: concept consolidation and assessment preparation",
+      "Study skills: time management and assessment planning",
     ],
   },
   {
     level: "Senior and exam years, Years 11 and 12",
     points: [
       "QCE aligned support in Maths, English and selected sciences",
-      "Breaking down internal assessments and external exam preparation",
-      "Planning, drafting and revising with clear checklists and scaffolds",
-      "Balancing workload, stress and expectations in the final years of school",
+      "IA planning, drafting, revising and exam preparation",
+      "Checklists, scaffolds and clear study routines",
+      "Workload and stress management in high-pressure terms",
     ],
   },
 ];
 
+/**
+ * Shortened “typical session”
+ */
 const sessionFlow = [
   {
-    title: "Arrive and settle",
-    text: "A short check in, setting a small goal for the session and revisiting last week’s key idea.",
+    title: "Set the focus",
+    text: "Quick check-in and a clear goal for the session.",
   },
   {
-    title: "Warm up",
-    text: "Quick review questions or a low pressure activity to wake up prior knowledge and build confidence.",
-  },
-  {
-    title: "New learning",
-    text: "Step by step teaching with visuals, worked examples and plenty of space for questions.",
+    title: "Teach and model",
+    text: "Step-by-step teaching with worked examples and visuals where needed.",
   },
   {
     title: "Guided practice",
-    text: "Students practise with support, gradually taking more ownership while we coach and prompt.",
+    text: "Students practise with coaching and prompts to build accuracy and confidence.",
   },
   {
-    title: "Wrap up and next steps",
-    text: "A short recap, a simple takeaway and light home practice or a plan for the next session.",
+    title: "Wrap and next steps",
+    text: "Short recap plus a simple plan for home practice or the next session.",
   },
 ];
 
+/**
+ * FAQ: keep helpful, avoid duplicating policies.
+ */
 const faqs = [
-  // Existing FAQs (kept)
   {
     q: "How long are sessions?",
-    a: "Most families choose 60 minute sessions once a week. Some students benefit from 45 minute sessions, especially younger or very anxious learners, or two sessions a week during busy assessment periods.",
+    a: "All standard sessions are 60 minutes.",
   },
   {
-    q: "Is there a minimum commitment?",
-    a: "We recommend trying a block of at least four to six sessions so your child has time to adjust and build trust. There are no long term lock in contracts.",
+    q: "Do you support anxious and neurodivergent learners?",
+    a: "Yes. Many Studyroom students are anxious, autistic, ADHD or benefit from predictable routines and clear teaching.",
   },
   {
-    q: "Do you give homework?",
-    a: "We keep home practice light and purposeful. This might be a short review, a reading goal or finishing a question set, always tailored to your child’s capacity and your family’s schedule.",
+    q: "What does a package include?",
+    a: "A structured block of sessions with a clear weekly focus, session notes and practical next steps tailored to your child’s goals and year level.",
   },
   {
-    q: "How will I know if my child is improving?",
-    a: "You will receive regular check ins about progress, challenges and next steps. We also keep an eye on school feedback, grades and how your child feels about learning.",
-  },
-
-  // NEW FAQs (Term 1 2026 package model)
-  {
-    q: "Why are you moving to packages?",
-    a: "Because consistency is what drives progress. Packages allow structured planning, weekly homework, clear session notes and progress updates, so students don’t feel like they are starting over each week.",
+    q: "What subjects do you tutor?",
+    a: "We support literacy, numeracy and study skills across Prep to Year 12. Coverage depends on tutor availability and the student’s year level.",
   },
   {
-    q: "Can I still book casual sessions?",
-    a: "Yes — but spots are limited. Casual sessions don’t include structured reporting and are offered when the timetable allows.",
-  },
-  {
-    q: "When do packages and new pricing start?",
-    a: "From Term 1, 2026.",
-  },
-  {
-    q: "What happens if we need to pause?",
-    a: "If something comes up, we’ll work with you to pause where possible and keep your child’s learning plan steady.",
-  },
-  {
-    q: "What if we miss a session?",
-    a: "If you give notice, we’ll aim to reschedule within the same week where possible or adjust the plan. Missed sessions without notice may be forfeited due to limited availability.",
+    q: "Can you help with senior assessment and exams?",
+    a: "Yes. We support planning, scaffolding, drafting and exam preparation, especially in Years 11–12.",
   },
 ];
 
@@ -233,28 +261,30 @@ export default function TutoringPage() {
       <section className="bg-[#f8f8ff] px-4 pt-12 pb-10 md:px-6 md:pt-16">
         <div className="mx-auto max-w-6xl space-y-6">
           <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
-            Logan and Brisbane Southside · In home and online · Prep to Year 12
-          </p>
-          <div className="inline-flex items-center rounded-full bg-[#d6e5e3] px-3 py-1 text-xs font-semibold text-[color:var(--brand)]">
-            Calm, confidence first tutoring
-          </div>
-          <h1 className="text-3xl font-semibold leading-tight text-[color:var(--ink)] md:text-4xl">
-            One-on-one tutoring that brings structure, confidence and clarity
-            back into school.
-          </h1>
-          <p className="text-base text-[color:var(--muted)] md:max-w-3xl md:text-lg">
-            Studyroom provides personalised, gentle tutoring for anxious learners
-            and neurodivergent students, including autistic and ADHD learners, as
-            well as high achievers who want to extend themselves. We focus on
-            understanding, not memorising, with clear steps and routines so
-            students know what to do and how to do it.
-          </p>
-          <p className="text-sm text-[color:var(--muted)] md:max-w-3xl">
-            Sessions are available in home across Logan, Beenleigh and Brisbane
-            Southside, or online via the Studyroom WebApp.
+            Prep to Year 12 · Logan and Brisbane Southside · In-home and online
           </p>
 
-          {/* Buttons (updated CTA language, keeping layout) */}
+          <div className="inline-flex items-center rounded-full bg-[#d6e5e3] px-3 py-1 text-xs font-semibold text-[color:var(--brand)]">
+            Personalised 1:1 tutoring
+          </div>
+
+          <h1 className="text-3xl font-semibold leading-tight text-[color:var(--ink)] md:text-4xl">
+            One-on-one tutoring that brings structure and confidence back into
+            school.
+          </h1>
+
+          <p className="text-base text-[color:var(--muted)] md:max-w-3xl md:text-lg">
+            Studyroom provides personalised 1:1 tutoring for Prep to Year 12
+            students across Logan and Brisbane Southside. We support anxious and
+            neurodivergent learners, as well as high-achieving students ready to
+            extend.
+          </p>
+
+          <p className="text-sm text-[color:var(--muted)] md:max-w-3xl">
+            We focus on understanding — not memorising — using clear steps and
+            predictable routines so students know what to do next.
+          </p>
+
           <div className="flex flex-wrap gap-3">
             <Link
               href="/contact"
@@ -272,20 +302,20 @@ export default function TutoringPage() {
         </div>
       </section>
 
-      {/* NEW: WHAT'S NEW / LEARNING PACKAGES */}
+      {/* PACKAGES */}
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-6xl space-y-6">
           <div className="flex flex-col gap-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--brand)]">
-              What’s new for Term 1, 2026
+              Packages
             </p>
             <h2 className="text-2xl font-semibold text-[color:var(--ink)]">
-              Introducing Studyroom learning packages
+              Structured learning packages
             </h2>
             <p className="text-sm text-[color:var(--muted)] md:max-w-3xl md:text-base">
-              Studyroom is moving from week-by-week bookings to structured
-              learning packages. This creates consistency for students, clarity
-              for parents, and measurable progress across the term.
+              Studyroom operates primarily on prepaid packages to secure weekly
+              time slots and support consistent progress. All sessions are 60
+              minutes.
             </p>
           </div>
 
@@ -304,9 +334,15 @@ export default function TutoringPage() {
                       {pkg.desc}
                     </p>
                   </div>
-                  <span className="shrink-0 rounded-full bg-[#d6e5e3] px-3 py-1 text-xs font-semibold text-[color:var(--brand)]">
-                    {pkg.price}
-                  </span>
+
+                  <div className="shrink-0 space-y-2 text-right">
+                    <div className="rounded-full bg-[#d6e5e3] px-3 py-1 text-xs font-semibold text-[color:var(--brand)]">
+                      In-home {pkg.priceInHome}
+                    </div>
+                    <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[color:var(--brand)] ring-1 ring-[color:var(--ring)]">
+                      Online {pkg.priceOnline}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="mt-4 space-y-2">
@@ -338,23 +374,23 @@ export default function TutoringPage() {
               href="#pricing"
               className="inline-flex items-center justify-center rounded-lg border border-[color:var(--ring)] bg-white px-5 py-3 text-sm font-semibold text-[color:var(--brand)] transition hover:bg-[#d6e5e3]/60"
             >
-              View pricing →
+              View pricing & policies →
             </Link>
           </div>
         </div>
       </section>
 
-      {/* WHAT WE OFFER */}
+      {/* DELIVERY MODES */}
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-6xl space-y-6">
           <h2 className="text-2xl font-semibold text-[color:var(--ink)]">
-            What we offer
+            How sessions can run
           </h2>
           <p className="text-sm text-[color:var(--muted)] md:max-w-3xl">
-            Every student’s plan is personalised, but most families begin with
-            weekly one to one support in one of these formats.
+            Most families begin with weekly 1:1 sessions either in-home or
+            online, depending on what’s easiest for the student and the family.
           </p>
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2">
             {offers.map((item) => (
               <div
                 key={item.title}
@@ -372,16 +408,16 @@ export default function TutoringPage() {
         </div>
       </section>
 
-      {/* SUBJECTS AND FOCUS AREAS */}
+      {/* SUBJECTS AND FOCUS AREAS (combined) */}
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-6xl space-y-6">
           <h2 className="text-2xl font-semibold text-[color:var(--ink)]">
             Subjects and focus areas
           </h2>
           <p className="text-sm text-[color:var(--muted)] md:max-w-3xl">
-            We do more than help with homework. Each session is anchored to clear
-            skills and aligned with the Australian Curriculum and your child’s
-            current units at school.
+            We support literacy, numeracy, executive function and study skills
+            aligned with the Australian Curriculum and your child’s current
+            school units.
           </p>
           <div className="grid gap-4 md:grid-cols-3">
             {subjectBlocks.map((block) => (
@@ -415,10 +451,9 @@ export default function TutoringPage() {
                 Who tutoring is for
               </h2>
               <p className="mt-3 text-sm text-[color:var(--muted)]">
-                Studyroom suits learners who do best with calm, consistent
-                support rather than pressure. We work with students who feel
-                anxious, overwhelmed or left behind in busy classrooms, as well
-                as students who are ready to extend themselves and aim higher.
+                Studyroom supports students who benefit from clear explanations,
+                predictable structure and steady guidance — whether they are
+                catching up, keeping up or extending.
               </p>
             </div>
             <div className="grid gap-3">
@@ -440,17 +475,12 @@ export default function TutoringPage() {
         </div>
       </section>
 
-      {/* HOW SESSIONS WORK */}
+      {/* HOW IT WORKS */}
       <section className="px-4 md:px-6" id="how-it-works">
         <div className="mx-auto max-w-6xl space-y-6">
           <h2 className="text-2xl font-semibold text-[color:var(--ink)]">
-            How Studyroom tutoring works
+            How Studyroom works
           </h2>
-          <p className="text-sm text-[color:var(--muted)] md:max-w-3xl">
-            The process is simple and supportive from the start. No pushy sales
-            calls, just a genuine conversation about what your child needs and
-            what is realistic for your family.
-          </p>
           <div className="grid gap-4 md:grid-cols-4">
             {howItWorks.map((item, index) => (
               <div
@@ -472,18 +502,17 @@ export default function TutoringPage() {
         </div>
       </section>
 
-      {/* WHAT A SESSION FEELS LIKE */}
+      {/* SESSION FLOW (shortened) */}
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-6xl space-y-6">
           <h2 className="text-2xl font-semibold text-[color:var(--ink)]">
-            What a typical session feels like
+            What a typical session looks like
           </h2>
           <p className="text-sm text-[color:var(--muted)] md:max-w-3xl">
-            Every tutor has their own style, but all Studyroom sessions follow a
-            calm, predictable rhythm so students know what to expect each week
-            and do not feel surprised or unprepared.
+            Sessions follow a predictable rhythm so students can focus on the
+            work, not guess what’s coming next.
           </p>
-          <div className="grid gap-4 md:grid-cols-5">
+          <div className="grid gap-4 md:grid-cols-4">
             {sessionFlow.map((step) => (
               <div
                 key={step.title}
@@ -501,20 +530,20 @@ export default function TutoringPage() {
         </div>
       </section>
 
-      {/* PRICING AND LOCATIONS */}
+      {/* PRICING & POLICIES + LOCATIONS */}
       <section className="px-4 md:px-6" id="pricing">
         <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-2">
-          {/* PRICING */}
+          {/* PRICING & POLICIES (single source of truth) */}
           <div className="rounded-3xl bg-[color:var(--card)] p-8 shadow-sm ring-1 ring-[color:var(--ring)]">
             <h3 className="text-xl font-semibold text-[color:var(--ink)]">
-              Pricing
+              Pricing and policies
             </h3>
             <p className="mt-2 text-sm text-[color:var(--muted)]">
-              Transparent options designed for consistency, clarity and flexible
-              support when needed.
+              Clear pricing and expectations in one place.
             </p>
+
             <div className="mt-4 space-y-3">
-              {pricing.map((item) => (
+              {pricingAndPolicies.map((item) => (
                 <div
                   key={item.label}
                   className="rounded-2xl bg-white/80 p-4 ring-1 ring-[color:var(--ring)]"
@@ -528,10 +557,6 @@ export default function TutoringPage() {
                 </div>
               ))}
             </div>
-            <p className="mt-4 text-xs text-[color:var(--muted)]">
-              Pricing is confirmed during your enquiry based on location, year
-              level and session length.
-            </p>
           </div>
 
           {/* LOCATIONS */}
@@ -540,8 +565,8 @@ export default function TutoringPage() {
               Locations
             </h3>
             <p className="mt-2 text-sm text-[color:var(--muted)]">
-              We keep travel reasonable for tutors and convenient for families
-              while offering online options for everyone else.
+              In-home coverage is kept reasonable for families and tutors, with
+              online tutoring available for everyone else.
             </p>
             <div className="mt-4 space-y-3">
               {locations.map((loc) => (
@@ -566,12 +591,8 @@ export default function TutoringPage() {
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-6xl space-y-6">
           <h2 className="text-2xl font-semibold text-[color:var(--ink)]">
-            Common questions from families
+            Common questions
           </h2>
-          <p className="text-sm text-[color:var(--muted)] md:max-w-3xl">
-            If you are unsure whether tutoring is the right step, you are not
-            alone. These are some of the questions we hear most often.
-          </p>
           <div className="grid gap-4 md:grid-cols-2">
             {faqs.map((item) => (
               <div
@@ -581,7 +602,9 @@ export default function TutoringPage() {
                 <div className="text-sm font-semibold text-[color:var(--ink)]">
                   {item.q}
                 </div>
-                <p className="mt-2 text-sm text-[color:var(--muted)]">{item.a}</p>
+                <p className="mt-2 text-sm text-[color:var(--muted)]">
+                  {item.a}
+                </p>
               </div>
             ))}
           </div>
@@ -597,8 +620,8 @@ export default function TutoringPage() {
                 Tutor profiles
               </h2>
               <p className="mt-1 text-xs text-[color:var(--muted)]">
-                Studyroom is a small, vetted team, not a large marketplace. You
-                will always know who is working with your child.
+                A small, vetted team — you always know who is working with your
+                child.
               </p>
             </div>
             <Link
@@ -608,6 +631,7 @@ export default function TutoringPage() {
               Find a tutor →
             </Link>
           </div>
+
           <div className="grid gap-4 md:grid-cols-3">
             {tutors.map((tutor) => (
               <div
@@ -623,7 +647,7 @@ export default function TutoringPage() {
                       {tutor.name}
                     </div>
                     <div className="text-xs text-[color:var(--muted)]">
-                      Confidence first tutor
+                      Tutor
                     </div>
                   </div>
                 </div>
@@ -642,16 +666,15 @@ export default function TutoringPage() {
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-white/80">
-                Let’s plan together
+                Next step
               </p>
               <h2 className="text-3xl font-semibold leading-tight">
-                Ready to join a learning plan?
+                Ready to start a weekly learning plan?
               </h2>
               <p className="text-sm text-white/85 md:max-w-2xl">
-                Tell us about your child’s goals, challenges and learning style.
-                We’ll recommend the right learning package and match them with a
-                tutor who fits their pace — whether they are catching up, keeping
-                up or aiming for top marks.
+                Tell us what your child needs right now. We’ll recommend the
+                best package and match them with a tutor who fits their goals and
+                pace.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">

@@ -1,65 +1,73 @@
 import Link from "next/link";
 import Image from "next/image";
 
+/**
+ * TERM 2 PACKAGE SALE
+ * Toggle on/off when needed.
+ */
+const TERM2_SALE_ACTIVE = true;
+const TERM2_SALE_ENDS = "31 March";
+const TERM2_SALE_LABEL = `Term 2 Early Enrolment Offer ends ${TERM2_SALE_ENDS}`;
+
 const services = [
   {
     title: "In-home tutoring",
-    desc: "Calm, structured lessons at your kitchen table that build confidence, clarity and routine.",
-    tag: "In person 1:1 support",
+    desc: "1:1 tutoring delivered in-home across Logan and Brisbane Southside.",
+    tag: "In person support",
   },
   {
     title: "Online tutoring",
-    desc: "Live 1:1 support through the Studyroom WebApp with shared notes, worksheets and progress tracking.",
-    tag: "Online 1:1 support",
+    desc: "Live 1:1 sessions delivered online via the Studyroom WebApp.",
+    tag: "Online support",
   },
   {
     title: "HeadStart workshops",
-    desc: "Holiday workshops that rebuild confidence, organisation and study habits before term begins.",
+    desc: "Holiday workshops that rebuild organisation and study habits before term begins.",
     tag: "Holiday workshops",
   },
   {
     title: "Custom worksheets",
-    desc: "Personalised printable resources that match your child’s level, school topics and goals.",
+    desc: "Printable resources matched to year level, topics and skill gaps.",
     tag: "Printable resources",
   },
 ];
 
 const philosophyPoints = [
-  "Learning plans shaped around the student, not a generic program.",
-  "Clear structure so school feels more manageable and less stressful.",
-  "Real confidence-building with small wins that students can feel.",
-  "Calm, encouraging sessions that avoid pressure and overwhelm.",
-  "Healthy challenge that stretches students without panic.",
+  "Plans shaped around the student — not a generic program.",
+  "Clear routines so school feels more manageable.",
+  "Small wins that build real confidence and effort.",
+  "Steady challenge without overwhelm.",
+  "Skills that transfer back into the classroom.",
 ];
 
 const helpPoints = [
-  "Anxious learners who feel stressed, worried about grades or nervous about school.",
-  "Autistic and ADHD students, and other neurodivergent learners who benefit from structure and clear expectations.",
-  "Students rebuilding confidence after low marks, school avoidance or tricky school years.",
-  "Motivated students aiming for strong grades, extension work or scholarships.",
-  "Students who need support with organisation, routines and study skills.",
+  "Anxious learners who feel stressed, stuck or behind at school.",
+  "Autistic and ADHD students and other neurodivergent learners.",
+  "Students rebuilding after low marks or tricky school years.",
+  "Motivated students aiming for strong grades, extension or scholarships.",
+  "Students needing support with organisation and study skills.",
 ];
 
 const whyReasons = [
   {
-    title: "Confidence, clarity and progress",
-    desc: "We focus on understanding, not memorising, so students feel capable and know what to do next.",
+    title: "Progress that is measurable",
+    desc: "Clear weekly focus so students build skills that show up in class and assessment.",
   },
   {
     title: "Personalised learning plans",
-    desc: "Every plan is shaped around your child’s goals, year level and current school topics.",
+    desc: "Tutoring shaped around year level, current units and what the student needs next.",
   },
   {
     title: "Organisation and study skills",
-    desc: "We help students plan, prioritise and revise so they are not scrambling before tests and assignments.",
+    desc: "Planning, prioritising and revision routines so students aren’t scrambling before tests.",
   },
   {
     title: "Curriculum aligned support",
-    desc: "Lessons follow the Australian Curriculum and QCE so tutoring links directly to what they see in class.",
+    desc: "Aligned with Australian Curriculum and QCE so tutoring connects directly to school.",
   },
   {
-    title: "Consistent communication",
-    desc: "Parents get honest updates, clear next steps and support when things feel stressful.",
+    title: "Clear communication",
+    desc: "Parents receive straightforward updates and next steps across the learning plan.",
   },
 ];
 
@@ -68,19 +76,25 @@ const tutors = [
     name: "Lily",
     role: "Founder & Tutor",
     blurb:
-      "Education student specialising in Maths and personalised learning. Focused on confidence, routines and helping students feel genuinely proud of their progress.",
+      "Education student specialising in Maths and personalised learning across Prep to Year 12. Lily supports students who feel anxious, behind or overwhelmed using explicit teaching, clear routines and structured scaffolds to build real understanding and confidence over time.",
   },
   {
     name: "Katarina",
     role: "Tutor",
     blurb:
-      "Calm, organised Education student who supports students with clear routines, encouragement and step by step teaching.",
+      "Maths and executive function tutor supporting primary and junior secondary students. Katarina helps students break work into manageable steps, develop organisation skills and reduce stress with steady pacing and clear expectations.",
   },
   {
     name: "Scarlett",
     role: "Tutor",
     blurb:
-      "Primary school tutor focused on literacy, reading confidence and growth mindset with gentle accountability each session.",
+      "Primary specialist focused on literacy, reading fluency and foundational skills. Scarlett strengthens decoding, comprehension and written expression through explicit instruction and consistent practice, supporting independence and resilience alongside core skill growth.",
+  },
+  {
+    name: "Casey (He/Him)",
+    role: "Tutor",
+    blurb:
+      "Maths tutor supporting all year levels, with additional expertise in senior assessment and assignment support across subjects. Casey uses clear explanations, structured strategies and a calm approach to make complex tasks feel manageable so students feel prepared, capable and confident.",
   },
 ];
 
@@ -88,7 +102,7 @@ const trustPoints = [
   "Local, Blue Card approved tutors",
   "1:1 support in-home or online",
   "Aligned with Australian Curriculum and QCE",
-  "Neurodiversity aware, anxiety-aware approach",
+  "Neurodiversity aware approach",
 ];
 
 const testimonials = [
@@ -132,38 +146,30 @@ export default function HomePage() {
         <div className="mx-auto flex max-w-6xl flex-col gap-10 lg:flex-row lg:items-center lg:gap-14">
           {/* TEXT SIDE */}
           <div className="flex-1 space-y-6">
-            {/* Location Line */}
             <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
               Logan and Brisbane Southside · Prep to Year 12
             </p>
 
-            {/* Brand Tone Bubble */}
             <p className="inline-flex items-center rounded-full bg-[#d6e5e3] px-3 py-1 text-xs font-semibold text-[color:var(--brand)]">
-              Calm · Personalised · Growth focused
+              Personalised tutoring
             </p>
 
-            {/* Heading */}
             <h1 className="text-3xl font-semibold leading-snug text-[color:var(--ink)] md:text-4xl">
-              Calm tutoring that helps students feel capable, organised and proud
-              of their progress.
+              Tutoring that helps students feel capable, organised and proud of
+              their progress.
             </h1>
 
-            {/* Hero Paragraphs */}
             <p className="text-base text-[color:var(--muted)] md:text-lg">
-              Studyroom gives students the structure, clarity and confidence they
-              need to move forward at school. We support anxious and
-              neurodivergent learners through calm, personalised teaching that
-              helps them understand their work, stay organised and feel
-              confident in their learning, without pressure.
+              Studyroom supports Prep to Year 12 students with personalised 1:1
+              tutoring that builds clear skills, consistent routines and steady
+              progress at school.
             </p>
 
             <p className="text-sm text-[color:var(--muted)]">
-              Some students come to us to catch up and feel proud again. Others
-              want to stay on top or push for top marks. We build a plan that
-              fits where they are now and where they want to go next.
+              We support anxious and neurodivergent learners, as well as
+              motivated students aiming for extension and strong results.
             </p>
 
-            {/* Buttons (updated CTA language, keeping the layout) */}
             <div className="flex flex-wrap gap-3">
               <Link
                 href="/contact"
@@ -171,16 +177,14 @@ export default function HomePage() {
               >
                 Apply for a spot
               </Link>
-              
             </div>
 
-            {/* Clean chips */}
             <div className="flex flex-wrap gap-2 text-xs font-medium">
               {[
                 "Logan based tutors",
                 "Prep to Year 12",
                 "In-home and online",
-                "Support for anxious and neurodivergent learners",
+                "Curriculum aligned support",
               ].map((chip) => (
                 <span
                   key={chip}
@@ -213,45 +217,48 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* NEW: WHAT'S NEW / LEARNING PLANS (Term 1 2026) */}
+      {/* PACKAGES TEASER (tight, not policy heavy) */}
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-6xl space-y-6">
           <div className="flex flex-col gap-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--brand)]">
-              What’s new for Term 1, 2026
+              Packages
             </p>
             <h2 className="text-2xl font-semibold text-[color:var(--ink)]">
-              Introducing Studyroom learning packages
+              Structured learning packages
             </h2>
             <p className="text-sm text-[color:var(--muted)] md:text-base">
-              Studyroom is moving from week-by-week bookings to structured
-              learning packages. This creates consistency for students, clarity
-              for parents, and measurable progress across the term.
+              Studyroom primarily runs on prepaid packages to secure weekly time
+              slots and support consistent progress. All sessions are 60 minutes.
             </p>
           </div>
 
           <div className="grid gap-5 md:grid-cols-3">
-            {/* 5-week */}
             <div className="rounded-xl bg-[color:var(--card)] p-5 shadow-sm ring-1 ring-[color:var(--ring)]">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-base font-semibold text-[color:var(--ink)]">
-                    5-Week Learning Package
+                    5-Week Package
                   </p>
                   <p className="mt-1 text-xs font-medium text-[color:var(--muted)]">
-                    Best for a clear short cycle + confidence rebuild
+                    A focused block to strengthen core skills and build momentum
                   </p>
                 </div>
                 <span className="shrink-0 rounded-full bg-[#d6e5e3] px-3 py-1 text-xs font-semibold text-[color:var(--brand)]">
-                  $375
+                  From $300
                 </span>
               </div>
+
+              <p className="mt-3 text-xs font-semibold text-[color:var(--muted)]">
+                {TERM2_SALE_ACTIVE ? TERM2_SALE_LABEL : "Prepaid package"}
+              </p>
+
               <div className="mt-4 space-y-2 text-sm text-[color:var(--muted)]">
                 {[
-                  "Weekly 1:1 session",
-                  "Weekly homework provided",
-                  "Structured session notes",
-                  "End-of-cycle parent progress update",
+                  "5 x 60-minute sessions",
+                  "Clear weekly focus",
+                  "Session notes + next steps",
+                  "Light home practice where helpful",
                 ].map((item) => (
                   <div key={item} className="flex items-start gap-3">
                     <span className="mt-1 h-5 w-5 rounded-full bg-[color:var(--brand-soft)] text-center text-xs leading-5 text-[color:var(--brand)]">
@@ -263,27 +270,31 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* 12-week */}
             <div className="rounded-xl bg-[color:var(--card)] p-5 shadow-sm ring-1 ring-[color:var(--ring)]">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-base font-semibold text-[color:var(--ink)]">
-                    12-Week Term Package
+                    Term Package (10 + 2 bonus)
                   </p>
                   <p className="mt-1 text-xs font-medium text-[color:var(--muted)]">
-                    Best for steady progress + reporting across the term
+                    Term structure with two extra sessions for assessment support
                   </p>
                 </div>
                 <span className="shrink-0 rounded-full bg-[#d6e5e3] px-3 py-1 text-xs font-semibold text-[color:var(--brand)]">
-                  $900
+                  From $720
                 </span>
               </div>
+
+              <p className="mt-3 text-xs font-semibold text-[color:var(--muted)]">
+                {TERM2_SALE_ACTIVE ? TERM2_SALE_LABEL : "Prepaid package"}
+              </p>
+
               <div className="mt-4 space-y-2 text-sm text-[color:var(--muted)]">
                 {[
-                  "Weekly 1:1 session",
-                  "Weekly homework",
-                  "Mid-term update",
-                  "End-of-term written report",
+                  "10 weekly term sessions",
+                  "+ 2 bonus sessions (same term)",
+                  "Supports steady skill growth",
+                  "Useful for exam and IA periods",
                 ].map((item) => (
                   <div key={item} className="flex items-start gap-3">
                     <span className="mt-1 h-5 w-5 rounded-full bg-[color:var(--brand-soft)] text-center text-xs leading-5 text-[color:var(--brand)]">
@@ -295,7 +306,6 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Casual */}
             <div className="rounded-xl bg-[color:var(--card)] p-5 shadow-sm ring-1 ring-[color:var(--ring)]">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -303,18 +313,19 @@ export default function HomePage() {
                     Casual sessions (limited)
                   </p>
                   <p className="mt-1 text-xs font-medium text-[color:var(--muted)]">
-                    Available in small numbers when timetable allows
+                    One-off sessions when availability allows
                   </p>
                 </div>
                 <span className="shrink-0 rounded-full bg-white px-3 py-1 text-xs font-semibold text-[color:var(--brand)] ring-1 ring-[color:var(--ring)]">
-                  $75
+                  From $60
                 </span>
               </div>
+
               <div className="mt-4 space-y-2 text-sm text-[color:var(--muted)]">
                 {[
-                  "One-off support when needed",
-                  "No structured reporting included",
-                  "Limited spots each week",
+                  "60-minute session",
+                  "Best for short-term support",
+                  "Limited weekly availability",
                 ].map((item) => (
                   <div key={item} className="flex items-start gap-3">
                     <span className="mt-1 h-5 w-5 rounded-full bg-[color:var(--brand-soft)] text-center text-xs leading-5 text-[color:var(--brand)]">
@@ -327,37 +338,6 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Mini FAQ row (kept short, not salesy) */}
-          <div className="grid gap-4 md:grid-cols-3">
-            {[
-              {
-                q: "Why packages?",
-                a: "Consistency drives progress. Packages allow planning, weekly homework, and clear tracking.",
-              },
-              {
-                q: "Can we still do casual?",
-                a: "Yes — limited spots, and casual sessions don’t include structured reporting.",
-              },
-              {
-                q: "What if we miss a week?",
-                a: "If you give notice, we’ll try to reschedule within the week or adjust the plan where possible.",
-              },
-            ].map((item) => (
-              <div
-                key={item.q}
-                className="rounded-xl bg-[#f8f8ff] p-4 ring-1 ring-[color:var(--ring)]"
-              >
-                <p className="text-xs font-semibold uppercase text-[color:var(--brand)]">
-                  {item.q}
-                </p>
-                <p className="mt-2 text-sm text-[color:var(--muted)]">
-                  {item.a}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          {/* CTA row under new section */}
           <div className="flex flex-wrap gap-3 pt-1">
             <Link
               href="/contact"
@@ -375,7 +355,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* TRUST / SAFETY STRIP */}
+      {/* TRUST STRIP */}
       <section className="bg-[#f3f7f6] border-y border-[color:var(--ring)] px-4 py-4 md:px-6">
         <div className="mx-auto flex max-w-6xl flex-wrap gap-3">
           {trustPoints.map((item) => (
@@ -436,13 +416,8 @@ export default function HomePage() {
               Learning is personal, and we treat it that way.
             </h2>
             <p className="text-sm text-white/85">
-              We believe every student, including anxious and neurodivergent
-              learners, can make strong progress when the environment is calm,
-              the plan is clear and the teaching fits how they learn.
-            </p>
-            <p className="text-sm text-white/85">
-              We do not rush. We remove the panic. We focus on small, steady wins
-              that add up to real confidence.
+              We focus on clear teaching and consistent routines that transfer
+              back into the classroom.
             </p>
           </div>
           <div className="space-y-3">
@@ -467,10 +442,8 @@ export default function HomePage() {
               Who we help
             </h2>
             <p className="text-sm text-[color:var(--muted)]">
-              Studyroom is where families turn when school starts to feel
-              stressful, confusing or stuck. We support anxious learners,
-              autistic and ADHD students and other neurodivergent young people,
-              as well as students who are simply ready to grow.
+              Families come to Studyroom when school feels stressful, confusing
+              or stuck — and they want a clear plan forward.
             </p>
             <div className="space-y-3">
               {helpPoints.map((item) => (
@@ -496,16 +469,16 @@ export default function HomePage() {
             <div className="grid gap-3 md:grid-cols-3">
               {[
                 {
-                  step: "1. Quick enquiry",
-                  desc: "Share your child’s goals, challenges and what school currently feels like.",
+                  step: "1. Enquiry",
+                  desc: "Share year level, goals and what support would help most.",
                 },
                 {
                   step: "2. Tutor match",
-                  desc: "We pair your child with a tutor who fits their personality, level and preferred mode.",
+                  desc: "We match based on needs, level and preferred mode.",
                 },
                 {
-                  step: "3. Weekly 1:1 sessions",
-                  desc: "Calm, structured lessons plus guidance for families so everyone knows the next step.",
+                  step: "3. Weekly sessions",
+                  desc: "60-minute sessions with a clear plan and steady progress.",
                 },
               ].map((item) => (
                 <div
@@ -525,17 +498,12 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* RESULTS & STORIES */}
+      {/* RESULTS */}
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-6xl space-y-5">
           <h2 className="text-2xl font-semibold text-[color:var(--ink)]">
             Results and stories
           </h2>
-          <p className="text-sm text-[color:var(--muted)]">
-            Some students just want to pass and feel proud again. Others are
-            aiming for top marks. We focus on confidence, clarity and steady
-            progress for both.
-          </p>
           <div className="grid gap-4 md:grid-cols-3">
             {testimonials.map((t) => (
               <div
@@ -554,7 +522,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* WHY FAMILIES CHOOSE STUDYROOM + WORKSHOP IMAGE */}
+      {/* WHY + IMAGE */}
       <section className="px-4 md:px-6">
         <div className="mx-auto grid max-w-6xl gap-8 md:grid-cols-2 md:items-center">
           <div className="space-y-4">
@@ -604,8 +572,8 @@ export default function HomePage() {
                 Meet your tutors
               </h2>
               <p className="mt-1 text-xs text-[color:var(--muted)]">
-                We are a small, vetted team, not a big marketplace. You will
-                always know exactly who is working with your child.
+                A small, vetted team — you always know who is working with your
+                child.
               </p>
             </div>
             <Link
@@ -643,7 +611,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* FINAL CTA (updated button label, keeping the section) */}
+      {/* FINAL CTA */}
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-6xl rounded-xl bg-[color:var(--brand)] px-6 py-8 text-white shadow-md">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -656,9 +624,8 @@ export default function HomePage() {
                 days.
               </h2>
               <p className="text-sm text-white/85">
-                Whether they want to pass and feel proud or are aiming for an A
-                plus, we will help map out a clear, calm plan for moving
-                forward.
+                We’ll recommend the best package and map out a clear plan for
+                term progress.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">

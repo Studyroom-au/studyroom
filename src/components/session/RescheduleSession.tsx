@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { auth } from "@/lib/firebase";
+import { SESSION_DURATION_MINS } from "@/lib/studyroom/billing";
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
@@ -31,10 +32,9 @@ export default function RescheduleSession({
 }) {
   const [open, setOpen] = useState(false);
   const [startStr, setStartStr] = useState(() => toLocalInputValue(currentStart));
-  const [duration, setDuration] = useState<number>(() => {
-    const mins = Math.max(15, Math.round((currentEnd.getTime() - currentStart.getTime()) / 60000));
-    return mins;
-  });
+  const [duration, setDuration] = useState<number>(() =>
+    Math.max(SESSION_DURATION_MINS, Math.round((currentEnd.getTime() - currentStart.getTime()) / 60000))
+  );
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -77,8 +77,8 @@ export default function RescheduleSession({
       setOpen(false);
       setMsg("Rescheduled ✅");
       onDone?.();
-    } catch (e: any) {
-      setMsg(e?.message ?? "Reschedule failed");
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Reschedule failed");
     } finally {
       setBusy(false);
     }
@@ -98,7 +98,7 @@ export default function RescheduleSession({
           type="button"
           onClick={() => {
             setStartStr(toLocalInputValue(currentStart));
-            setDuration(Math.max(15, Math.round((currentEnd.getTime() - currentStart.getTime()) / 60000)));
+            setDuration(Math.max(SESSION_DURATION_MINS, Math.round((currentEnd.getTime() - currentStart.getTime()) / 60000)));
             setMsg(null);
             setOpen((v) => !v);
           }}
@@ -122,19 +122,10 @@ export default function RescheduleSession({
           </div>
 
           <div>
-            <label htmlFor="duration-select" className="text-xs font-semibold text-[color:var(--muted)]">Duration</label>
-            <select
-              id="duration-select"
-              value={duration}
-              onChange={(e) => setDuration(Number(e.target.value))}
-              className="mt-1 w-full rounded-2xl border border-[color:var(--ring)] px-3 py-2 text-sm outline-none"
-            >
-              {[30, 45, 60, 75, 90, 120].map((m) => (
-                <option key={m} value={m}>
-                  {m} min
-                </option>
-              ))}
-            </select>
+            <label className="text-xs font-semibold text-[color:var(--muted)]">Duration</label>
+            <div className="mt-1 rounded-2xl border border-[color:var(--ring)] px-3 py-2 text-sm text-[color:var(--muted)]">
+              {duration} min
+            </div>
           </div>
 
           <div className="md:col-span-3 flex flex-wrap items-center gap-2">

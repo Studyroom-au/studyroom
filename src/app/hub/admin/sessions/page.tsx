@@ -28,21 +28,18 @@ import type {
 import type { EventResizeDoneArg } from "@fullcalendar/interaction";
 
 import SessionLogEditor from "@/components/session/SessionLogEditor";
-
-type SessionStatus =
-  | "SCHEDULED"
-  | "CONFIRMED"
-  | "COMPLETED"
-  | "CANCELLED_PARENT"
-  | "CANCELLED_STUDYROOM"
-  | "NO_SHOW";
-
-type BillingStatus =
-  | "NOT_BILLED"
-  | "READY_TO_INVOICE"
-  | "INVOICED"
-  | "CREDITED"
-  | "FORFEITED";
+import {
+  formatModeLabel,
+  formatPlanLabel,
+  formatSessionStatusLabel,
+  normalizeMode,
+  normalizePlanType,
+  normalizeSessionStatus,
+  type BillingOutcome,
+  type InvoiceStatus,
+  type StudyroomEntitlementRecord,
+  type StudyroomPlanRecord,
+} from "@/lib/studyroom/billing";
 
 type SessionDoc = {
   tutorId: string;
@@ -50,16 +47,24 @@ type SessionDoc = {
 
   studentId: string;
   clientId: string;
+  planId?: string | null;
 
   startAt: Timestamp;
   endAt: Timestamp;
   durationMinutes: number;
+  durationMins?: number;
 
-  status: SessionStatus;
-  billingStatus: BillingStatus;
+  status: string;
+  billingStatus?: string;
+  billingOutcome?: BillingOutcome | null;
 
   modality?: "IN_HOME" | "ONLINE" | "GROUP" | null;
+  mode?: "in_home" | "online" | "group" | null;
   notes?: string | null;
+  graceApplied?: boolean | null;
+  noticeHours?: number | null;
+  consumed?: boolean | null;
+  invoiceId?: string | null;
 
   amountCents?: number | null;
   xeroInvoiceId?: string | null;
@@ -82,27 +87,17 @@ type UserDoc = {
   email?: string;
 };
 
+type InvoiceDoc = {
+  status?: InvoiceStatus | null;
+  dueAt?: Timestamp | null;
+  lateFeeApplied?: boolean | null;
+  lateFeeCents?: number | null;
+};
+
 function niceTimeRange(start: Date, end: Date) {
   const s = start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   const e = end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   return `${s}–${e}`;
-}
-
-function statusChip(status: SessionStatus) {
-  if (status === "COMPLETED") return "Completed";
-  if (status === "CONFIRMED") return "Confirmed";
-  if (status === "SCHEDULED") return "Session";
-  if (status === "NO_SHOW") return "No-show";
-  if (status.startsWith("CANCELLED")) return "Cancelled";
-  return status;
-}
-
-function modalityLabel(m?: SessionDoc["modality"]) {
-  if (!m) return "";
-  if (m === "ONLINE") return "Online";
-  if (m === "IN_HOME") return "In-home";
-  if (m === "GROUP") return "Group";
-  return "";
 }
 
 export default function AdminSessionsCalendarPage() {
@@ -111,6 +106,10 @@ export default function AdminSessionsCalendarPage() {
 
   const [students, setStudents] = useState<Record<string, StudentDoc>>({});
   const [tutors, setTutors] = useState<Record<string, UserDoc>>({});
+  const [plans, setPlans] = useState<Record<string, StudyroomPlanRecord>>({});
+  const [entitlements, setEntitlements] = useState<Record<string, StudyroomEntitlementRecord>>({});
+  const [invoices, setInvoices] = useState<Record<string, InvoiceDoc>>({});
+  const [actionBusy, setActionBusy] = useState<"no_show" | "apply_grace" | null>(null);
 
   const [openId, setOpenId] = useState<string | null>(null);
 
@@ -118,6 +117,18 @@ export default function AdminSessionsCalendarPage() {
     () => sessions.find((s) => s.id === openId) ?? null,
     [openId, sessions]
   );
+  const openPlan = useMemo(() => {
+    const planId = openSession?.data.planId ?? "";
+    return planId ? plans[planId] ?? null : null;
+  }, [openSession, plans]);
+  const openEntitlement = useMemo(() => {
+    const planId = openSession?.data.planId ?? "";
+    return planId ? entitlements[planId] ?? null : null;
+  }, [openSession, entitlements]);
+  const openInvoice = useMemo(() => {
+    const invoiceId = openSession?.data.invoiceId ?? "";
+    return invoiceId ? invoices[invoiceId] ?? null : null;
+  }, [openSession, invoices]);
 
   const studentLabel = useCallback(
     (studentId: string) => {
@@ -176,6 +187,35 @@ export default function AdminSessionsCalendarPage() {
           })
         );
         setTutors(tutorMap);
+
+        const planIds = Array.from(new Set(loaded.map((s) => s.data.planId).filter(Boolean) as string[]));
+        const invoiceIds = Array.from(new Set(loaded.map((s) => s.data.invoiceId).filter(Boolean) as string[]));
+
+        const planMap: Record<string, StudyroomPlanRecord> = {};
+        const entitlementMap: Record<string, StudyroomEntitlementRecord> = {};
+        await Promise.all(
+          planIds.map(async (pid) => {
+            const planSnap = await getDoc(doc(db, "plans", pid));
+            if (planSnap.exists()) {
+              planMap[pid] = { id: pid, ...(planSnap.data() as StudyroomPlanRecord) };
+            }
+            const entitlementSnap = await getDoc(doc(db, "entitlements", pid));
+            if (entitlementSnap.exists()) {
+              entitlementMap[pid] = { id: pid, ...(entitlementSnap.data() as StudyroomEntitlementRecord) };
+            }
+          })
+        );
+        setPlans(planMap);
+        setEntitlements(entitlementMap);
+
+        const invoiceMap: Record<string, InvoiceDoc> = {};
+        await Promise.all(
+          invoiceIds.map(async (invoiceId) => {
+            const invoiceSnap = await getDoc(doc(db, "invoices", invoiceId));
+            if (invoiceSnap.exists()) invoiceMap[invoiceId] = invoiceSnap.data() as InvoiceDoc;
+          })
+        );
+        setInvoices(invoiceMap);
       } finally {
         setLoading(false);
       }
@@ -194,24 +234,26 @@ export default function AdminSessionsCalendarPage() {
 
       const classNames = [
         "sr-event",
-        s.data.status === "COMPLETED" ? "sr-event--done" : "",
-        s.data.status.startsWith("CANCELLED") ? "sr-event--cancel" : "",
-        s.data.billingStatus === "READY_TO_INVOICE" ? "sr-event--invoice" : "",
+        normalizeSessionStatus(s.data.status) === "completed" ? "sr-event--done" : "",
+        normalizeSessionStatus(s.data.status).startsWith("cancelled") ? "sr-event--cancel" : "",
+        s.data.billingOutcome === "invoice" ? "sr-event--invoice" : "",
       ].filter(Boolean);
 
       return {
         id: s.id,
         // Title is fallback only; eventContent controls display
-        title: `${statusChip(s.data.status)} · ${stud} · ${tut}`,
+        title: `${formatSessionStatusLabel(normalizeSessionStatus(s.data.status))} · ${stud} · ${tut}`,
         start,
         end,
         classNames,
         extendedProps: {
-          status: s.data.status,
-          billingStatus: s.data.billingStatus,
+          status: normalizeSessionStatus(s.data.status),
+          billingStatus: s.data.billingStatus ?? "",
+          billingOutcome: s.data.billingOutcome ?? null,
           studentLabel: stud,
           tutorLabel: tut,
           modality: s.data.modality ?? null,
+          mode: s.data.mode ?? null,
         },
       };
     });
@@ -261,6 +303,30 @@ export default function AdminSessionsCalendarPage() {
     setOpenId(arg.event.id);
   }
 
+  async function runAdminAction(action: "no_show" | "apply_grace") {
+    const user = auth.currentUser;
+    if (!user || !openSession) return;
+    setActionBusy(action);
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch("/api/sessions/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ sessionId: openSession.id, action }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || "Session update failed.");
+      }
+      window.location.reload();
+    } catch (e) {
+      console.error(e);
+      alert(e instanceof Error ? e.message : "Session update failed.");
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-6xl space-y-5">
       <header className="space-y-1">
@@ -303,14 +369,13 @@ export default function AdminSessionsCalendarPage() {
               const start = arg.event.start ?? new Date();
               const end = arg.event.end ?? new Date(start.getTime() + 60 * 60000);
 
-              const status = String(arg.event.extendedProps?.status ?? "");
-              const billing = String(arg.event.extendedProps?.billingStatus ?? "");
+              const status = normalizeSessionStatus(arg.event.extendedProps?.status);
               const stud = String(arg.event.extendedProps?.studentLabel ?? "Student");
               const tut = String(arg.event.extendedProps?.tutorLabel ?? "Tutor");
-              const mod = arg.event.extendedProps?.modality as SessionDoc["modality"] | null;
+              const mod = normalizeMode(arg.event.extendedProps?.mode ?? arg.event.extendedProps?.modality);
 
               const compact = arg.view.type === "dayGridMonth";
-              const topLabel = statusChip(status as SessionStatus);
+              const topLabel = formatSessionStatusLabel(status);
 
               return (
                 <div className="sr-event-inner">
@@ -318,9 +383,11 @@ export default function AdminSessionsCalendarPage() {
                   <div className="sr-event-row">
                     <span className="sr-dot" />
                     <span className="sr-title">{topLabel}</span>
-                    {billing === "READY_TO_INVOICE" && <span className="sr-pill">Invoice</span>}
-                    {!compact && modalityLabel(mod ?? undefined) && (
-                      <span className="sr-pill">{modalityLabel(mod ?? undefined)}</span>
+                    {(arg.event.extendedProps?.billingOutcome as BillingOutcome | null) === "invoice" && (
+                      <span className="sr-pill">Invoice</span>
+                    )}
+                    {!compact && formatModeLabel(mod) && (
+                      <span className="sr-pill">{formatModeLabel(mod)}</span>
                     )}
                   </div>
 
@@ -347,7 +414,7 @@ export default function AdminSessionsCalendarPage() {
                 Session
               </div>
               <div className="mt-1 text-lg font-semibold text-[color:var(--ink)]">
-                {statusChip(openSession.data.status)}
+                {formatSessionStatusLabel(normalizeSessionStatus(openSession.data.status))}
               </div>
               <div className="mt-1 text-sm text-[color:var(--muted)]">
                 {niceTimeRange(openSession.data.startAt.toDate(), openSession.data.endAt.toDate())}
@@ -355,6 +422,10 @@ export default function AdminSessionsCalendarPage() {
               <div className="mt-1 text-xs text-[color:var(--muted)]">
                 {studentLabel(openSession.data.studentId)} ·{" "}
                 {tutorLabel(openSession.data.tutorId, openSession.data.tutorEmail)}
+              </div>
+              <div className="mt-1 text-xs text-[color:var(--muted)]">
+                {formatModeLabel(normalizeMode(openSession.data.mode ?? openSession.data.modality))} · Outcome:{" "}
+                <b>{openSession.data.billingOutcome ?? "no_charge"}</b>
               </div>
             </div>
 
@@ -365,6 +436,65 @@ export default function AdminSessionsCalendarPage() {
             >
               Close
             </button>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] p-3 text-sm">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">Plan</div>
+              <div className="mt-1 font-semibold text-[color:var(--ink)]">
+                {formatPlanLabel(normalizePlanType(openPlan?.type))}
+              </div>
+              <div className="mt-1 text-xs text-[color:var(--muted)]">
+                {openSession.data.graceApplied ? "Grace applied to this session" : "No grace on this session"}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] p-3 text-sm">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">Entitlement</div>
+              <div className="mt-1 font-semibold text-[color:var(--ink)]">
+                {openEntitlement
+                  ? `${openEntitlement.remainingSessions} base · ${openEntitlement.bonusRemaining} bonus`
+                  : "No package balance"}
+              </div>
+              <div className="mt-1 text-xs text-[color:var(--muted)]">
+                Consumed: {openSession.data.consumed ? "Yes" : "No"}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] p-3 text-sm">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">Invoice</div>
+              <div className="mt-1 font-semibold text-[color:var(--ink)]">
+                {openInvoice?.status ?? (openSession.data.invoiceId ? "linked" : "none")}
+              </div>
+              <div className="mt-1 text-xs text-[color:var(--muted)]">
+                {openInvoice?.dueAt ? `Due ${openInvoice.dueAt.toDate().toLocaleDateString()}` : "No due date"}
+                {openInvoice?.lateFeeApplied ? ` · Late fee $${((openInvoice.lateFeeCents ?? 0) / 100).toFixed(2)}` : ""}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={actionBusy !== null}
+              onClick={() => runAdminAction("no_show")}
+              className="rounded-xl border border-[color:var(--ring)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--brand)] hover:bg-[#d6e5e3]/40 disabled:opacity-60"
+            >
+              {actionBusy === "no_show" ? "Saving..." : "Mark no-show"}
+            </button>
+            <button
+              type="button"
+              disabled={actionBusy !== null}
+              onClick={() => runAdminAction("apply_grace")}
+              className="rounded-xl border border-[color:var(--ring)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--brand)] hover:bg-[#d6e5e3]/40 disabled:opacity-60"
+            >
+              {actionBusy === "apply_grace" ? "Applying..." : "Apply grace"}
+            </button>
+            <div className="self-center text-xs text-[color:var(--muted)]">
+              {openSession.data.graceApplied
+                ? "Grace already applied"
+                : openSession.data.noticeHours !== undefined && openSession.data.noticeHours !== null
+                  ? `Notice: ${openSession.data.noticeHours.toFixed(1)} hours`
+                  : "No notice recorded"}
+            </div>
           </div>
 
           <div className="mt-4">

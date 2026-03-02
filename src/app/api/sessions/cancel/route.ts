@@ -1,7 +1,7 @@
 // src/app/api/sessions/cancel/route.ts
 import { NextResponse } from "next/server";
-import { Timestamp } from "firebase-admin/firestore";
 import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
+import { applySessionAction } from "@/lib/studyroom/serverBilling";
 
 function getBearerToken(req: Request) {
   const h = req.headers.get("authorization") || "";
@@ -19,12 +19,8 @@ async function requireUser(req: Request) {
   return await auth.verifyIdToken(token);
 }
 
-function isAdminEmail(email?: string | null) {
-  return (email || "").toLowerCase() === "lily.studyroom@gmail.com";
-}
-
 async function isTutorOrAdmin(uid: string, email?: string | null) {
-  if (isAdminEmail(email)) return { role: "admin" as const };
+  if ((email || "").toLowerCase() === "lily.studyroom@gmail.com") return { role: "admin" as const };
 
   const db = getAdminDb();
   if (!db) throw new Error("Admin DB not configured.");
@@ -47,6 +43,16 @@ export async function POST(req: Request) {
     if (!sessionId) {
       return NextResponse.json({ error: "Missing sessionId" }, { status: 400 });
     }
+
+    const result = await applySessionAction({
+      sessionId,
+      action: reason === "STUDYROOM" ? "cancel_by_tutor" : "cancel_by_parent",
+      user,
+      role,
+    });
+
+    return NextResponse.json(result);
+    /*
 
     const db = getAdminDb();
     if (!db) throw new Error("Admin DB not configured.");
@@ -105,6 +111,7 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ ok: true, within12, invoiceTriggered });
+    */
   } catch (e: unknown) {
     console.error("[sessions/cancel]", e);
     const errorMessage = e instanceof Error ? e.message : "Unknown error";

@@ -16,6 +16,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { SESSION_DURATION_MINS, normalizeMode } from "@/lib/studyroom/billing";
 
 type StudentDoc = {
   clientId?: string | null;
@@ -33,6 +34,7 @@ type StudentDoc = {
   package?: string | null;
   assignedTutorId?: string | null;
   assignedTutorEmail?: string | null;
+  activePlanId?: string | null;
   message?: string | null;
 };
 
@@ -49,27 +51,17 @@ type ClientDoc = {
   assignedTutorEmail?: string | null;
 };
 
-type SessionStatus =
-  | "SCHEDULED"
-  | "CONFIRMED"
-  | "COMPLETED"
-  | "CANCELLED_PARENT"
-  | "CANCELLED_STUDYROOM"
-  | "NO_SHOW";
-
-type BillingStatus = "NOT_BILLED" | "READY_TO_INVOICE" | "INVOICED" | "CREDITED" | "FORFEITED";
-
 type SessionDoc = {
   tutorId: string;
   tutorEmail?: string | null;
   studentId: string;
   clientId?: string | null;
+  planId?: string | null;
   startAt: Timestamp;
   endAt: Timestamp;
-  status: SessionStatus;
-  billingStatus: BillingStatus;
+  status: string;
   modality?: "IN_HOME" | "ONLINE" | "GROUP" | null;
-  xeroInvoiceId?: string | null;
+  mode?: "in_home" | "online" | "group" | null;
   seriesKey?: string | null;
   notes?: string | null;
   durationMinutes?: number;
@@ -108,7 +100,7 @@ export default function TutorStudentDetailPage() {
   const [loading, setLoading] = useState(true);
 
   const [addWhenLocal, setAddWhenLocal] = useState("");
-  const [addDuration, setAddDuration] = useState(60);
+  const [addDuration, setAddDuration] = useState(SESSION_DURATION_MINS);
   const [addModality, setAddModality] = useState<AddModality>("IN_HOME");
   const [addNotes, setAddNotes] = useState("");
   const [saving, setSaving] = useState(false);
@@ -211,24 +203,23 @@ export default function TutorStudentDetailPage() {
       tutorEmail: user.email ?? null,
       studentId,
       clientId: student?.clientId ?? null,
+      planId: student?.activePlanId ?? null,
       startAt: Timestamp.fromDate(start),
       endAt: Timestamp.fromDate(end),
       durationMinutes: addDuration,
+      durationMins: addDuration,
       modality: addModality,
-      status: "SCHEDULED",
-      billingStatus: "NOT_BILLED",
-      xeroInvoiceId: null,
+      mode: normalizeMode(addModality),
+      status: "scheduled",
+      legacyStatus: "SCHEDULED",
       notes: addNotes.trim() ? addNotes.trim() : null,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-      completedAt: null,
-      cancelledAt: null,
-      cancelReason: null,
     });
 
     setAddNotes("");
     setAddWhenLocal("");
-    setAddDuration(60);
+    setAddDuration(SESSION_DURATION_MINS);
     setAddModality("IN_HOME");
 
     await reloadSessions();
@@ -357,11 +348,7 @@ export default function TutorStudentDetailPage() {
               onChange={(e) => setAddDuration(Number(e.target.value))}
               className="w-full rounded-xl border border-[color:var(--ring)] bg-white px-3 py-2 text-sm"
             >
-              <option value={30}>30 min</option>
-              <option value={45}>45 min</option>
               <option value={60}>60 min</option>
-              <option value={90}>90 min</option>
-              <option value={120}>120 min</option>
             </select>
           </div>
 

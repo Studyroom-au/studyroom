@@ -4,6 +4,15 @@ import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
 import { ensureXeroToken } from "@/lib/xero";
 import { Invoice } from "xero-node";
 
+type SessionRecord = {
+  tutorId?: string;
+  xeroInvoiceId?: string | null;
+};
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Unknown error";
+}
+
 function getBearerToken(req: Request) {
   const h = req.headers.get("authorization") || "";
   const m = h.match(/^Bearer (.+)$/i);
@@ -20,7 +29,7 @@ async function requireUser(req: Request) {
   return await auth.verifyIdToken(token);
 }
 
-async function requireTutorOrAdmin(uid: string, email?: string | null) {
+async function requireAdmin(uid: string, email?: string | null) {
   if ((email || "").toLowerCase() === "lily.studyroom@gmail.com") return { role: "admin" };
 
   const db = getAdminDb();
@@ -28,14 +37,14 @@ async function requireTutorOrAdmin(uid: string, email?: string | null) {
 
   const roleSnap = await db.collection("roles").doc(uid).get();
   const role = roleSnap.exists ? (roleSnap.data()?.role as string) : "student";
-  if (role !== "tutor" && role !== "admin") throw new Error("Not permitted.");
+  if (role !== "admin") throw new Error("Not permitted.");
   return { role };
 }
 
 export async function POST(req: Request) {
   try {
     const user = await requireUser(req);
-    const { role } = await requireTutorOrAdmin(user.uid, user.email ?? null);
+    const { role } = await requireAdmin(user.uid, user.email ?? null);
 
     const body = await req.json();
     const sessionId = String(body?.sessionId ?? "");
@@ -48,7 +57,7 @@ export async function POST(req: Request) {
     const sessionSnap = await sessionRef.get();
     if (!sessionSnap.exists) return NextResponse.json({ error: "Session not found" }, { status: 404 });
 
-    const session = sessionSnap.data() as any;
+    const session = (sessionSnap.data() ?? {}) as SessionRecord;
 
     if (role !== "admin" && session.tutorId !== user.uid) {
       return NextResponse.json({ error: "Not permitted" }, { status: 403 });
@@ -62,7 +71,7 @@ export async function POST(req: Request) {
     const { xero, tenantId } = await ensureXeroToken();
 
     await xero.accountingApi.updateInvoice(tenantId, xeroInvoiceId, {
-      invoices: [{ status: Invoice.StatusEnum.VOIDED } as any],
+      invoices: [{ status: Invoice.StatusEnum.VOIDED } as unknown as Invoice],
     });
 
     await sessionRef.update({
@@ -72,11 +81,8 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ ok: true });
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error("[xero/invoices/void]", e);
-    return NextResponse.json(
-      { error: e?.message ?? "Unknown error", details: e?.response?.body ?? null },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: getErrorMessage(e) }, { status: 500 });
   }
 }

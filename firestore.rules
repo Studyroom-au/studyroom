@@ -52,6 +52,14 @@ service cloud.firestore {
       );
     }
 
+    function tutorOwnerMatch(docData) {
+      return isAuthed() && (
+        isAdmin() ||
+        (docData.tutorId != null && docData.tutorId == request.auth.uid) ||
+        (docData.tutorEmail != null && authedEmail() != null && docData.tutorEmail == authedEmail())
+      );
+    }
+
     // ---------------- ROOMS ----------------
     match /rooms/{roomId} {
       allow read: if isAuthed();
@@ -240,35 +248,41 @@ service cloud.firestore {
       // Tutor creates own sessions (restricted fields)
       allow create: if isTutor() && (
         request.resource.data.tutorId == request.auth.uid
-        && request.resource.data.keys().hasAll([
+        && (
+          !("tutorEmail" in request.resource.data) ||
+          request.resource.data.tutorEmail == null ||
+          request.resource.data.tutorEmail == authedEmail()
+        )
+        && request.resource.data.keys().hasOnly([
           "tutorId",
+          "tutorEmail",
           "studentId",
           "clientId",
+          "planId",
           "startAt",
           "endAt",
           "durationMinutes",
+          "durationMins",
           "modality",
+          "mode",
           "status",
-          "billingStatus"
+          "legacyStatus",
+          "seriesKey",
+          "notes",
+          "createdAt",
+          "updatedAt"
         ])
+        && request.resource.data.status == "scheduled"
       );
 
-      // Tutor updates own sessions safely (NO payable/pay rate edits)
+      // Tutor can only reschedule/update notes from the client.
       allow update: if isTutor()
-        && resource.data.tutorId == request.auth.uid
-        && request.resource.data.tutorId == resource.data.tutorId
-        && request.resource.data.clientId == resource.data.clientId
-        && request.resource.data.studentId == resource.data.studentId
+        && sessionTutorMatch(resource.data)
         && request.resource.data.diff(resource.data).changedKeys().hasOnly([
           "startAt",
           "endAt",
-          "durationMinutes",
-          "status",
           "notes",
-          "updatedAt",
-          "completedAt",
-          "cancelledAt",
-          "cancelReason"
+          "updatedAt"
         ]);
 
       allow delete: if false;
@@ -290,22 +304,23 @@ service cloud.firestore {
       allow read, write: if isAdmin();
 
       // Tutors can read their own invoices (optional)
-      allow read: if isTutor()
-        && resource.data.tutorId == request.auth.uid;
+      allow read: if isTutor() && tutorOwnerMatch(resource.data);
 
-      // Tutors can cancel only draft invoices (optional)
-      allow update: if isTutor()
-        && resource.data.tutorId == request.auth.uid
-        && resource.data.status == "DRAFT"
-        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
-          "status",
-          "tutorNote",
-          "updatedAt",
-          "cancelReason"
-        ])
-        && request.resource.data.status in ["CANCELLED_BY_TUTOR"];
+      allow create, update, delete: if false;
+    }
 
-      allow create, delete: if false;
+    // ---------------- PLANS ----------------
+    match /plans/{planId} {
+      allow read, write: if isAdmin();
+      allow read: if isTutor() && tutorOwnerMatch(resource.data);
+      allow create, update, delete: if false;
+    }
+
+    // ---------------- ENTITLEMENTS ----------------
+    match /entitlements/{entitlementId} {
+      allow read, write: if isAdmin();
+      allow read: if isTutor() && tutorOwnerMatch(resource.data);
+      allow create, update, delete: if false;
     }
 
     // ---------------- PACKAGES ----------------

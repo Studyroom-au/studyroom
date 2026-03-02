@@ -40,7 +40,7 @@ async function requireUser(req: Request) {
   return await auth.verifyIdToken(token);
 }
 
-async function requireTutorOrAdmin(uid: string, email?: string | null) {
+async function requireAdmin(uid: string, email?: string | null) {
   if ((email || "").toLowerCase() === "lily.studyroom@gmail.com") return { role: "admin" as const };
 
   const db = getAdminDb();
@@ -48,7 +48,7 @@ async function requireTutorOrAdmin(uid: string, email?: string | null) {
 
   const roleSnap = await db.collection("roles").doc(uid).get();
   const role = (roleSnap.exists ? (roleSnap.data()?.role as Role) : "student") ?? "student";
-  if (role !== "tutor" && role !== "admin") throw new Error("Not permitted.");
+  if (role !== "admin") throw new Error("Not permitted.");
   return { role };
 }
 
@@ -60,7 +60,7 @@ function safeJsonError(e: unknown): { message: string; details?: unknown } {
 export async function POST(req: Request) {
   try {
     const user = await requireUser(req);
-    const { role } = await requireTutorOrAdmin(user.uid, user.email ?? null);
+    const { role } = await requireAdmin(user.uid, user.email ?? null);
 
     const body: unknown = await req.json();
     const sessionId = String((body as { sessionId?: unknown })?.sessionId ?? "");

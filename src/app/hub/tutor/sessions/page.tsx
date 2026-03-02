@@ -28,28 +28,39 @@ import type { EventResizeDoneArg } from "@fullcalendar/interaction";
 import Drawer from "@/components/ui/Drawer";
 import RescheduleSession from "@/components/session/RescheduleSession";
 import SessionLogEditor from "@/components/session/SessionLogEditor";
-
-type SessionStatus =
-  | "SCHEDULED"
-  | "CONFIRMED"
-  | "COMPLETED"
-  | "CANCELLED_PARENT"
-  | "CANCELLED_STUDYROOM"
-  | "NO_SHOW";
-
-type BillingStatus = "NOT_BILLED" | "READY_TO_INVOICE" | "INVOICED" | "CREDITED" | "FORFEITED";
+import {
+  SESSION_DURATION_MINS,
+  formatModeLabel,
+  formatPlanLabel,
+  formatSessionStatusLabel,
+  normalizeMode,
+  normalizePlanType,
+  normalizeSessionStatus,
+  type BillingOutcome,
+  type InvoiceStatus,
+  type StudyroomEntitlementRecord,
+  type StudyroomPlanRecord,
+} from "@/lib/studyroom/billing";
 
 type SessionDoc = {
   tutorId: string;
   tutorEmail?: string | null;
   studentId: string;
   clientId?: string | null;
+  planId?: string | null;
   startAt: Timestamp;
   endAt: Timestamp;
   durationMinutes?: number;
-  status: SessionStatus;
-  billingStatus: BillingStatus;
+  durationMins?: number;
+  status: string;
+  billingStatus?: string;
+  billingOutcome?: BillingOutcome | null;
   modality?: "IN_HOME" | "ONLINE" | "GROUP" | null;
+  mode?: "in_home" | "online" | "group" | null;
+  graceApplied?: boolean | null;
+  noticeHours?: number | null;
+  consumed?: boolean | null;
+  invoiceId?: string | null;
   xeroInvoiceId?: string | null;
   seriesKey?: string | null;
   notes?: string | null;
@@ -64,6 +75,9 @@ type StudentDoc = {
   postcode?: string | null;
   assignedTutorId?: string;
   assignedTutorEmail?: string;
+  activePlanId?: string | null;
+  package?: string | null;
+  mode?: "online" | "in-home" | null;
 };
 
 type ClientDoc = {
@@ -73,6 +87,10 @@ type ClientDoc = {
   addressLine1?: string | null;
   suburb?: string | null;
   postcode?: string | null;
+};
+
+type InvoiceDoc = {
+  status?: InvoiceStatus | null;
 };
 
 type AddModality = "IN_HOME" | "ONLINE";
@@ -106,6 +124,9 @@ export default function TutorSessionsPage() {
   const [sessions, setSessions] = useState<Array<{ id: string; data: SessionDoc }>>([]);
   const [students, setStudents] = useState<Record<string, StudentDoc>>({});
   const [clients, setClients] = useState<Record<string, ClientDoc>>({});
+  const [plans, setPlans] = useState<Record<string, StudyroomPlanRecord>>({});
+  const [entitlements, setEntitlements] = useState<Record<string, StudyroomEntitlementRecord>>({});
+  const [invoices, setInvoices] = useState<Record<string, InvoiceDoc>>({});
 
   const [openId, setOpenId] = useState<string | null>(null);
 
@@ -113,7 +134,7 @@ export default function TutorSessionsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [addStudentId, setAddStudentId] = useState("");
   const [addWhenLocal, setAddWhenLocal] = useState(""); // yyyy-mm-ddThh:mm
-  const [addDuration, setAddDuration] = useState(60);
+  const [addDuration, setAddDuration] = useState(SESSION_DURATION_MINS);
   const [addModality, setAddModality] = useState<AddModality>("IN_HOME");
   const [addNotes, setAddNotes] = useState("");
   const [addBusy, setAddBusy] = useState(false);
@@ -146,6 +167,18 @@ export default function TutorSessionsPage() {
     if (!cid) return null;
     return clients[cid] ?? null;
   }, [openSession, openStudent, clients]);
+  const openPlan = useMemo(() => {
+    const planId = openSession?.data.planId ?? openStudent?.activePlanId ?? "";
+    return planId ? plans[planId] ?? null : null;
+  }, [openSession, openStudent, plans]);
+  const openEntitlement = useMemo(() => {
+    const planId = openSession?.data.planId ?? openStudent?.activePlanId ?? "";
+    return planId ? entitlements[planId] ?? null : null;
+  }, [openSession, openStudent, entitlements]);
+  const openInvoice = useMemo(() => {
+    const invoiceId = openSession?.data.invoiceId ?? "";
+    return invoiceId ? invoices[invoiceId] ?? null : null;
+  }, [openSession, invoices]);
 
   useEffect(() => {
     if (!openStudent) return;
@@ -220,6 +253,42 @@ export default function TutorSessionsPage() {
           })
         );
         setClients(clientMap);
+
+        const planIds = Array.from(
+          new Set(
+            nextSessions
+              .map((s) => s.data.planId)
+              .concat(Object.values(studentMap).map((s) => s.activePlanId || null))
+              .filter(Boolean) as string[]
+          )
+        );
+
+        const planMap: Record<string, StudyroomPlanRecord> = {};
+        const entitlementMap: Record<string, StudyroomEntitlementRecord> = {};
+        await Promise.all(
+          planIds.map(async (id) => {
+            const planSnap = await getDoc(doc(db, "plans", id));
+            if (planSnap.exists()) {
+              planMap[id] = { id, ...(planSnap.data() as StudyroomPlanRecord) };
+            }
+            const entitlementSnap = await getDoc(doc(db, "entitlements", id));
+            if (entitlementSnap.exists()) {
+              entitlementMap[id] = { id, ...(entitlementSnap.data() as StudyroomEntitlementRecord) };
+            }
+          })
+        );
+        setPlans(planMap);
+        setEntitlements(entitlementMap);
+
+        const invoiceIds = Array.from(new Set(nextSessions.map((s) => s.data.invoiceId).filter(Boolean) as string[]));
+        const invoiceMap: Record<string, InvoiceDoc> = {};
+        await Promise.all(
+          invoiceIds.map(async (id) => {
+            const snap = await getDoc(doc(db, "invoices", id));
+            if (snap.exists()) invoiceMap[id] = snap.data() as InvoiceDoc;
+          })
+        );
+        setInvoices(invoiceMap);
       } finally {
         setLoading(false);
       }
@@ -242,9 +311,9 @@ export default function TutorSessionsPage() {
 
       const classNames = [
         "sr-event",
-        s.data.status === "COMPLETED" ? "sr-event--done" : "",
-        s.data.status?.startsWith("CANCELLED") ? "sr-event--cancel" : "",
-        s.data.billingStatus === "READY_TO_INVOICE" ? "sr-event--invoice" : "",
+        normalizeSessionStatus(s.data.status) === "completed" ? "sr-event--done" : "",
+        normalizeSessionStatus(s.data.status).startsWith("cancelled") ? "sr-event--cancel" : "",
+        s.data.billingOutcome === "invoice" ? "sr-event--invoice" : "",
       ].filter(Boolean);
 
       return {
@@ -255,78 +324,45 @@ export default function TutorSessionsPage() {
         classNames,
         extendedProps: {
           billingStatus: s.data.billingStatus,
-          status: s.data.status,
+          billingOutcome: s.data.billingOutcome ?? null,
+          status: normalizeSessionStatus(s.data.status),
         },
       };
     });
   }, [sessions, studentLabel]);
 
-  async function markCompleted(sessionId: string, billingStatus: BillingStatus) {
-    await updateDoc(doc(db, "sessions", sessionId), {
-      status: "COMPLETED",
-      billingStatus: billingStatus === "NOT_BILLED" ? "READY_TO_INVOICE" : billingStatus,
-      completedAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-
-    if (billingStatus === "NOT_BILLED") {
-      const send = confirm("Session completed.\n\nSend invoice now?");
-      if (send) await sendInvoiceNow(sessionId, "AUTHORISED");
-    }
-
-    await refresh(auth.currentUser?.uid || "", auth.currentUser?.email ?? null);
-  }
-
-  async function sendInvoiceNow(sessionId: string, mode: "DRAFT" | "AUTHORISED" = "AUTHORISED") {
+  async function updateSessionStatus(
+    sessionId: string,
+    action: "complete" | "cancel_by_parent" | "cancel_by_tutor" | "no_show"
+  ) {
     const user = auth.currentUser;
     if (!user) return;
 
     const idToken = await user.getIdToken();
-    const res = await fetch("/api/xero/invoices/create", {
+    const res = await fetch("/api/sessions/status", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-      body: JSON.stringify({ sessionId, mode }),
+      body: JSON.stringify({ sessionId, action }),
     });
 
     if (!res.ok) {
       const t = await res.text();
-      console.error("Invoice create failed:", res.status, t);
-      alert("Invoice failed. Check console / server logs.");
+      console.error("Session update failed:", res.status, t);
+      alert("Session update failed. Check console / server logs.");
     } else {
-      alert("Invoice sent to Xero");
       await refresh(user.uid, user.email ?? null);
+      setOpenId(null);
     }
   }
 
   async function cancelSession(sessionId: string, reason: "PARENT" | "STUDYROOM") {
-    const yes = confirm("Cancel this session?\n\nThis action may trigger invoicing if within policy.");
+    const yes = confirm(
+      reason === "PARENT"
+        ? "Cancel this session as a parent cancellation?"
+        : "Cancel this session as a tutor cancellation? This records a credit outcome."
+    );
     if (!yes) return;
-
-    const user = auth.currentUser;
-    if (!user) return;
-
-    const idToken = await user.getIdToken();
-    const res = await fetch("/api/sessions/cancel", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-      body: JSON.stringify({ sessionId, reason }),
-    });
-
-    if (!res.ok) {
-      const t = await res.text();
-      console.error("Cancel failed:", res.status, t);
-      alert("Cancel failed. Check console / server logs.");
-      return;
-    }
-
-    const json: unknown = await res.json().catch(() => ({}));
-    const invoiceTriggered =
-      !!json && typeof json === "object" && "invoiceTriggered" in json && (json as { invoiceTriggered?: unknown }).invoiceTriggered === true;
-
-    alert(invoiceTriggered ? "Cancelled.\n\nLate cancellation: invoice was triggered per policy." : "Cancelled.");
-
-    await refresh(user.uid, user.email ?? null);
-    setOpenId(null);
+    await updateSessionStatus(sessionId, reason === "STUDYROOM" ? "cancel_by_tutor" : "cancel_by_parent");
   }
 
   async function createRecurringFromOpenSession() {
@@ -349,13 +385,15 @@ export default function TutorSessionsPage() {
           tutorEmail: base.tutorEmail ?? auth.currentUser?.email ?? null,
           studentId: base.studentId,
           clientId: base.clientId ?? null,
+          planId: base.planId ?? students[base.studentId]?.activePlanId ?? null,
           startAt: Timestamp.fromDate(start),
           endAt: Timestamp.fromDate(end),
           durationMinutes: durationMin,
+          durationMins: durationMin,
           modality: base.modality ?? "IN_HOME",
-          status: "SCHEDULED",
-          billingStatus: "NOT_BILLED",
-          xeroInvoiceId: null,
+          mode: normalizeMode(base.mode ?? base.modality ?? "IN_HOME"),
+          status: "scheduled",
+          legacyStatus: "SCHEDULED",
           seriesKey,
           notes: base.notes ?? null,
           createdAt: serverTimestamp(),
@@ -412,19 +450,18 @@ export default function TutorSessionsPage() {
         tutorEmail: user.email ?? null,
         studentId: addStudentId,
         clientId: student.clientId ?? null,
+        planId: student.activePlanId ?? null,
         startAt: Timestamp.fromDate(start),
         endAt: Timestamp.fromDate(end),
         durationMinutes: addDuration,
+        durationMins: addDuration,
         modality: addModality,
-        status: "SCHEDULED",
-        billingStatus: "NOT_BILLED",
-        xeroInvoiceId: null,
+        mode: normalizeMode(addModality),
+        status: "scheduled",
+        legacyStatus: "SCHEDULED",
         notes: addNotes.trim() ? addNotes.trim() : null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-        completedAt: null,
-        cancelledAt: null,
-        cancelReason: null,
       });
 
       setAddNotes("");
@@ -515,8 +552,8 @@ export default function TutorSessionsPage() {
             slotDuration="00:30:00"
             editable
             eventStartEditable
-            eventDurationEditable
-            eventResizableFromStart
+            eventDurationEditable={false}
+            eventResizableFromStart={false}
             events={events}
             eventClick={(arg: EventClickArg) => setOpenId(arg.event.id)}
             eventDrop={(arg: EventDropArg) => persistReschedule(arg.event.id, arg.event.start!, arg.event.end!)}
@@ -525,10 +562,17 @@ export default function TutorSessionsPage() {
               const start = arg.event.start ?? new Date();
               const end =
                 arg.event.end ?? new Date((arg.event.start?.getTime() || Date.now()) + 60 * 60000);
+              const status = normalizeSessionStatus(arg.event.extendedProps?.status);
+              const topLabel = formatSessionStatusLabel(status);
+              const outcome = arg.event.extendedProps?.billingOutcome as BillingOutcome | null;
 
               return (
                 <div className="sr-event-inner">
-                  <div className="sr-title">{arg.event.title}</div>
+                  <div className="sr-row">
+                    <div className="sr-title">{topLabel}</div>
+                    {outcome === "invoice" && <span className="sr-pill">Invoice</span>}
+                  </div>
+                  <div className="sr-sub">{arg.event.title}</div>
                   <div className="sr-time">{niceRange(start, end)}</div>
                 </div>
               );
@@ -589,11 +633,7 @@ export default function TutorSessionsPage() {
                 onChange={(e) => setAddDuration(Number(e.target.value))}
                 className="w-full rounded-xl border border-[color:var(--ring)] bg-white px-3 py-2 text-sm"
               >
-                <option value={30}>30 min</option>
-                <option value={45}>45 min</option>
                 <option value={60}>60 min</option>
-                <option value={90}>90 min</option>
-                <option value={120}>120 min</option>
               </select>
             </div>
 
@@ -654,9 +694,51 @@ export default function TutorSessionsPage() {
                 {niceRange(openSession.data.startAt.toDate(), openSession.data.endAt.toDate())}
               </p>
               <p className="text-xs text-[color:var(--muted)]">
-                Status: <b>{openSession.data.status}</b> · Billing: <b>{openSession.data.billingStatus}</b> ·{" "}
-                {openSession.data.modality === "ONLINE" ? "Online" : "In-home"}
+                Status: <b>{formatSessionStatusLabel(normalizeSessionStatus(openSession.data.status))}</b> · Outcome:{" "}
+                <b>{openSession.data.billingOutcome ?? "no_charge"}</b> ·{" "}
+                {formatModeLabel(normalizeMode(openSession.data.mode ?? openSession.data.modality))}
               </p>
+              <p className="text-xs text-[color:var(--muted)]">
+                Plan: <b>{formatPlanLabel(normalizePlanType(openStudent?.package))}</b>
+                {openSession.data.noticeHours !== null && openSession.data.noticeHours !== undefined
+                  ? ` · Notice: ${openSession.data.noticeHours.toFixed(1)}h`
+                  : ""}
+                {openSession.data.graceApplied ? " · Grace applied" : ""}
+              </p>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <div className="rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] p-3 text-sm">
+                <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">Plan</div>
+                <div className="mt-1 font-semibold text-[color:var(--ink)]">
+                  {formatPlanLabel(normalizePlanType(openPlan?.type ?? openStudent?.package))}
+                </div>
+                <div className="mt-1 text-xs text-[color:var(--muted)]">
+                  {openEntitlement
+                    ? `${openEntitlement.remainingSessions} base remaining · ${openEntitlement.bonusRemaining} bonus`
+                    : "No package balance shown"}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] p-3 text-sm">
+                <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">Billing</div>
+                <div className="mt-1 font-semibold text-[color:var(--ink)]">
+                  {openSession.data.billingOutcome ?? "no_charge"}
+                </div>
+                <div className="mt-1 text-xs text-[color:var(--muted)]">
+                  {openInvoice?.status ? `Invoice status: ${openInvoice.status}` : "No invoice linked"}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] p-3 text-sm">
+                <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">Tutor action</div>
+                <div className="mt-1 font-semibold text-[color:var(--ink)]">
+                  {normalizeSessionStatus(openSession.data.status) === "scheduled"
+                    ? "Choose what happened"
+                    : "Recorded"}
+                </div>
+                <div className="mt-1 text-xs text-[color:var(--muted)]">
+                  Complete if delivered. Parent cancel if family cancelled. Studyroom cancel if you cancelled.
+                </div>
+              </div>
             </div>
 
             <div className="mt-4 rounded-2xl border border-[color:var(--ring)] bg-white p-3">
@@ -735,6 +817,22 @@ export default function TutorSessionsPage() {
             </div>
 
             <div className="mt-4 space-y-2">
+              <div className="rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] p-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">Tutor workflow</div>
+                <div className="mt-2 text-sm text-[color:var(--ink)]">
+                  1. Reschedule if the time changes.
+                </div>
+                <div className="text-sm text-[color:var(--ink)]">
+                  2. Mark completed after the lesson finishes.
+                </div>
+                <div className="text-sm text-[color:var(--ink)]">
+                  3. Use parent cancel only when the family cancels. Use Studyroom cancel only when you or admin cancel.
+                </div>
+                <div className="text-sm text-[color:var(--ink)]">
+                  4. Add notes after the session so admin sees the same record.
+                </div>
+              </div>
+
               <RescheduleSession
                 sessionId={openSession.id}
                 currentStart={openSession.data.startAt.toDate()}
@@ -743,24 +841,13 @@ export default function TutorSessionsPage() {
               />
 
               <div className="flex flex-wrap gap-2">
-                {openSession.data.status !== "COMPLETED" && (
+                {normalizeSessionStatus(openSession.data.status) !== "completed" && (
                   <button
                     type="button"
                     className="brand-cta rounded-xl px-4 py-2 text-sm font-semibold"
-                    onClick={() => markCompleted(openSession.id, openSession.data.billingStatus)}
+                    onClick={() => updateSessionStatus(openSession.id, "complete")}
                   >
                     Mark completed
-                  </button>
-                )}
-
-                {(openSession.data.billingStatus === "NOT_BILLED" ||
-                  openSession.data.billingStatus === "READY_TO_INVOICE") && (
-                  <button
-                    type="button"
-                    className="rounded-xl border border-[color:var(--ring)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--brand)] hover:bg-[#d6e5e3]/40"
-                    onClick={() => sendInvoiceNow(openSession.id, "AUTHORISED")}
-                  >
-                    Send invoice now
                   </button>
                 )}
 
@@ -777,7 +864,7 @@ export default function TutorSessionsPage() {
                   className="rounded-xl border border-[color:var(--ring)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--brand)] hover:bg-[#d6e5e3]/40"
                   onClick={() => cancelSession(openSession.id, "STUDYROOM")}
                 >
-                  Cancel (Studyroom)
+                  Cancel (tutor)
                 </button>
               </div>
 
@@ -801,10 +888,32 @@ export default function TutorSessionsPage() {
           text-overflow: ellipsis;
           white-space: nowrap;
         }
+        .sr-row {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          justify-content: space-between;
+        }
+        .sr-sub {
+          margin-top: 2px;
+          font-size: 11px;
+          font-weight: 600;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
         .sr-time {
           margin-top: 2px;
           font-size: 11px;
           opacity: 0.8;
+        }
+        .sr-pill {
+          font-size: 10px;
+          font-weight: 800;
+          padding: 1px 6px;
+          border-radius: 999px;
+          border: 1px solid color-mix(in oklab, var(--ring), transparent 15%);
+          background: white;
         }
 
         .sr-event {

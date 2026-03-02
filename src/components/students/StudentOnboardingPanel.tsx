@@ -4,6 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { collection, doc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import {
+  getDefaultSessionRateCents,
+  getEntitlementSeed,
+  inferTermId,
+  normalizeMode,
+  normalizePlanType,
+} from "@/lib/studyroom/billing";
 
 type ClientDoc = {
   parentName?: string;
@@ -18,6 +25,7 @@ type ClientDoc = {
   assignedTutorName?: string | null;
   assignedTutorEmail?: string | null;
   onboardingStatus?: "INCOMPLETE" | "COMPLETE";
+  activePlanId?: string | null;
 };
 
 type StudentDoc = {
@@ -37,6 +45,7 @@ type StudentDoc = {
   assignedTutorId?: string | null;
   assignedTutorName?: string | null;
   assignedTutorEmail?: string | null;
+  activePlanId?: string | null;
 };
 
 type Row<T> = { id: string; data: T };
@@ -199,6 +208,13 @@ export default function StudentOnboardingPanel({
 
       const batch = writeBatch(db);
       const clientRef = doc(db, "clients", clientId);
+      const targetStudentRef =
+        studentId === "__create__" || !studentId ? doc(collection(db, "students")) : doc(db, "students", studentId);
+      const existingPlanId = existingStudent?.data.activePlanId ?? activeClient?.data.activePlanId ?? "";
+      const planRef = existingPlanId ? doc(db, "plans", existingPlanId) : doc(collection(db, "plans"));
+      const normalizedPlan = normalizePlanType(form.package);
+      const normalizedMode = normalizeMode(form.mode);
+      const termId = inferTermId(new Date());
 
       batch.set(
         clientRef,
@@ -211,6 +227,7 @@ export default function StudentOnboardingPanel({
           addressLine1: form.addressLine1.trim() || null,
           postcode: form.postcode.trim() || null,
           package: form.package,
+          activePlanId: planRef.id,
           onboardingStatus: "COMPLETE",
           onboardingCompletedAt: serverTimestamp(),
           onboardingCompletedBy: auth.currentUser?.uid ?? null,
@@ -218,9 +235,6 @@ export default function StudentOnboardingPanel({
         },
         { merge: true }
       );
-
-      const targetStudentRef =
-        studentId === "__create__" || !studentId ? doc(collection(db, "students")) : doc(db, "students", studentId);
 
       const studentPatch: Record<string, unknown> = {
         clientId,
@@ -236,6 +250,7 @@ export default function StudentOnboardingPanel({
         goals: form.goals.trim() || null,
         challenges: form.challenges.trim() || null,
         package: form.package,
+        activePlanId: planRef.id,
         assignedTutorId:
           existingStudent?.data.assignedTutorId ?? activeClient?.data.assignedTutorId ?? null,
         assignedTutorName:
@@ -249,6 +264,49 @@ export default function StudentOnboardingPanel({
         studentPatch.createdAt = serverTimestamp();
       }
       batch.set(targetStudentRef, studentPatch, { merge: true });
+
+      batch.set(
+        planRef,
+        {
+          clientId,
+          studentId: targetStudentRef.id,
+          tutorId:
+            existingStudent?.data.assignedTutorId ?? activeClient?.data.assignedTutorId ?? null,
+          tutorEmail:
+            existingStudent?.data.assignedTutorEmail ?? activeClient?.data.assignedTutorEmail ?? null,
+          type: normalizedPlan,
+          mode: normalizedMode,
+          status: "active",
+          termId,
+          sessionRateCents: getDefaultSessionRateCents(normalizedMode),
+          graceUsedThisTerm: false,
+          graceTermId: termId,
+          updatedAt: serverTimestamp(),
+          createdAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      const entitlementSeed = getEntitlementSeed(normalizedPlan);
+      if (entitlementSeed.remainingSessions > 0 || entitlementSeed.bonusRemaining > 0) {
+        batch.set(
+          doc(db, "entitlements", planRef.id),
+          {
+            planId: planRef.id,
+            tutorId:
+              existingStudent?.data.assignedTutorId ?? activeClient?.data.assignedTutorId ?? null,
+            tutorEmail:
+              existingStudent?.data.assignedTutorEmail ?? activeClient?.data.assignedTutorEmail ?? null,
+            remainingSessions: entitlementSeed.remainingSessions,
+            bonusRemaining: entitlementSeed.bonusRemaining,
+            termId,
+            bonusNonTransferable: true,
+            updatedAt: serverTimestamp(),
+            createdAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
 
       await batch.commit();
       setMsg("Onboarding saved and profile updated.");
