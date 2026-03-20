@@ -2,67 +2,114 @@ import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
 
+function parseExpiry(value: unknown): Date | null {
+  if (!value) return null;
+  if (typeof (value as { toDate?: () => Date }).toDate === "function") {
+    return (value as { toDate: () => Date }).toDate();
+  }
+  if (value instanceof Date) {
+    return value;
+  }
+
+  const parsed = new Date(value as string | number);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get("authorization");
     const token = authHeader?.replace("Bearer ", "");
-    if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!token) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     const decoded = await getAdminAuth().verifyIdToken(token);
     const uid = decoded.uid;
+    const userEmail = decoded.email?.toLowerCase().trim() ?? "";
 
-    const { code } = await req.json() as { code?: string };
-    if (!code?.trim()) return NextResponse.json({ error: "Code is required." }, { status: 400 });
+    const body = (await req.json()) as { code?: string };
+    const code = body.code?.trim().toUpperCase();
+    if (!code) {
+      return NextResponse.json({ error: "Access code required." }, { status: 400 });
+    }
 
     const db = getAdminDb();
-
-    // Find the access code document
-    const codeSnap = await db.collection("tutorAccessCodes")
-      .where("code", "==", code.trim().toUpperCase())
-      .where("used", "==", false)
-      .limit(1)
-      .get();
-
+    const codeSnap = await db.collection("tutorAccessCodes").where("code", "==", code).limit(1).get();
     if (codeSnap.empty) {
-      return NextResponse.json({ error: "Invalid or already used code." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid access code. Please check and try again." },
+        { status: 400 }
+      );
     }
 
     const codeDoc = codeSnap.docs[0];
     const codeData = codeDoc.data();
 
-    // Check expiry (48 hours)
-    const createdAt = codeData.createdAt?.toDate?.() ?? new Date(0);
-    const hoursSince = (Date.now() - createdAt.getTime()) / 3600000;
-    if (hoursSince > 48) {
-      return NextResponse.json({ error: "This code has expired. Contact admin for a new one." }, { status: 400 });
+    if (codeData.used === true) {
+      return NextResponse.json(
+        { error: "This access code has already been used." },
+        { status: 400 }
+      );
     }
 
-    // Check the code belongs to this tutor's email (if email is stored on code)
-    const codeEmail = String(codeData.tutorEmail ?? "");
-    if (codeEmail && codeEmail !== decoded.email) {
-      return NextResponse.json({ error: "This code is not valid for your account." }, { status: 403 });
+    const expiresAt = parseExpiry(codeData.expiresAt);
+    if (expiresAt && new Date() > expiresAt) {
+      return NextResponse.json(
+        { error: "This access code has expired. Please contact Studyroom for a new one." },
+        { status: 400 }
+      );
     }
 
-    // Mark code as used
+    const storedEmail = String(codeData.tutorEmail ?? "").toLowerCase().trim();
+    if (storedEmail && storedEmail !== userEmail) {
+      return NextResponse.json(
+        { error: "This code was issued for a different email address." },
+        { status: 400 }
+      );
+    }
+
+    await db.collection("roles").doc(uid).set(
+      {
+        role: "tutor",
+        grantedViaCode: codeDoc.id,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    await db.collection("users").doc(uid).set(
+      {
+        subscriptionStatus: "tutor_access",
+        onboardingComplete: true,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
     await codeDoc.ref.update({
       used: true,
-      usedBy: uid,
-      usedAt: FieldValue.serverTimestamp(),
+      redeemedAt: FieldValue.serverTimestamp(),
+      redeemedByUid: uid,
+      redeemedByEmail: userEmail,
     });
 
-    // Grant tutor role
-    await db.collection("roles").doc(uid).set({
-      role: "tutor",
-      grantedViaCode: codeDoc.id,
-      updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
-
-    // Mark user as not needing subscription
-    await db.collection("users").doc(uid).set({
-      subscriptionStatus: "tutor_access",
-      onboardingComplete: true,
-      updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
+    const leadsSnap = await db.collection("leads").where("email", "==", storedEmail || userEmail).get();
+    if (!leadsSnap.empty) {
+      await Promise.all(
+        leadsSnap.docs
+          .filter((lead) => {
+            const type = String(lead.data().type ?? "");
+            return type === "tutor_request" || type === "tutor_invite";
+          })
+          .map((lead) =>
+            lead.ref.update({
+              status: "active",
+              tutorUid: uid,
+              updatedAt: FieldValue.serverTimestamp(),
+            })
+          )
+      );
+    }
 
     return NextResponse.json({ ok: true });
   } catch (err) {

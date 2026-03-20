@@ -7,8 +7,12 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
+  orderBy,
   query,
+  serverTimestamp,
   Timestamp,
+  updateDoc,
   where,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
@@ -60,6 +64,15 @@ type PendingTutorRow = {
   isComplete: boolean;
 };
 
+type TutorRequestRow = {
+  id: string;
+  name: string;
+  email: string;
+  status: string;
+  accessCode: string;
+  createdAt: Date | null;
+};
+
 function displayName(user?: UserDoc) {
   return user?.name || user?.displayName || "Tutor";
 }
@@ -68,7 +81,9 @@ export default function AdminTutorsPage() {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<TutorRow[]>([]);
   const [pendingRows, setPendingRows] = useState<PendingTutorRow[]>([]);
+  const [tutorRequests, setTutorRequests] = useState<TutorRequestRow[]>([]);
   const [actionBusyUid, setActionBusyUid] = useState<string | null>(null);
+  const [requestInviteBusyId, setRequestInviteBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [addTutorEmail, setAddTutorEmail] = useState("");
   const [addTutorBusy, setAddTutorBusy] = useState(false);
@@ -77,9 +92,17 @@ export default function AdminTutorsPage() {
   async function load() {
     setLoading(true);
     try {
-      const [rolesTutorSnap, rolesPendingSnap] = await Promise.all([
+      const [rolesTutorSnap, rolesPendingSnap, tutorRequestsSnap] = await Promise.all([
         getDocs(query(collection(db, "roles"), where("role", "==", "tutor"))),
         getDocs(query(collection(db, "roles"), where("role", "==", "tutor_pending"))),
+        getDocs(
+          query(
+            collection(db, "leads"),
+            where("type", "==", "tutor_request"),
+            orderBy("createdAt", "desc"),
+            limit(50)
+          )
+        ),
       ]);
       const tutorUids = rolesTutorSnap.docs.map((d) => d.id);
       const pendingUids = rolesPendingSnap.docs.map((d) => d.id);
@@ -142,6 +165,31 @@ export default function AdminTutorsPage() {
         })
       );
       setPendingRows(pendingLoaded);
+
+      const loadedRequests = tutorRequestsSnap.docs.map((requestDoc) => {
+        const data = requestDoc.data();
+        const createdAtValue = data.createdAt;
+        let createdAt: Date | null = null;
+
+        if (typeof createdAtValue?.toDate === "function") {
+          createdAt = createdAtValue.toDate();
+        } else if (createdAtValue instanceof Date) {
+          createdAt = createdAtValue;
+        } else if (createdAtValue) {
+          const parsed = new Date(createdAtValue);
+          createdAt = Number.isNaN(parsed.getTime()) ? null : parsed;
+        }
+
+        return {
+          id: requestDoc.id,
+          name: String(data.name ?? ""),
+          email: String(data.email ?? ""),
+          status: String(data.status ?? "new"),
+          accessCode: String(data.accessCode ?? ""),
+          createdAt,
+        } satisfies TutorRequestRow;
+      });
+      setTutorRequests(loadedRequests);
     } finally {
       setLoading(false);
     }
@@ -151,6 +199,30 @@ export default function AdminTutorsPage() {
     load();
   }, []);
 
+  async function grantTutorInvite(email: string, name?: string) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const idToken = await auth.currentUser?.getIdToken();
+    if (!idToken) throw new Error("Not authenticated");
+
+    const grantRes = await fetch("/api/admin/grant-tutor", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify({ email: normalizedEmail, name }),
+    });
+
+    const grantData = (await grantRes.json().catch(() => ({}))) as {
+      ok?: boolean;
+      error?: string;
+      accessCode?: string;
+    };
+
+    if (!grantRes.ok || !grantData.ok || !grantData.accessCode) {
+      throw new Error(grantData.error ?? "Failed to send invite. Please try again.");
+    }
+
+    return { email: normalizedEmail, accessCode: grantData.accessCode };
+  }
+
   async function handleAddTutorByEmail() {
     const email = addTutorEmail.trim().toLowerCase();
     if (!email) return;
@@ -159,42 +231,44 @@ export default function AdminTutorsPage() {
     setAddTutorMsg(null);
 
     try {
-      const idToken = await auth.currentUser?.getIdToken();
-      if (!idToken) throw new Error("Not authenticated");
-
-      // Step 1: grant tutor access via Admin SDK (looks up by Auth email, not Firestore field)
-      const grantRes = await fetch("/api/admin/grant-tutor", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({ email, action: "grant" }),
+      const result = await grantTutorInvite(email);
+      setAddTutorMsg({
+        type: "success",
+        text: `Tutor invite sent to ${result.email}. Access code: ${result.accessCode}`,
       });
-
-      const grantData = (await grantRes.json().catch(() => ({}))) as { ok?: boolean; error?: string; displayName?: string; accessCode?: string };
-
-      if (!grantRes.ok || !grantData.ok) {
-        setAddTutorMsg({ type: "error", text: grantData.error ?? "Failed to grant access." });
-        return;
-      }
-
-      // Step 2: send welcome email (non-fatal)
-      try {
-        await fetch("/api/email/tutor-welcome", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-          body: JSON.stringify({ to: email, displayName: grantData.displayName ?? email, accessCode: grantData.accessCode }),
-        });
-      } catch (emailErr) {
-        console.warn("[add-tutor] welcome email failed (non-fatal):", emailErr);
-      }
-
-      setAddTutorMsg({ type: "success", text: `${email} has been granted tutor access. A welcome email has been sent.` });
       setAddTutorEmail("");
       await load();
     } catch (err) {
       console.error("[add-tutor]", err);
-      setAddTutorMsg({ type: "error", text: "Something went wrong. Check the console." });
+      setAddTutorMsg({ type: "error", text: "Failed to send invite. Please try again." });
     } finally {
       setAddTutorBusy(false);
+    }
+  }
+
+  async function handleAddTutorFromRequest(email: string, name: string, leadId: string) {
+    setRequestInviteBusyId(leadId);
+    setAddTutorMsg(null);
+
+    try {
+      const result = await grantTutorInvite(email, name);
+      await updateDoc(doc(db, "leads", leadId), {
+        status: "invited",
+        accessCode: result.accessCode,
+        updatedAt: serverTimestamp(),
+      });
+
+      setAddTutorEmail(result.email);
+      setAddTutorMsg({
+        type: "success",
+        text: `Access code sent to ${result.email}. Code: ${result.accessCode}`,
+      });
+      await load();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to send invite. Please try again.";
+      setAddTutorMsg({ type: "error", text: message });
+    } finally {
+      setRequestInviteBusyId(null);
     }
   }
 
@@ -232,6 +306,16 @@ export default function AdminTutorsPage() {
       return bTime - aTime;
     });
   }, [pendingRows]);
+  const sortedTutorRequests = useMemo(() => {
+    return [...tutorRequests].sort((a, b) => {
+      const aTime = a.createdAt ? a.createdAt.getTime() : 0;
+      const bTime = b.createdAt ? b.createdAt.getTime() : 0;
+      return bTime - aTime;
+    });
+  }, [tutorRequests]);
+  const newTutorRequestCount = useMemo(() => {
+    return tutorRequests.filter((request) => request.status === "new").length;
+  }, [tutorRequests]);
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
@@ -325,6 +409,103 @@ export default function AdminTutorsPage() {
         )}
       </section>
 
+      {sortedTutorRequests.length > 0 && (
+        <section style={{ marginBottom: 20 }}>
+          <div
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: "0.18em",
+              textTransform: "uppercase",
+              color: "#748398",
+              marginBottom: 10,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <span>Tutor requests</span>
+            <div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.07)" }} />
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                background: "#fce8ee",
+                color: "#c0445e",
+                borderRadius: 20,
+                padding: "2px 8px",
+              }}
+            >
+              {newTutorRequestCount} new
+            </span>
+          </div>
+
+          {sortedTutorRequests.map((request) => (
+            <div
+              key={request.id}
+              style={{
+                background: "#fff",
+                borderRadius: 14,
+                padding: "12px 16px",
+                border: "1px solid rgba(0,0,0,0.06)",
+                marginBottom: 8,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#1d2428" }}>
+                  {request.name || request.email}
+                </div>
+                <div style={{ fontSize: 11, color: "#8a96a3", marginTop: 2 }}>
+                  {request.email}
+                </div>
+                <div style={{ fontSize: 11, color: "#8a96a3", marginTop: 2 }}>
+                  {request.createdAt ? request.createdAt.toLocaleString() : "No submission date"}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    padding: "2px 9px",
+                    borderRadius: 20,
+                    background: request.status === "invited" ? "#d4edcc" : "#fce8ee",
+                    color: request.status === "invited" ? "#2d5a24" : "#c0445e",
+                  }}
+                >
+                  {request.status === "invited" ? "Invited" : "New"}
+                </span>
+                {request.status !== "invited" && (
+                  <button
+                    type="button"
+                    onClick={() => void handleAddTutorFromRequest(request.email, request.name, request.id)}
+                    disabled={requestInviteBusyId === request.id}
+                    style={{
+                      background: "#456071",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: 9,
+                      padding: "5px 14px",
+                      fontSize: 11,
+                      fontWeight: 600,
+                      cursor: requestInviteBusyId === request.id ? "not-allowed" : "pointer",
+                      fontFamily: "inherit",
+                      opacity: requestInviteBusyId === request.id ? 0.6 : 1,
+                    }}
+                  >
+                    {requestInviteBusyId === request.id ? "Sending..." : "Add as tutor"}
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+
       {/* Add Tutor section */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "20px 0 12px" }}>
         <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#748398", whiteSpace: "nowrap" }}>
@@ -338,8 +519,8 @@ export default function AdminTutorsPage() {
           Grant tutor access by email
         </div>
         <div style={{ fontSize: 12, color: "#8a96a3", marginBottom: 14, lineHeight: 1.5 }}>
-          The user must already have a Studyroom account. Once added, they&apos;ll receive a
-          welcome email with instructions to check their students and calendar.
+          Generate a tutor access code and email invite for someone who has not created their
+          Studyroom account yet.
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
           <div style={{ flex: 1 }}>
