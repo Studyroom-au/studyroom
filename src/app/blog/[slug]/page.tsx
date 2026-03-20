@@ -1,10 +1,7 @@
 import Link from "next/link";
-import { getAllPosts, getPostBySlug } from "../../../lib/posts";
+import { getPostBySlug } from "../../../lib/posts";
 
-export async function generateStaticParams() {
-  const posts = await getAllPosts();
-  return posts.map((p) => ({ slug: p.slug }));
-}
+export const dynamic = "force-dynamic";
 
 // 👇 Note: params is now a Promise in Next 16 app router
 type BlogPostParams = Promise<{ slug: string }>;

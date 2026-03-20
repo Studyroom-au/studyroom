@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { onAuthStateChanged } from "firebase/auth";
 import { collection, getDocs, query, where, Timestamp } from "firebase/firestore";
@@ -93,82 +93,78 @@ export default function TutorStudentsPage() {
     return () => off();
   }, []);
 
-  const count = useMemo(() => rows.length, [rows]);
-
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
-            Tutor Portal
-          </p>
-          <h1 className="mt-1 text-3xl font-semibold text-[color:var(--ink)]">
-            My Students
-          </h1>
-          <p className="mt-1 text-sm text-[color:var(--muted)]">
-            Students assigned to you. ({count})
-          </p>
-        </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
 
-        <div className="flex flex-wrap gap-2">
+      {/* Page header */}
+      <div style={{ marginBottom: 4 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#748398", marginBottom: 4 }}>
+          Students
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <div style={{ fontSize: 20, fontWeight: 700, color: "#1d2428", letterSpacing: "-0.02em" }}>
+            My Students
+          </div>
           <Link
             href="/hub/tutor/leads"
-            className="rounded-xl border border-[color:var(--ring)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--brand)] transition hover:bg-[#d6e5e3]/40"
+            style={{ background: "white", color: "#456071", border: "1.5px solid rgba(69,96,113,0.2)", borderRadius: 20, padding: "6px 16px", fontSize: 12, fontWeight: 500, textDecoration: "none", display: "inline-flex", alignItems: "center" }}
           >
-            View Leads →
+            View Leads
           </Link>
         </div>
-      </header>
+      </div>
 
-      <section className="rounded-3xl border border-[color:var(--ring)] bg-[color:var(--card)] p-4 shadow-sm">
-        {loading ? (
-          <div className="p-6 text-sm text-[color:var(--muted)]">Loading…</div>
-        ) : rows.length === 0 ? (
-          <div className="p-6 text-sm text-[color:var(--muted)]">
-            No students yet.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-[900px] w-full border-separate border-spacing-0">
-              <thead>
-                <tr className="text-left text-xs font-semibold text-[color:var(--muted)]">
-                  <th className="px-3 py-3">Created</th>
-                  <th className="px-3 py-3">Student</th>
-                  <th className="px-3 py-3">Year</th>
-                  <th className="px-3 py-3">School</th>
-                  <th className="px-3 py-3">Open</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((s) => (
-                  <tr key={s.id} className="border-t border-[color:var(--ring)]">
-                    <td className="px-3 py-3 text-sm text-[color:var(--muted)]">
-                      {formatDate(s.createdAt)}
-                    </td>
-                    <td className="px-3 py-3 text-sm font-semibold text-[color:var(--ink)]">
-                      {s.studentName || "—"}
-                    </td>
-                    <td className="px-3 py-3 text-sm text-[color:var(--muted)]">
-                      {s.yearLevel || "—"}
-                    </td>
-                    <td className="px-3 py-3 text-sm text-[color:var(--muted)]">
-                      {s.school || "—"}
-                    </td>
-                    <td className="px-3 py-3">
-                      <Link
-                        href={`/hub/tutor/students/${s.id}`}
-                        className="inline-flex items-center justify-center rounded-xl border border-[color:var(--ring)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--brand)] transition hover:bg-[#d6e5e3]/40"
-                      >
-                        Open →
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      {loading ? (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 }}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} style={{ background: "white", borderRadius: 18, padding: 16, border: "1px solid rgba(0,0,0,0.06)" }}>
+              <div style={{ height: 14, width: 80, borderRadius: 20, background: "rgba(0,0,0,0.06)", marginBottom: 10 }} />
+              <div style={{ height: 20, width: 140, borderRadius: 20, background: "rgba(0,0,0,0.06)", marginBottom: 8 }} />
+              <div style={{ height: 12, width: "70%", borderRadius: 20, background: "rgba(0,0,0,0.06)" }} />
+            </div>
+          ))}
+        </div>
+      ) : rows.length === 0 ? (
+        <div style={{ border: "1.5px dashed #e4eaef", borderRadius: 16, padding: 40, textAlign: "center", fontSize: 13, color: "#8a96a3" }}>
+          No students assigned yet.
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 }}>
+          {rows.map((s) => (
+            <div key={s.id} style={{ background: "white", borderRadius: 18, border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 1px 4px rgba(0,0,0,0.04)", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+              <div style={{ height: 4, background: "#456071" }} />
+              <div style={{ padding: 16, display: "flex", flexDirection: "column", flexGrow: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                  <div style={{ width: 38, height: 38, borderRadius: "50%", background: "linear-gradient(135deg, #456071 0%, #82977e 100%)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 15, fontWeight: 700, flexShrink: 0 }}>
+                    {(s.studentName || "S").charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "#1d2428" }}>{s.studentName || "—"}</div>
+                    <div style={{ fontSize: 11, color: "#8a96a3", marginTop: 1 }}>
+                      {[s.yearLevel, s.school].filter(Boolean).join(" · ") || "Details pending"}
+                    </div>
+                  </div>
+                </div>
+
+                {s.createdAt && (
+                  <div style={{ fontSize: 11, color: "#8a96a3", marginBottom: 12 }}>
+                    <span style={{ fontWeight: 600, color: "#748398" }}>Added: </span>{formatDate(s.createdAt)}
+                  </div>
+                )}
+
+                <div style={{ marginTop: "auto" }}>
+                  <Link
+                    href={`/hub/tutor/students/${s.id}`}
+                    style={{ display: "inline-block", background: "#456071", color: "white", borderRadius: 20, padding: "6px 14px", fontSize: 12, fontWeight: 600, textDecoration: "none" }}
+                  >
+                    Open →
+                  </Link>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,154 +1,295 @@
-/*
-PROJECT: Studyroom (MVP)
-GOAL: Safe study platform where verified students join video "study rooms".
-Tutors are moderators from day one. Email/password only (no anonymous).
+# Studyroom
 
-STACK
-- Next.js (App Router, React, TypeScript)
-- TailwindCSS (Studyroom brand colors via CSS vars)
-- Firebase: Auth (email+password), Firestore (rooms, members, chat, logs), Storage (attachments)
-- LiveKit Web SDK: video/audio, screen share, data channels
-- Deployment: Vercel frontend + serverless token server
+Studyroom is a tutoring business web app built with Next.js, Firebase, LiveKit, and Xero.
 
-ROLES & AUTH
-- Roles: "student", "tutor", "admin" (stored in /users/{uid})
-- Sign-in REQUIRED: email/password only (no anonymous)
-- Tutors = moderators: can mute/remove users, lock/unlock room, clear chat items, disable others' screen share
-- Store: /users/{uid} = { displayName, role, avatarUrl? }
+It combines:
 
-ROOMS & ACCESS
-- Rooms PUBLIC by default; creator can switch to PRIVATE/INVITE-ONLY
-- Private: via short inviteCode and/or allowedMemberIds list
-- Keep join/leave logs for every entry/exit (uid, role, timestamp)
-- Room "locked" flag: when locked, only tutors can admit (MVP: disallow new joins unless unlocked)
+- a public marketing site for Studyroom Australia
+- a parent enquiry and enrolment funnel
+- a student study hub with personal productivity tools
+- live online study rooms with video, chat, and a shared whiteboard
+- tutor and admin portals for leads, students, sessions, billing, and invoicing
 
-FEATURES (MVP)
-1) Video room
-   - On/off mic & camera, hand-raise, screen share (students + tutors)
-   - Responsive participant grid (tiles + basic controls)
-2) Text chat with attachments
-   - Firestore subcollection per room
-   - Upload attachments to Firebase Storage; save {name,url,type,size}
-   - Limits: ≤ 10 MB; allow safe MIME types (png, jpg, pdf, docx)
-   - Tutors can delete messages/attachments; log moderation actions
-3) Synced Pomodoro timer
-   - Default fixed sequence (minutes): 25/5/25/5/25/5/25/60/25/5/25/5/25/5/25
-   - ANYONE can start/reset; allow custom durations per user preference
-   - Canonical state in Firestore: { phase: "focus"|"break"|"idle", startedAt: Timestamp|null, durationSec: number, sequence: number }
-   - Realtime broadcast via LiveKit data channel: { phase, durationSec, startedAtSec }
-   - Late joiners compute remaining = durationSec - (now - startedAt)
-4) Moderation & safety
-   - Tutor-only actions: mute/unmute, remove participant, lock/unlock room, clear chat items
-   - Write entries to /rooms/{id}/logs for auditability
-5) Logging
-   - /rooms/{id}/logs for: join/leave/mute/remove/lock/unlock/startTimer/resetTimer with actorId/targetId/at/details
+## Stack
 
-DATA MODEL (FIRESTORE)
-- /users/{uid}
-  displayName: string
-  role: "student"|"tutor"|"admin"
-  avatarUrl?: string
+- Next.js 16 App Router
+- React 19
+- TypeScript
+- Tailwind CSS
+- Firebase Auth
+- Cloud Firestore
+- Firebase Storage
+- LiveKit
+- FullCalendar
+- Nodemailer / Resend / Formspree for notifications
+- Xero for accounting integration
 
-- /rooms/{roomId}
-  name: string
-  visibility: "public"|"private"
-  createdBy: uid
-  inviteCode?: string|null
-  allowedMemberIds?: string[]
-  locked: boolean
-  pomodoro: { phase: "focus"|"break"|"idle", startedAt: Timestamp|null, durationSec: number, sequence: number }
-  membersCount: number
-  createdAt: Timestamp
+## What The App Does
 
-- /rooms/{roomId}/members/{uid}
-  role: "student"|"tutor"
-  joinedAt: Timestamp
-  mutedByModerator: boolean
-  handRaised: boolean
+### Public site
 
-- /rooms/{roomId}/chat/{msgId}
-  senderId: uid
-  senderRole: "student"|"tutor"|"admin"
-  text?: string
-  attachments?: [{ name, url, type, size }]
-  createdAt: Timestamp
+The public site is the parent-facing and marketing side of the business.
 
-- /rooms/{roomId}/logs/{logId}
-  type: "join"|"leave"|"mute"|"remove"|"lock"|"unlock"|"startTimer"|"resetTimer"
-  actorId: uid
-  targetId?: uid
-  at: Timestamp
-  details?: any
+- `/` homepage with brand, services, packages, testimonials, and tutor summaries
+- `/tutoring` tutoring offer, packages, pricing, policies, and subject coverage
+- `/headstart` holiday workshop sales page
+- `/worksheets` custom worksheet packs and sample downloads
+- `/about` business philosophy, founder story, and safety positioning
+- `/contact` general enquiry form
+- `/enrol` detailed enrolment form
+- `/blog` markdown-based blog
+- `/legal/*` privacy, safety, and terms pages
 
-TOKEN SERVER (SERVERLESS/EXPRESS)
-- POST /livekitToken { idToken, roomName }
-- Verify Firebase ID token; confirm room permission/visibility:
-  - public OR allowedMemberIds includes uid OR inviteCode valid
-- Assign LiveKit grant role:
-  - moderator for tutors/admins
-  - participant for students
-- Return { url, token, role }
-- NEVER expose LiveKit API secret to client (use env vars)
+### Logged-in student experience
 
-UI STRUCTURE (APP ROUTER)
-- src/app/page.tsx: Home (sign-in, create/join room)
-- src/app/room/[id]/page.tsx: Study room (video grid + right panel + toolbar)
-- src/components/PomodoroBar.tsx
-- src/components/ChatPanel.tsx
-- src/components/ParticipantsPanel.tsx
-- src/lib/firebase.ts, src/lib/tokenService.ts, src/lib/roomService.ts, src/lib/chatService.ts
+Authenticated users get a study hub built around calm planning and focus.
 
-STYLE & BRAND
-- Minimal, clean, accessible (labels/ARIA)
-- TailwindCSS with Studyroom brand via CSS vars:
-  :root {
-    --brand: #0ea5e9; /* REPLACE with Studyroom.au primary */
-    --brand-600: #0284c7;
-    --text: #0b1220;
-    --bg: #f8fafc;
-  }
-- Buttons: clear states (on/off), focus rings, keyboard navigation
+- private Pomodoro timer
+- personal task list
+- daily planner for upcoming work
+- mood tracker with private history
+- profile page
+- room lobby and live study rooms
 
-CODING CONVENTIONS
-- TypeScript strict, React function components + hooks
-- Firebase v9 modular imports; async/await
-- Small components; prefer composition; colocate minimal state
-- Services layer for Firebase/LiveKit calls; UI stays dumb
-- Handle permission/camera/mic errors and reconnects
-- Validate input, enforce file limits/types before upload
+### Study rooms
 
-SECURITY (DEV → PROD)
-- Dev rules can allow all authed reads/writes; tighten for prod:
-  - No anonymous users
-  - Only tutors/admins update moderation fields (locked, mutedByModerator)
-  - Limit chat attachment metadata; validate types/sizes
-  - Enforce room visibility: private rooms require invite or allowlist
-- Never store secrets client-side; use serverless env vars
+The room system is the real-time collaboration part of the app.
 
-ACCEPTANCE CRITERIA (MVP READY)
-- Users can sign in with email/password (no anonymous)
-- Create/join a room → see video grid; mic/cam toggle; screen share; hand-raise
-- Pomodoro starts/resets; all clients stay in sync; late joiners show correct remaining
-- Chat supports text + safe attachments; tutors can delete items
-- Logs written for joins/leaves + moderation/timer actions
-- Rooms public by default; can switch to private/invite-only
-- Deployed on Vercel; token server live and returning tokens
+- LiveKit-powered video and audio rooms
+- room lobby with default rooms and user-created temporary rooms
+- room chat backed by Firestore
+- shared whiteboard backed by Firestore
+- room activity and participant count tracking
+- in-room Pomodoro widget
 
-NON-FUNCTIONAL
-- Basic Lighthouse friendliness (PWA later)
-- Mobile-first responsive layout
-- Guardrails for large/unsafe files (<= 10MB, safe MIME)
-- Error paths: network fail, token 401, camera denied, firestore permission denied
+### Tutor and admin operations
 
-SUGGESTIONS (FOR COPILOT)
-- Generate idiomatic Next.js + TS components and services:
-  - Auth form (email/password)
-  - Room creation/join flow (Firestore + router push)
-  - LiveKit connect helper + video grid/tiles
-  - PomodoroBar (Firestore canonical state + data-channel broadcast)
-  - ChatPanel (Storage uploads + Firestore messages)
-  - ParticipantsPanel (mute/remove/lock; Firestore + LiveKit controls)
-  - roomService APIs (createRoom, joinRoom, leaveRoom, toggleVisibility, writeLog)
-  - tokenService client (POST /livekitToken)
-- Follow modern App Router patterns; compile with current Next.js, Firebase v9, LiveKit Web SDK
-*/
+The internal portals support day-to-day tutoring business operations.
+
+- tutor session scheduling and rescheduling
+- recurring session creation
+- session completion, cancellation, and no-show handling
+- lead review and assignment
+- student and client records
+- package / entitlement tracking
+- invoice and payment reporting
+- Xero connection for invoice creation
+
+## Main Routes
+
+### Public pages
+
+- `/`
+- `/about`
+- `/tutoring`
+- `/headstart`
+- `/worksheets`
+- `/contact`
+- `/enrol`
+- `/blog`
+- `/blog/[slug]`
+- `/legal/privacy`
+- `/legal/safety`
+- `/legal/terms`
+
+### Authenticated pages
+
+- `/login`
+- `/profile`
+- `/hub`
+- `/lobby`
+- `/room/[id]`
+
+### Tutor portal
+
+- `/hub/tutor`
+- `/hub/tutor/calendar`
+- `/hub/tutor/leads`
+- `/hub/tutor/leads/[leadsId]`
+- `/hub/tutor/payouts`
+- `/hub/tutor/sessions`
+- `/hub/tutor/students`
+- `/hub/tutor/students/[id]`
+
+### Admin portal
+
+- `/hub/admin`
+- `/hub/admin/calendar`
+- `/hub/admin/clients`
+- `/hub/admin/integrations/xero`
+- `/hub/admin/invoices`
+- `/hub/admin/leads`
+- `/hub/admin/leads/[leadId]`
+- `/hub/admin/payments`
+- `/hub/admin/sessions`
+- `/hub/admin/students/add-existing`
+- `/hub/admin/students/[studentId]`
+- `/hub/admin/tutors`
+- `/hub/admin/tutors/[tutorId]`
+
+## Core Data Areas
+
+Firestore is used as the main system of record for:
+
+- `users`
+- `roles`
+- `rooms`
+- `rooms/{roomId}/chat`
+- `rooms/{roomId}/whiteboard`
+- `reports`
+- `leads`
+- `enquiries`
+- `clients`
+- `students`
+- `sessions`
+- `invoices`
+- `plans`
+- `entitlements`
+- `integrations`
+
+User-specific productivity data is stored under each user document, including:
+
+- `pomoState`
+- `tasks`
+- `moodLogs`
+- `upcoming`
+
+## Roles
+
+The app currently uses these effective roles:
+
+- `student`
+- `tutor_pending`
+- `tutor`
+- `admin`
+
+Roles are read from Firestore and also influenced by the hard-coded admin email in the app and Firestore rules.
+
+## Local Development
+
+### 1. Install dependencies
+
+```bash
+npm install
+```
+
+### 2. Add environment variables
+
+Create `.env.local` and provide the values your environment needs.
+
+#### Firebase client
+
+```env
+NEXT_PUBLIC_FIREBASE_API_KEY=
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
+NEXT_PUBLIC_FIREBASE_APP_ID=
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
+```
+
+#### Firebase Admin
+
+```env
+FIREBASE_PROJECT_ID=
+FIREBASE_CLIENT_EMAIL=
+FIREBASE_PRIVATE_KEY=
+```
+
+#### LiveKit
+
+```env
+LIVEKIT_API_KEY=
+LIVEKIT_API_SECRET=
+LIVEKIT_URL=
+```
+
+#### Email / notifications
+
+You do not need every provider at once, but at least one delivery path should be configured for enquiry and enrolment alerts.
+
+```env
+SMTP_HOST=
+SMTP_PORT=
+SMTP_USER=
+SMTP_PASS=
+
+MAIL_TO=
+ENQUIRY_ALERT_TO=
+ENROL_ALERT_TO=
+
+RESEND_API_KEY=
+RESEND_FROM=
+
+FORMSPREE_ENDPOINT=
+FORMSPREE_ENQUIRY_ENDPOINT=
+FORMSPREE_ENROL_ENDPOINT=
+```
+
+#### Xero
+
+```env
+XERO_CLIENT_ID=
+XERO_CLIENT_SECRET=
+XERO_REDIRECT_URI=
+XERO_SALES_ACCOUNT_CODE=
+XERO_TENANT_ID=
+XERO_TOKEN_SET_JSON=
+```
+
+### 3. Run the app
+
+```bash
+npm run dev
+```
+
+Then open `http://localhost:3000`.
+
+### 4. Lint
+
+```bash
+npm run lint
+```
+
+## Notable Implementation Details
+
+- Firebase client setup lives in `src/lib/firebase.ts`.
+- Firebase Admin setup lives in `src/lib/firebaseAdmin.ts`.
+- Firestore security rules are defined in `firestore.rules`.
+- Blog posts are loaded from markdown files under `content/blog`.
+- Room chat attachments are currently disabled in `src/components/ChatPanel.tsx`.
+- Tutor and admin billing logic is centralized in `src/lib/studyroom/billing.ts` and `src/lib/studyroom/serverBilling.ts`.
+- Xero token storage is handled through Firestore `integrations/xero` or optional environment variables.
+
+## Project Structure
+
+```text
+src/
+  app/                  Next.js routes
+  components/           shared UI, room UI, widgets, admin/tutor UI
+  hooks/                auth/profile/role hooks
+  lib/                  Firebase, billing, Xero, posts, validation
+content/
+  blog/                 markdown blog posts
+public/
+  docs/                 downloadable worksheet samples
+scripts/                local utility scripts
+```
+
+## Current Product Summary
+
+Studyroom is no longer just a study-room MVP. It is a combined tutoring website and business operations platform with:
+
+- lead capture
+- enrolment intake
+- student planning tools
+- live online study rooms
+- tutor scheduling workflows
+- admin CRM-style tooling
+- billing and invoice support
+
+## Notes
+
+- The app assumes Firebase Auth and Firestore are available.
+- Some admin-only behaviour depends on the email `lily.studyroom@gmail.com` being treated as admin in code and rules.
+- Production readiness depends on environment configuration, Firestore rules, and third-party integrations being set correctly.

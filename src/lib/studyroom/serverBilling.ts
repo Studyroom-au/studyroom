@@ -100,7 +100,7 @@ function invoiceStatusFromOutcome(outcome: BillingOutcome): InvoiceStatus | null
 }
 
 function isUnpaidInvoiceStatus(status?: InvoiceStatus | null) {
-  return status === "sent" || status === "overdue";
+  return status === "sent" || status === "overdue" || status === "pending_xero" || status === "xero_failed";
 }
 
 async function hydratePlanContext(input: {
@@ -395,7 +395,7 @@ export async function applySessionAction(args: ApplySessionActionArgs) {
       const issuedAt = now;
       const dueAt = new Date(issuedAt.getTime() + CASUAL_INVOICE_DUE_DAYS * 86400000);
       const studentName = String((ctx.student as { studentName?: string | null }).studentName ?? "Student");
-      const invoiceStatus: InvoiceStatus = isInvoiceOverdue({ dueAt, status: "sent", lateFeeApplied: false }) ? "overdue" : "sent";
+      const invoiceStatus: InvoiceStatus = "pending_xero";
       const invoiceDoc = {
         clientId: session.clientId ?? ctx.plan.clientId ?? null,
         studentId: session.studentId ?? ctx.plan.studentId ?? null,

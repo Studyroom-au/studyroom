@@ -20,6 +20,8 @@ type UpcomingItem = {
   subject: string;
   title: string;
   dueDate: string; // stored as "YYYY-MM-DD"
+  handoutDate?: string | null;
+  draftDate?: string | null;
   status: string;
   notes: string;
   completed: boolean;
@@ -67,6 +69,8 @@ export default function DailyPlannerWidget() {
     subject: "",
     title: "",
     dueDate: "",
+    handoutDate: "",
+    draftDate: "",
     status: "",
     notes: "",
   });
@@ -109,6 +113,8 @@ export default function DailyPlannerWidget() {
             subject: String(data.subject || ""),
             title: String(data.title || ""),
             dueDate: String(data.dueDate || ""),
+            handoutDate: data.handoutDate ? String(data.handoutDate) : null,
+            draftDate: data.draftDate ? String(data.draftDate) : null,
             status: String(data.status || ""),
             notes: String(data.notes || ""),
             completed: Boolean(data.completed),
@@ -129,7 +135,7 @@ export default function DailyPlannerWidget() {
       setErr("Please sign in to save upcoming work.");
       return;
     }
-    const { subject, title, dueDate, status, notes } = newItem;
+    const { subject, title, dueDate, handoutDate, draftDate, status, notes } = newItem;
     if (!subject || !title || !dueDate) {
       setErr("Please fill in subject, what it is, and the due date.");
       return;
@@ -140,6 +146,8 @@ export default function DailyPlannerWidget() {
         subject: subject.trim(),
         title: title.trim(),
         dueDate,
+        handoutDate: handoutDate || null,
+        draftDate: draftDate || null,
         status: status.trim(),
         notes: notes.trim(),
         completed: false,
@@ -149,6 +157,8 @@ export default function DailyPlannerWidget() {
         subject: "",
         title: "",
         dueDate: "",
+        handoutDate: "",
+        draftDate: "",
         status: "",
         notes: "",
       });
@@ -175,20 +185,22 @@ export default function DailyPlannerWidget() {
 
   const upcoming = useMemo(() => items.slice(0, 12), [items]);
 
+  const inputStyle: React.CSSProperties = { border: "1px solid #e4eaef", borderRadius: 10, padding: "7px 10px", fontSize: 12, background: "white", outline: "none", width: "100%", boxSizing: "border-box", color: "var(--sr-ink)", fontFamily: "inherit" };
+
   // Simple skeleton while auth is wiring up
   if (!authReady) {
     return (
-      <div className="space-y-2 text-xs text-[color:var(--muted)]">
-        <div className="h-8 w-full rounded-lg bg-slate-200/70" />
-        <div className="h-16 w-full rounded-lg bg-slate-200/70" />
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ height: 32, width: "100%", borderRadius: 10, background: "rgba(0,0,0,0.06)" }} />
+        <div style={{ height: 64, width: "100%", borderRadius: 10, background: "rgba(0,0,0,0.06)" }} />
       </div>
     );
   }
 
   return (
-    <section className="space-y-4 text-sm">
+    <section style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {err && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        <div style={{ borderRadius: 12, border: "1px solid #fcd34d", background: "#fffbeb", padding: "6px 10px", fontSize: 11, color: "#92400e" }}>
           {err}
         </div>
       )}
@@ -196,139 +208,156 @@ export default function DailyPlannerWidget() {
       {/* Add new item */}
       <form
         onSubmit={addItem}
-        className="grid grid-cols-1 gap-2 rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] p-3 sm:grid-cols-2"
+        style={{ background: "rgba(0,0,0,0.02)", borderRadius: 14, border: "1px solid #e4eaef", padding: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}
       >
         <input
           type="text"
           placeholder="Subject (e.g. Maths)"
           value={newItem.subject}
-          onChange={(e) =>
-            setNewItem((x) => ({ ...x, subject: e.target.value }))
-          }
-          className="rounded-lg border border-[color:var(--ring)] px-3 py-2 text-xs"
+          onChange={(e) => setNewItem((x) => ({ ...x, subject: e.target.value }))}
+          style={inputStyle}
         />
         <input
           type="text"
           placeholder="What is it? (e.g. Algebra test)"
           value={newItem.title}
-          onChange={(e) =>
-            setNewItem((x) => ({ ...x, title: e.target.value }))
-          }
-          className="rounded-lg border border-[color:var(--ring)] px-3 py-2 text-xs"
+          onChange={(e) => setNewItem((x) => ({ ...x, title: e.target.value }))}
+          style={inputStyle}
         />
         <input
           type="date"
           title="Due date"
           aria-label="Due date"
           value={newItem.dueDate}
-          onChange={(e) =>
-            setNewItem((x) => ({ ...x, dueDate: e.target.value }))
-          }
-          className="rounded-lg border border-[color:var(--ring)] px-3 py-2 text-xs"
+          onChange={(e) => setNewItem((x) => ({ ...x, dueDate: e.target.value }))}
+          style={inputStyle}
         />
         <input
           type="text"
-          placeholder="Status (e.g. not started / revising)"
+          placeholder="Status (e.g. not started)"
           value={newItem.status}
-          onChange={(e) =>
-            setNewItem((x) => ({ ...x, status: e.target.value }))
-          }
-          className="rounded-lg border border-[color:var(--ring)] px-3 py-2 text-xs"
+          onChange={(e) => setNewItem((x) => ({ ...x, status: e.target.value }))}
+          style={inputStyle}
         />
+        {/* Optional handout + draft dates */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          <span style={{ fontSize: 10, color: "#8a96a3" }}>Handout date (optional)</span>
+          <input
+            type="date"
+            title="Handout date (optional)"
+            aria-label="Handout date (optional)"
+            value={newItem.handoutDate}
+            onChange={(e) => setNewItem((x) => ({ ...x, handoutDate: e.target.value }))}
+            style={{ ...inputStyle, opacity: 0.8 }}
+          />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          <span style={{ fontSize: 10, color: "#8a96a3" }}>Draft due (optional)</span>
+          <input
+            type="date"
+            title="Draft due date (optional)"
+            aria-label="Draft due date (optional)"
+            value={newItem.draftDate}
+            onChange={(e) => setNewItem((x) => ({ ...x, draftDate: e.target.value }))}
+            style={{ ...inputStyle, opacity: 0.8 }}
+          />
+        </div>
         <input
           type="text"
           placeholder="Notes (optional)"
           value={newItem.notes}
-          onChange={(e) =>
-            setNewItem((x) => ({ ...x, notes: e.target.value }))
-          }
-          className="sm:col-span-2 rounded-lg border border-[color:var(--ring)] px-3 py-2 text-xs"
+          onChange={(e) => setNewItem((x) => ({ ...x, notes: e.target.value }))}
+          style={{ ...inputStyle, gridColumn: "span 2" }}
         />
-        <div className="sm:col-span-2 flex justify-end">
+        <div style={{ gridColumn: "span 2", display: "flex", justifyContent: "flex-end" }}>
           <button
             type="submit"
             disabled={saving}
-            className="rounded-lg bg-[color:var(--brand)] px-4 py-2 text-xs font-medium text-white shadow-sm transition hover:bg-[color:var(--brand-600)] disabled:opacity-60"
+            style={{ background: "#456071", color: "white", border: "none", borderRadius: 10, padding: "7px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", opacity: saving ? 0.6 : 1 }}
           >
-            {saving ? "Adding…" : "Add to upcoming"}
+            {saving ? "Adding\u2026" : "Add to upcoming"}
           </button>
         </div>
       </form>
 
       {/* List */}
-      <ul className="space-y-2">
+      <ul style={{ display: "flex", flexDirection: "column", gap: 0, listStyle: "none", margin: 0, padding: 0 }}>
         {upcoming.map((item) => {
           const dueDateObj = parseDue(item.dueDate);
           const dueLabel = formatPrettyDue(dueDateObj);
           const distance = describeDistance(dueDateObj);
-          const isOverdue =
-            dueDateObj && describeDistance(dueDateObj).startsWith("Overdue");
-          const isToday = distance === "Due today";
+          // Urgency tier
+          const today = new Date();
+          const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+          const diffDays = dueDateObj
+            ? Math.round((new Date(dueDateObj.getFullYear(), dueDateObj.getMonth(), dueDateObj.getDate()).getTime() - todayMid.getTime()) / 86400000)
+            : 999;
+
+          let borderColor = "#b0c8d8";
+          let bg = "#f3f7f9";
+          let badgeBg = "#d4e8f0";
+          let badgeColor = "#1a3a4a";
+
+          if (item.completed) {
+            borderColor = "#82977e"; bg = "#f4faf0"; badgeBg = "#d4edcc"; badgeColor = "#2d5a24";
+          } else if (diffDays < 0) {
+            borderColor = "#e39bb6"; bg = "#fdf2f4"; badgeBg = "#fce4eb"; badgeColor = "#9a2040";
+          } else if (diffDays === 0) {
+            borderColor = "#d4a017"; bg = "#fffbf0"; badgeBg = "#fef3c7"; badgeColor = "#7a4d10";
+          } else if (diffDays <= 3) {
+            borderColor = "#e39bb6"; bg = "#fdf2f4"; badgeBg = "#fce4eb"; badgeColor = "#9a2040";
+          } else if (diffDays <= 14) {
+            borderColor = "#d4b896"; bg = "#fdf8f3"; badgeBg = "#f5e8d4"; badgeColor = "#7a4d20";
+          }
 
           return (
             <li
               key={item.id}
-              className={`flex flex-col rounded-xl border bg-[color:var(--card)] p-3 text-xs shadow-sm ${
-                item.completed ? "opacity-70" : ""
-              }`}
+              style={{ display: "flex", justifyContent: "space-between", padding: "8px 11px", borderRadius: 12, marginBottom: 6, borderLeft: `3px solid ${borderColor}`, background: bg, opacity: item.completed ? 0.75 : 1 }}
             >
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="font-semibold text-[color:var(--ink)]">
-                    {item.subject || "No subject"} — {item.title || "Untitled"}
-                  </div>
-                  <div className="mt-0.5 text-[color:var(--muted)]">
-                    {item.status && <span>Status: {item.status}. </span>}
-                    {item.notes && <span>Notes: {item.notes}</span>}
-                  </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "var(--sr-ink)" }}>
+                  {item.subject || "No subject"} — {item.title || "Untitled"}
                 </div>
-
-                <div className="text-right">
-                  <div className="text-[11px] font-semibold text-[color:var(--ink)]">
-                    {dueLabel}
-                  </div>
-                  {distance && (
-                    <div
-                      className={`mt-0.5 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] ${
-                        item.completed
-                          ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
-                          : isOverdue
-                          ? "bg-red-50 text-red-700 border border-red-100"
-                          : isToday
-                          ? "bg-amber-50 text-amber-800 border border-amber-100"
-                          : "bg-[color:var(--accent-soft)]/40 text-[color:var(--brand)] border border-[color:var(--accent-soft)]/60"
-                      }`}
-                    >
-                      {item.completed ? "Completed" : distance}
-                    </div>
-                  )}
+                <div style={{ fontSize: 10, color: "var(--sr-muted)", marginTop: 1 }}>
+                  {item.status && <span>{item.status}</span>}
+                  {item.status && item.notes && <span> \u00B7 </span>}
+                  {item.notes && <span>{item.notes}</span>}
+                </div>
+                <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 8 }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--sr-muted)", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={item.completed}
+                      onChange={(e) => toggleComplete(item.id, e.target.checked)}
+                      style={{ width: 12, height: 12 }}
+                    />
+                    Mark as done
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => removeItem(item.id)}
+                    style={{ border: "1px solid #e4eaef", borderRadius: 8, padding: "3px 8px", fontSize: 10, color: "#dc2626", background: "white", cursor: "pointer" }}
+                    onMouseOver={(e) => (e.currentTarget.style.background = "#fee2e2")}
+                    onMouseOut={(e) => (e.currentTarget.style.background = "white")}
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
-
-              <div className="mt-2 flex items-center gap-3">
-                <label className="flex items-center gap-1 text-[11px] text-[color:var(--muted)]">
-                  <input
-                    type="checkbox"
-                    checked={item.completed}
-                    onChange={(e) => toggleComplete(item.id, e.target.checked)}
-                    className="h-3 w-3"
-                  />
-                  Mark as done
-                </label>
-                <button
-                  onClick={() => removeItem(item.id)}
-                  className="ml-auto rounded-lg border border-[color:var(--ring)] px-2 py-1 text-[11px] text-red-600 transition hover:bg-red-50"
-                >
-                  Delete
-                </button>
+              <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--sr-ink)", marginBottom: 4 }}>{dueLabel}</div>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 20, background: badgeBg, color: badgeColor, display: "inline-block" }}>
+                  {item.completed ? "Done" : distance}
+                </span>
               </div>
             </li>
           );
         })}
 
         {upcoming.length === 0 && (
-          <li className="rounded-xl border border-dashed border-[color:var(--ring)] px-3 py-4 text-center text-xs text-[color:var(--muted)]">
-            No upcoming assessments or exams yet. Add your next due date above.
+          <li style={{ border: "1.5px dashed #e4eaef", borderRadius: 12, padding: "16px", textAlign: "center", fontSize: 11, color: "var(--sr-muted)" }}>
+            No upcoming assessments yet. Add your next due date above.
           </li>
         )}
       </ul>

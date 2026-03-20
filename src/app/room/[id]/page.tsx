@@ -25,6 +25,8 @@ import PomoWidget from "@/components/widgets/PomoWidget";
 import ChatPanel from "@/components/ChatPanel";
 import { useUserRole } from "@/hooks/useUserRole";
 import RoomWhiteboard from "@/components/RoomWhiteboard";
+import TutorSessionSidebar from "@/components/room/TutorSessionSidebar";
+import RoomControls from "@/components/room/RoomControls";
 
 async function touchRoomActivity(roomId: string) {
   try {
@@ -86,30 +88,48 @@ function RoomActivityTouch({ roomId }: { roomId: string }) {
 function RoomHeader({
   roomName,
   onBack,
+  isTutor,
 }: {
   roomName: string;
   onBack: () => void;
+  isTutor: boolean;
 }) {
   return (
-    <header className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] px-4 py-2 shadow-sm">
-      {/* Left side: back button + room label */}
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={onBack}
-          className="rounded-full border border-[color:var(--ring)] bg-white px-3 py-1.5 text-xs font-medium text-[color:var(--ink)]/80 hover:bg-slate-50"
-        >
-          Lobby
-        </button>
-        <div className="flex flex-col leading-tight">
-          <span className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
-            Studyroom
-          </span>
-          <span className="text-sm font-semibold text-[color:var(--ink)]">
-            Room: {roomName}
-          </span>
-        </div>
-      </div>
+    <header style={{
+      background: "white",
+      borderBottom: "1px solid rgba(0,0,0,0.07)",
+      height: 52,
+      padding: "0 20px",
+      display: "flex",
+      alignItems: "center",
+      gap: 12,
+      flexShrink: 0,
+    }}>
+      <button
+        type="button"
+        onClick={onBack}
+        style={{
+          background: "rgba(69,96,113,0.08)",
+          color: "#456071",
+          border: "none",
+          borderRadius: 8,
+          padding: "5px 13px",
+          fontSize: 12,
+          fontWeight: 600,
+          cursor: "pointer",
+          fontFamily: "inherit",
+        }}
+      >
+        Lobby
+      </button>
+      <span style={{ fontSize: 14, fontWeight: 700, color: "#1d2428" }}>
+        {roomName}
+      </span>
+      {isTutor && (
+        <span style={{ fontSize: 10, fontWeight: 600, padding: "3px 9px", borderRadius: 20, background: "#edf2f6", color: "#456071", marginLeft: 8 }}>
+          Tutor view
+        </span>
+      )}
     </header>
   );
 }
@@ -123,7 +143,8 @@ export default function RoomPage() {
   }, [params]);
 
   const role = useUserRole();
-  const canModerate = role === "tutor" || role === "admin";
+  const isTutor = role === "tutor" || role === "admin";
+  const canModerate = isTutor;
 
   const [authReady, setAuthReady] = useState<null | boolean>(null);
   const [url, setUrl] = useState<string>();
@@ -180,46 +201,96 @@ export default function RoomPage() {
     router.push("/lobby");
   }, [router]);
 
+  useEffect(() => {
+    const t = setTimeout(() => {
+      (window as unknown as Record<string, unknown> & {
+        alexBuddy?: { say: (key: string) => void };
+      }).alexBuddy?.say("room_enter");
+    }, 2000);
+    return () => clearTimeout(t);
+  }, []);
+
   if (error) return <div className="p-4 text-red-600">{error}</div>;
-  if (authReady === null) return <div className="p-4">Checking sign-in...</div>;
+  if (authReady === null) return (
+    <div style={{ background: "#f0f2f5", minHeight: "100svh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ fontSize: 13, color: "#8a96a3" }}>Loading room...</div>
+    </div>
+  );
   if (authReady === false) return <div className="p-4">Redirecting...</div>;
-  if (!url || !token) return <div className="p-4">Connecting to room...</div>;
+  if (!url || !token) return (
+    <div style={{ background: "#f0f2f5", minHeight: "100svh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ fontSize: 13, color: "#8a96a3" }}>Connecting to room...</div>
+    </div>
+  );
 
   return (
-    <div className="app-bg min-h-[100svh] px-3 py-3">
+    <div style={{ background: "#f0f2f5", minHeight: "100svh", display: "flex", flexDirection: "column" }}>
       <LiveKitRoom
         serverUrl={url}
         token={token}
         connect
-        className="flex-1"
         audio={true}
         connectOptions={{
           autoSubscribe: true,
         }}
+        style={{ display: "flex", flexDirection: "column", flex: 1 }}
       >
         <RoomActivityTouch roomId={roomName} />
-        <RoomHeader roomName={roomName} onBack={handleBack} />
+        <RoomHeader roomName={roomName} onBack={handleBack} isTutor={isTutor} />
 
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)]">
-          {/* VIDEO + CONTROLS */}
-          <section className="min-h-0 rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] shadow-sm">
-            <SafeVideoArea />
-          </section>
+        <div className="room-layout" style={{ display: "flex", flexDirection: "row", gap: 16, padding: 16, minHeight: "calc(100vh - 52px)" }}>
 
-          {/* SIDE WIDGETS */}
-          <aside className="flex min-h-0 flex-col gap-3">
-            <section className="rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] p-3 shadow-sm">
-              <PomoWidget />
-            </section>
-            <section className="rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] p-3 shadow-sm">
-              <ChatPanel roomId={roomName} canModerate={canModerate} />
-            </section>
-          </aside>
-        </div>
+          {/* Left column — video + whiteboard */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, flex: 1, minWidth: 0 }}>
+            {/* Video card */}
+            <div className="room-video-card" style={{ background: "#111827", borderRadius: 16, overflow: "hidden", minHeight: 340, position: "relative" }}>
+              {/* Room badge top-left */}
+              <div style={{ position: "absolute", top: 12, left: 14, zIndex: 1, background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.7)", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", padding: "4px 10px", borderRadius: 20 }}>
+                {roomName}
+              </div>
+              {/* Live indicator top-right */}
+              <div style={{ position: "absolute", top: 12, right: 14, zIndex: 1, display: "flex", alignItems: "center", gap: 5, fontSize: 10, color: "rgba(255,255,255,0.6)" }}>
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e", animation: "sr-streak-glow 1.2s ease-in-out infinite" }} />
+                Live
+              </div>
+              <SafeVideoArea />
+            </div>
 
-        {/* WHITEBOARD BELOW – scroll if needed */}
-        <div className="mt-3 rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] p-3 shadow-sm">
-          <RoomWhiteboard roomId={roomName} />
+            {/* Controls bar */}
+            <RoomControls onLeave={handleBack} />
+
+            {/* Whiteboard card */}
+            <div style={{ background: "white", borderRadius: 16, padding: "14px 16px", border: "1px solid rgba(0,0,0,0.06)", marginTop: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "#748398" }}>
+                  Shared Whiteboard
+                </span>
+              </div>
+              <RoomWhiteboard roomId={roomName} />
+            </div>
+          </div>
+
+          {/* Right column — role-based */}
+          <div className="room-sidebar" style={{ display: "flex", flexDirection: "column", width: 320, flexShrink: 0 }}>
+            {isTutor
+              ? <TutorSessionSidebar roomId={roomName} />
+              : (
+                <>
+                  {/* Pomodoro card */}
+                  <div style={{ background: "white", borderRadius: 20, padding: 18, border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 1px 6px rgba(0,0,0,0.04)", marginBottom: 12 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#1d2428", marginBottom: 12 }}>Private Pomodoro</div>
+                    <PomoWidget />
+                  </div>
+                  {/* Chat card */}
+                  <div style={{ background: "white", borderRadius: 20, padding: 18, border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 1px 6px rgba(0,0,0,0.04)", flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#1d2428", marginBottom: 12 }}>Room Chat</div>
+                    <ChatPanel roomId={roomName} canModerate={canModerate} />
+                  </div>
+                </>
+              )
+            }
+          </div>
+
         </div>
 
         <RoomAudioRenderer />

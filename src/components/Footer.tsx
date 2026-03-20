@@ -19,7 +19,7 @@ export default function Footer() {
             <div>
               <div className="h-9 w-40" suppressHydrationWarning>
                 <Image
-                  src="/logo.png"
+                  src="/logo1.png"
                   alt="Studyroom"
                   width={160}
                   height={36}

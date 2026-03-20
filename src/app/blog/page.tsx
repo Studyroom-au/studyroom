@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getAllPosts } from "../../lib/posts";
 
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
 export default async function BlogPage() {
   const posts = await getAllPosts();
@@ -12,9 +12,9 @@ export default async function BlogPage() {
         <div className="inline-flex items-center rounded-full bg-white/80 px-3 py-2 text-xs font-semibold text-[color:var(--brand)] shadow-sm ring-1 ring-slate-200">
           Blog
         </div>
-        <h1 className="text-4xl font-bold leading-tight text-[color:var(--ink)] md:text-5xl">
-          Calm study tips, literacy help, and support for anxious and neurodivergent learners.
-        </h1>
+        <h2 className="text-4xl font-bold leading-tight text-[color:var(--ink)] md:text-5xl">
+          Calm study tips, literacy help, and support for confident learners.
+        </h2>
         <p className="text-lg text-slate-700 md:max-w-3xl">
           Short, practical articles you can actually use at home.
         </p>

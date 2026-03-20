@@ -18,6 +18,7 @@
     "@fullcalendar/timegrid": "^6.1.20",
     "@livekit/components-react": "^2.9.14",
     "@livekit/components-styles": "^1.1.6",
+    "@stripe/stripe-js": "^8.11.0",
     "axios": "^1.11.0",
     "cors": "^2.8.5",
     "date-fns": "^4.1.0",
@@ -28,12 +29,14 @@
     "gray-matter": "^4.0.3",
     "livekit-client": "^2.15.7",
     "livekit-server-sdk": "^2.13.2",
+    "marked": "^17.0.4",
     "next": "^16.0.1",
     "nodemailer": "^7.0.11",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "remark": "^15.0.1",
     "remark-html": "^16.0.1",
+    "stripe": "^20.4.1",
     "xero-node": "^13.4.0"
   },
   "devDependencies": {

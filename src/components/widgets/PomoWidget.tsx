@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { auth, db } from "@/lib/firebase";
 import {
+  addDoc,
+  collection,
   doc,
   getDoc,
   onSnapshot,
@@ -121,6 +123,20 @@ export default function PomoWidget() {
     if (remote.state === "idle") return;
     if (!remote.targetEpochMs) return;
     if (remainingMs > 0) return;
+
+    // Record completed focus session to pomoHistory
+    if (remote.state === "running") {
+      const u = auth.currentUser;
+      if (u) {
+        const d = new Date();
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        addDoc(collection(db, "users", u.uid, "pomoHistory"), {
+          date: dateStr,
+          durationMs: remote.durationMs ?? FOCUS_MS,
+          completedAt: serverTimestamp(),
+        }).catch(() => { /* ignore write errors */ });
+      }
+    }
 
     void safeWrite((_u, dref) => {
       const focusDur = focusMinutes * 60 * 1000;
@@ -290,118 +306,145 @@ export default function PomoWidget() {
 
   // UI ---------------------------
 
-  return (
-    <div className="space-y-3">
-      {/* Top row: phase pill + status */}
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-[color:var(--muted)]">
-          {phase === "break" ? "Break block" : "Focus block"}
-        </span>
-        <span className="text-[10px] rounded-full border border-[color:var(--ring)] px-2 py-0.5 text-[color:var(--muted)]">
-          {isRunningFocus || isRunningBreak
-            ? "Running"
-            : "Paused"}
-        </span>
-      </div>
+  // Ring progress calculation
+  const circumference = 2 * Math.PI * 27; // r=27
+  const totalMs = remote?.durationMs ?? (phase === "break" ? BREAK_MS : FOCUS_MS);
+  const progress = totalMs > 0 ? Math.max(0, Math.min(1, showingMs / totalMs)) : 1;
+  const dashOffset = circumference * (1 - progress);
 
-      {err && (
-        <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {!loading && err && (
+        <div style={{ borderRadius: 10, border: "1px solid #fca5a5", background: "#fef2f2", padding: "6px 10px", fontSize: 11, color: "#b91c1c" }}>
           {err}
         </div>
       )}
 
-      {/* Timer display */}
-      <div className="flex items-baseline gap-3">
-        <div className="text-4xl font-semibold tabular-nums tracking-tight text-[color:var(--ink)]">
-          {fmt(showingMs)}
+      {/* Ring + time side by side */}
+      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        {/* SVG ring */}
+        <div style={{ position: "relative", width: 68, height: 68, flexShrink: 0 }}>
+          <svg
+            width="68"
+            height="68"
+            viewBox="0 0 68 68"
+            style={{ transform: "rotate(-90deg)" }}
+          >
+            <circle cx="34" cy="34" r="27" fill="none" stroke="#e4eaef" strokeWidth="5.5" />
+            <circle
+              cx="34" cy="34" r="27"
+              fill="none"
+              stroke="#456071"
+              strokeWidth="5.5"
+              strokeLinecap="round"
+              strokeDasharray={circumference}
+              strokeDashoffset={dashOffset}
+              style={{ transition: "stroke-dashoffset 1s linear" }}
+            />
+          </svg>
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <span style={{ fontSize: 8, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "#456071" }}>
+              {phase === "break" ? "Break" : "Focus"}
+            </span>
+          </div>
         </div>
-        <div className="text-xs text-[color:var(--muted)]">
-          {phase === "break"
-            ? "Short reset between blocks."
-            : "Deep focus on one task."}
+
+        {/* Right side */}
+        <div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: "var(--sr-ink)", letterSpacing: -1, fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>
+            {fmt(showingMs)}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--sr-muted)", margin: "3px 0 10px" }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: (isRunningFocus || isRunningBreak) ? "#456071" : "#d1d5db", display: "inline-block" }} />
+            <span>{(isRunningFocus || isRunningBreak) ? "Stay with it." : "Ready when you are."}</span>
+          </div>
+
+          {/* Control buttons */}
+          <div style={{ display: "flex", gap: 6 }}>
+            {/* Primary action */}
+            {isRunningFocus || isRunningBreak ? (
+              <button
+                type="button"
+                onClick={pause}
+                style={{ background: "#456071", color: "white", border: "none", borderRadius: 9, padding: "6px 13px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}
+              >
+                Pause
+              </button>
+            ) : phase === "break" && isIdle ? (
+              <button
+                type="button"
+                onClick={resumeBreak}
+                style={{ background: "#456071", color: "white", border: "none", borderRadius: 9, padding: "6px 13px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}
+              >
+                Resume break
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={startFocus}
+                style={{ background: "#456071", color: "white", border: "none", borderRadius: 9, padding: "6px 13px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}
+              >
+                Start focus
+              </button>
+            )}
+
+            {/* Break / Back to focus */}
+            {phase === "break" || isRunningBreak ? (
+              <button
+                type="button"
+                onClick={resumeStudy}
+                style={{ background: "#f0f2f5", color: "#677a8a", border: "none", borderRadius: 9, padding: "6px 13px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}
+              >
+                Back to focus
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={startBreak}
+                style={{ background: "#f0f2f5", color: "#677a8a", border: "none", borderRadius: 9, padding: "6px 13px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}
+              >
+                Break
+              </button>
+            )}
+
+            {/* Reset */}
+            <button
+              type="button"
+              onClick={reset}
+              style={{ background: "#f0f2f5", color: "#677a8a", border: "none", borderRadius: 9, padding: "6px 13px", fontSize: 11, cursor: "pointer" }}
+            >
+              Reset
+            </button>
+          </div>
         </div>
-      </div>
-
-      {/* Controls */}
-      <div className="mt-1 flex flex-wrap gap-2">
-        {isRunningFocus || isRunningBreak ? (
-          <button
-            onClick={pause}
-            className="rounded-lg border border-[color:var(--ring)] bg-[color:var(--card)] px-3 py-1.5 text-xs text-[color:var(--ink)] hover:bg-white"
-          >
-            Pause
-          </button>
-        ) : phase === "break" && isIdle ? (
-          <button
-            onClick={resumeBreak}
-            className="rounded-lg bg-[color:var(--brand)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[color:var(--brand-600)]"
-          >
-            Resume break
-          </button>
-        ) : (
-          <button
-            onClick={startFocus}
-            className="rounded-lg bg-[color:var(--brand)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[color:var(--brand-600)]"
-          >
-            Start focus
-          </button>
-        )}
-
-        {phase === "break" || isRunningBreak ? (
-          <button
-            onClick={resumeStudy}
-            className="rounded-lg border border-[color:var(--ring)] bg-[color:var(--card)] px-3 py-1.5 text-xs text-[color:var(--ink)] hover:bg-white"
-          >
-            Back to focus
-          </button>
-        ) : (
-          <button
-            onClick={startBreak}
-            className="rounded-lg border border-[color:var(--ring)] bg-[color:var(--card)] px-3 py-1.5 text-xs text-[color:var(--ink)] hover:bg-white"
-          >
-            Break
-          </button>
-        )}
-
-        <button
-          onClick={reset}
-          className="rounded-lg border border-[color:var(--ring)] bg-[color:var(--card)] px-3 py-1.5 text-xs text-[color:var(--ink)] hover:bg-white"
-        >
-          Reset
-        </button>
       </div>
 
       {/* Length controls */}
-      <div className="mt-3 grid grid-cols-2 gap-3">
-        <label className="flex flex-col gap-1">
-          <span className="text-[10px] font-medium text-[color:var(--muted)]">
-            Focus length (min)
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, borderTop: "1px solid #edf0f3", paddingTop: 12 }}>
+        <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          <span style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--sr-muted)" }}>
+            Focus (min)
           </span>
           <input
             type="number"
             min={1}
             max={180}
             value={focusMinutes}
-            onChange={(e) =>
-              setFocusMinutes(Number(e.target.value) || DEFAULT_FOCUS_MIN)
-            }
-            className="w-full rounded-lg border border-[color:var(--ring)] bg-white px-2 py-1.5 text-xs text-[color:var(--ink)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent-soft)]"
+            onChange={(e) => setFocusMinutes(Number(e.target.value) || DEFAULT_FOCUS_MIN)}
+            style={{ width: "100%", border: "1px solid #e4eaef", borderRadius: 8, padding: "5px 8px", fontSize: 12, color: "var(--sr-ink)", background: "white", outline: "none", boxSizing: "border-box" }}
           />
         </label>
-
-        <label className="flex flex-col gap-1">
-          <span className="text-[10px] font-medium text-[color:var(--muted)]">
-            Break length (min)
+        <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          <span style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--sr-muted)" }}>
+            Break (min)
           </span>
           <input
             type="number"
             min={1}
             max={60}
             value={breakMinutes}
-            onChange={(e) =>
-              setBreakMinutes(Number(e.target.value) || DEFAULT_BREAK_MIN)
-            }
-            className="w-full rounded-lg border border-[color:var(--ring)] bg-white px-2 py-1.5 text-xs text-[color:var(--ink)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent-soft)]"
+            onChange={(e) => setBreakMinutes(Number(e.target.value) || DEFAULT_BREAK_MIN)}
+            style={{ width: "100%", border: "1px solid #e4eaef", borderRadius: 8, padding: "5px 8px", fontSize: 12, color: "var(--sr-ink)", background: "white", outline: "none", boxSizing: "border-box" }}
           />
         </label>
       </div>

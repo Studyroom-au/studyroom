@@ -3,12 +3,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import Link from "next/link";
-import Image from "next/image";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { useUserRole } from "@/hooks/useUserRole";
+import PortalHeader from "@/components/hub/PortalHeader";
 
 type TutorAccessRequest = {
   status?: "draft" | "submitted" | "under_review" | "approved" | "rejected";
@@ -81,15 +80,6 @@ export default function TutorLayout({ children }: { children: React.ReactNode })
     if (!mounted || role !== "tutor_pending") return;
     loadRequest();
   }, [mounted, role]);
-
-  const navButtonBase =
-    "rounded-xl px-3 py-1.5 text-xs font-semibold shadow-sm transition";
-  const navInactive =
-    navButtonBase +
-    " border border-[color:var(--ring)] bg-white text-[color:var(--brand)] hover:bg-[#d6e5e3]/40";
-  const navActive =
-    navButtonBase +
-    " bg-[color:var(--brand)] text-[color:var(--brand-contrast)]";
 
   const isTutorHome = pathname === "/hub/tutor";
 
@@ -187,15 +177,34 @@ export default function TutorLayout({ children }: { children: React.ReactNode })
     const reviewedAt = request?.reviewedAt?.toDate?.();
     const isSubmitted = request?.status === "submitted" || request?.status === "under_review";
     return (
-      <div className="app-bg min-h-[100svh]">
+      <div className="app-bg page-shell min-h-[100svh]">
         <div className="mx-auto max-w-3xl px-4 py-8">
-          <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
-            <h1 className="text-xl font-semibold text-amber-900">Tutor Portal Temporarily Unavailable</h1>
-            <p className="mt-2 text-sm text-amber-800">
-              Your tutor account is pending admin approval.
-            </p>
-            <div className="mt-4 rounded-xl border border-amber-300 bg-white p-4">
-              <p className="text-sm font-semibold text-amber-900">Request Tutor Access</p>
+          <section
+            className="rounded-[32px] p-6"
+            style={{
+              background: "linear-gradient(138deg, #fffbf0 0%, #fff8e8 100%)",
+              border: "1px solid #e8c96a",
+              borderTop: "2.5px solid #c49a14",
+              boxShadow: "0 2px 12px rgba(170, 120, 10, 0.09), 0 8px 28px rgba(170, 120, 10, 0.06)",
+            }}
+          >
+            <div className="space-y-2">
+              <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-amber-700">
+                Studyroom Tutor Access
+              </p>
+              <h1 className="text-2xl font-bold tracking-tight text-amber-950">
+                Tutor Portal temporarily unavailable
+              </h1>
+              <p className="text-sm leading-relaxed text-amber-900/80">
+                Your account is still awaiting admin approval. Submit or update your access request below and we will keep the rest of the tutor workflow untouched.
+              </p>
+            </div>
+
+            <div
+              className="mt-5 rounded-[22px] p-5"
+              style={{ background: "rgba(255,255,255,0.94)", border: "1px solid #e0c060" }}
+            >
+              <p className="text-sm font-bold text-amber-900">Request Tutor Access</p>
               <p className="mt-1 text-xs text-amber-800">
                 Complete all required fields and submit for admin review.
               </p>
@@ -205,23 +214,23 @@ export default function TutorLayout({ children }: { children: React.ReactNode })
                   value={subjectsText}
                   onChange={(e) => setSubjectsText(e.target.value)}
                   placeholder="Subjects * (e.g. Math, English)"
-                  className="rounded-xl border border-amber-300 px-3 py-2 text-sm text-[color:var(--ink)]"
+                  className="rounded-xl border border-amber-300 bg-white px-3 py-2.5 text-sm text-[color:var(--ink)] outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
                 />
                 <input
                   value={yearLevelsText}
                   onChange={(e) => setYearLevelsText(e.target.value)}
                   placeholder="Year levels * (e.g. 7-12)"
-                  className="rounded-xl border border-amber-300 px-3 py-2 text-sm text-[color:var(--ink)]"
+                  className="rounded-xl border border-amber-300 bg-white px-3 py-2.5 text-sm text-[color:var(--ink)] outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
                 />
               </div>
 
-              <div className="mt-2 flex flex-wrap items-center gap-4 rounded-xl border border-amber-300 px-3 py-2 text-xs text-amber-900">
-                <span className="font-semibold">Mode *</span>
-                <label className="inline-flex items-center gap-1">
+              <div className="mt-2 flex flex-wrap items-center gap-4 rounded-xl border border-amber-300 bg-white px-4 py-3 text-xs text-amber-900">
+                <span className="font-bold">Mode *</span>
+                <label className="inline-flex items-center gap-1.5">
                   <input type="checkbox" checked={modeOnline} onChange={(e) => setModeOnline(e.target.checked)} />
                   Online
                 </label>
-                <label className="inline-flex items-center gap-1">
+                <label className="inline-flex items-center gap-1.5">
                   <input type="checkbox" checked={modeInHome} onChange={(e) => setModeInHome(e.target.checked)} />
                   In-home
                 </label>
@@ -232,13 +241,13 @@ export default function TutorLayout({ children }: { children: React.ReactNode })
                   value={serviceArea}
                   onChange={(e) => setServiceArea(e.target.value)}
                   placeholder="Suburb/service area *"
-                  className="rounded-xl border border-amber-300 px-3 py-2 text-sm text-[color:var(--ink)]"
+                  className="rounded-xl border border-amber-300 bg-white px-3 py-2.5 text-sm text-[color:var(--ink)] outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
                 />
                 <input
                   value={abn}
                   onChange={(e) => setAbn(e.target.value)}
                   placeholder="ABN *"
-                  className="rounded-xl border border-amber-300 px-3 py-2 text-sm text-[color:var(--ink)]"
+                  className="rounded-xl border border-amber-300 bg-white px-3 py-2.5 text-sm text-[color:var(--ink)] outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
                 />
               </div>
 
@@ -246,7 +255,7 @@ export default function TutorLayout({ children }: { children: React.ReactNode })
                 value={wwccStatus}
                 onChange={(e) => setWwccStatus(e.target.value)}
                 placeholder="Blue Card/WWCC status *"
-                className="mt-2 w-full rounded-xl border border-amber-300 px-3 py-2 text-sm text-[color:var(--ink)]"
+                className="mt-2 w-full rounded-xl border border-amber-300 bg-white px-3 py-2.5 text-sm text-[color:var(--ink)] outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
               />
 
               <textarea
@@ -254,20 +263,20 @@ export default function TutorLayout({ children }: { children: React.ReactNode })
                 onChange={(e) => setRequestNote(e.target.value)}
                 rows={3}
                 placeholder="Optional note"
-                className="mt-2 w-full rounded-xl border border-amber-300 px-3 py-2 text-sm text-[color:var(--ink)]"
+                className="mt-2 w-full rounded-xl border border-amber-300 bg-white px-3 py-2.5 text-sm text-[color:var(--ink)] outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
               />
 
-              <div className="mt-3 flex flex-wrap items-center gap-2">
+              <div className="mt-4 flex flex-wrap items-center gap-2.5">
                 <button
                   type="button"
                   disabled={requestBusy}
                   onClick={submitTutorAccessRequest}
-                  className="rounded-xl border border-[color:var(--ring)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--brand)] shadow-sm transition hover:bg-[#d6e5e3]/40 disabled:opacity-60"
+                  className="rounded-full bg-amber-900 px-4 py-2 text-xs font-bold text-white transition hover:bg-amber-950 disabled:opacity-60"
                 >
                   {requestBusy ? "Submitting..." : isSubmitted ? "Resubmit request" : "Submit request"}
                 </button>
                 {isSubmitted && submittedAt && (
-                  <span className="text-xs text-amber-800">
+                  <span className="text-xs text-amber-700">
                     Last submitted: {submittedAt.toLocaleString()}
                   </span>
                 )}
@@ -284,7 +293,7 @@ export default function TutorLayout({ children }: { children: React.ReactNode })
               </div>
 
               {reviewedAt && (
-                <p className="mt-2 text-xs text-amber-800">
+                <p className="mt-2 text-xs text-amber-700">
                   Last review: {reviewedAt.toLocaleString()}
                   {request?.reviewedByEmail ? ` by ${request.reviewedByEmail}` : ""}
                 </p>
@@ -298,10 +307,12 @@ export default function TutorLayout({ children }: { children: React.ReactNode })
                 <p className="mt-2 text-xs font-semibold text-amber-900">{requestMsg}</p>
               )}
             </div>
-            <div className="mt-4 flex gap-2">
+
+            <div className="mt-5 flex flex-wrap gap-2">
               <button
                 type="button"
-                className="rounded-xl border border-[color:var(--ring)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--brand)] shadow-sm transition hover:bg-[#d6e5e3]/40"
+                className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-amber-900 transition hover:bg-amber-50"
+                style={{ border: "1px solid #d4a835" }}
                 onClick={() => router.push("/hub")}
               >
                 Back to Hub
@@ -309,7 +320,8 @@ export default function TutorLayout({ children }: { children: React.ReactNode })
               <button
                 type="button"
                 onClick={handleSignOut}
-                className="rounded-xl border border-[color:var(--ring)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--muted)] shadow-sm transition hover:bg-[#d6e5e3]/40"
+                className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-50"
+                style={{ border: "1px solid #e0c060" }}
               >
                 Sign out
               </button>
@@ -321,64 +333,25 @@ export default function TutorLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="app-bg min-h-[100svh]">
+    <div className="app-bg page-shell min-h-[100svh]">
       <div className="mx-auto max-w-6xl px-4 py-6 md:py-8">
-        {/* Tutor Top Bar */}
-        <header className="mb-6 flex flex-col gap-3 rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/hub" className="flex items-center gap-3">
-              <div className="relative h-9 w-9 rounded-xl bg-[color:var(--brand)] shadow-sm">
-                <Image
-                  src="/logo.png"
-                  alt="Studyroom"
-                  fill
-                  className="object-contain p-1.5"
-                />
-              </div>
-              <div className="flex flex-col leading-tight">
-                <span className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
-                  Studyroom
-                </span>
-                <span className="text-sm font-semibold text-[color:var(--ink)]">
-                  Tutor Portal
-                </span>
-              </div>
-            </Link>
-          
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              className={navInactive}
-              onClick={() => router.push("/hub")}
-            >
-              Hub
-            </button>
-
-            <button
-              type="button"
-              className={isTutorHome ? navActive : navInactive}
-              onClick={() => router.push("/hub/tutor")}
-            >
-              Tutor Home
-            </button>
-
-
-
-            <span className="ml-1 inline-flex items-center rounded-xl border border-[color:var(--ring)] bg-white px-3 py-1 text-xs font-semibold text-[color:var(--muted)]">
-              {roleLabel}
-            </span>
-
-            <button
-              type="button"
-              onClick={handleSignOut}
-              className="ml-1 rounded-xl border border-[color:var(--ring)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--muted)] shadow-sm transition hover:bg-[#d6e5e3]/40"
-            >
-              Sign out
-            </button>
-          </div>
-        </header>
+        <PortalHeader
+          homeHref="/hub/tutor"
+          eyebrow="Studyroom Tutor"
+          title="Tutor Portal"
+          subtitle="Manage leads, students, sessions, and payouts in one structured workspace."
+          roleLabel={roleLabel}
+          onSignOut={handleSignOut}
+          navItems={[
+            { label: "Hub", href: "/hub" },
+            { label: "Tutor Home", href: "/hub/tutor", active: isTutorHome },
+            { label: "Marketplace", href: "/hub/tutor/leads", active: pathname.startsWith("/hub/tutor/leads") },
+            { label: "Students", href: "/hub/tutor/students", active: pathname.startsWith("/hub/tutor/students") },
+            { label: "Sessions", href: "/hub/tutor/sessions", active: pathname.startsWith("/hub/tutor/sessions") },
+            { label: "Payouts", href: "/hub/tutor/payouts", active: pathname.startsWith("/hub/tutor/payouts") },
+            { label: "Resources", href: "/hub/tutor/resources", active: pathname.startsWith("/hub/tutor/resources") },
+          ]}
+        />
 
         {children}
       </div>

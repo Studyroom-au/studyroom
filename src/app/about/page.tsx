@@ -75,7 +75,9 @@ export default function AboutPage() {
           <p className="text-sm text-[color:var(--muted)]">
             We don&apos;t force students into a system – we build the system around them.
           </p>
+          
         </div>
+        
       </section>
 
       {/* WHO WE SUPPORT */}
@@ -87,6 +89,10 @@ export default function AboutPage() {
               Studyroom is for students who want to feel confident, organised, and capable –
               without pressure or fear of making mistakes.
             </p>
+           
+                      
+              
+                      
           </div>
 
           <div className="grid gap-3">

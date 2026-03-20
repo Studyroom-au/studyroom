@@ -5,6 +5,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -49,12 +50,18 @@ function toDateSafe(v: unknown): Date | null {
   return v && typeof v.toDate === "function" ? v.toDate() : null;
 }
 
-const MOODS: { value: Mood; label: string; emoji: string }[] = [
-  { value: "great", label: "Great", emoji: "😊" },
-  { value: "good", label: "Good", emoji: "🙂" },
-  { value: "ok", label: "OK", emoji: "😐" },
-  { value: "tired", label: "Tired", emoji: "😴" },
-  { value: "stressed", label: "Stressed", emoji: "😰" },
+const MOODS: {
+  value: Mood;
+  label: string;
+  emoji: string;
+  activeBg: string;
+  activeText: string;
+}[] = [
+  { value: "great",    label: "Great",   emoji: "\uD83D\uDE0A", activeBg: "#bde4af", activeText: "#2d5a24" },
+  { value: "good",     label: "Good",    emoji: "\uD83D\uDE42", activeBg: "#d6e5e3", activeText: "#1a3a4a" },
+  { value: "ok",       label: "OK",      emoji: "\uD83D\uDE10", activeBg: "#eaeaea", activeText: "#4a4a4a" },
+  { value: "tired",    label: "Tired",   emoji: "\uD83D\uDE34", activeBg: "#e5d1d0", activeText: "#5a3a38" },
+  { value: "stressed", label: "Stressed",emoji: "\uD83D\uDE30", activeBg: "#f0e4d0", activeText: "#3a2810" },
 ];
 
 export default function MoodTrackerWidget() {
@@ -69,6 +76,25 @@ export default function MoodTrackerWidget() {
 
   const todayKey = useMemo(() => formatDateKey(new Date()), []);
   const activeDateKey = editingId ?? todayKey;
+  const todayEntry = useMemo(() => logs.find((l) => l.date === todayKey), [logs, todayKey]);
+
+  // Derived from existing logs state — no new hooks
+  const streak = useMemo(() => {
+    if (logs.length === 0) return 0;
+    const logSet = new Set(logs.map((l) => l.date));
+    let count = 0;
+    const base = new Date();
+    for (let i = 0; i < 365; i++) {
+      const d = new Date(base);
+      d.setDate(d.getDate() - i);
+      if (logSet.has(formatDateKey(d))) {
+        count++;
+      } else {
+        break;
+      }
+    }
+    return count;
+  }, [logs]);
 
   useEffect(() => {
     const off = onAuthStateChanged(auth, async (u) => {
@@ -95,7 +121,8 @@ export default function MoodTrackerWidget() {
     setErr(null);
     const q = query(
       collection(db, "users", u.uid, "moodLogs"),
-      orderBy("date", "desc")
+      orderBy("date", "desc"),
+      limit(30)
     );
 
     const off = onSnapshot(
@@ -156,7 +183,6 @@ export default function MoodTrackerWidget() {
       const dref = doc(db, "users", u.uid, "moodLogs", activeDateKey);
       await setDoc(dref, payload, { merge: true });
 
-      // reset back to "today" mode after saving
       setNote("");
       setSelectedMood(null);
       setEditingId(null);
@@ -187,97 +213,141 @@ export default function MoodTrackerWidget() {
 
   if (!authReady) {
     return (
-      <div className="space-y-2 text-xs text-[color:var(--muted)]">
-        <div className="h-5 w-24 rounded bg-slate-200/70" />
-        <div className="h-8 w-full rounded bg-slate-200/70" />
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ height: 20, width: 96, borderRadius: 8, background: "rgba(0,0,0,0.06)" }} />
+        <div style={{ height: 32, width: "100%", borderRadius: 8, background: "rgba(0,0,0,0.06)" }} />
       </div>
     );
   }
 
-  const activeMoodMeta = selectedMood
-    ? MOODS.find((m) => m.value === selectedMood)
-    : undefined;
-
   const isEditing = Boolean(editingId);
 
   return (
-    <section className="space-y-3">
+    <section style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {err && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        <div style={{ borderRadius: 12, border: "1px solid #fcd34d", background: "#fffbeb", padding: "6px 10px", fontSize: 11, color: "#92400e" }}>
           {err}
         </div>
       )}
 
-      {/* Header row: date + mode */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex flex-col">
-          <span className="text-xs font-medium text-[color:var(--muted)]">
-            {isEditing ? "Editing entry" : "Today"}
-          </span>
-          <span className="text-xs font-semibold text-[color:var(--ink)]">
-            {formatPrettyDate(activeDateKey)}
-          </span>
+      {/* Header row: date + streak badge */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          <span style={{ fontSize: 10, color: "var(--sr-muted)" }}>{isEditing ? "Editing entry" : "Today"}</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--sr-ink)" }}>{formatPrettyDate(activeDateKey)}</span>
         </div>
-        <span className="text-[10px] text-[color:var(--muted)]">
-          Only you can see this.
-        </span>
-      </div>
-
-      {/* Mood chips */}
-      <div className="space-y-1">
-        <p className="text-xs text-[color:var(--muted)]">
-          How are you feeling?
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {MOODS.map((m) => {
-            const active = selectedMood === m.value;
-            return (
-              <button
-                key={m.value}
-                type="button"
-                onClick={() => setSelectedMood(m.value)}
-                className={`flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition ${
-                  active
-                    ? "border-[color:var(--brand)] bg-[color:var(--brand)]/10 text-[color:var(--brand)]"
-                    : "border-[color:var(--ring)] text-[color:var(--ink)] hover:bg-white"
-                }`}
-              >
-                <span>{m.emoji}</span>
-                <span>{m.label}</span>
-              </button>
-            );
-          })}
-        </div>
-        {activeMoodMeta && (
-          <p className="text-[11px] text-[color:var(--muted)]">
-            Selected: {activeMoodMeta.emoji} {activeMoodMeta.label}
-          </p>
+        {streak > 0 && (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#bde4af", color: "#2d5a24", fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 20 }}>
+            {"\uD83D\uDD25"} {streak} day{streak === 1 ? "" : "s"}
+          </span>
         )}
       </div>
 
-      {/* Note input */}
-      <form onSubmit={saveMood} className="space-y-2">
+      {/* Today's saved entry (read mode) */}
+      {todayEntry && !editingId ? (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#f4faf0", border: "1px solid #c8e6bb", borderRadius: 12, padding: "10px 14px" }}>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#1d2428" }}>
+              {MOODS.find(m => m.value === todayEntry.mood)?.emoji} {MOODS.find(m => m.value === todayEntry.mood)?.label}
+            </div>
+            {todayEntry.note && (
+              <div style={{ fontSize: 11, color: "#677a8a", marginTop: 2 }}>{todayEntry.note}</div>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => startEdit(todayKey)}
+            style={{ fontSize: 11, fontWeight: 600, color: "#456071", background: "white", border: "1px solid #b8cad6", borderRadius: 8, padding: "5px 12px", cursor: "pointer" }}
+          >
+            Edit
+          </button>
+        </div>
+      ) : (
+      <>
+
+      {/* Mood chips */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {MOODS.map((m) => {
+          const active = selectedMood === m.value;
+          return (
+            <button
+              key={m.value}
+              type="button"
+              className="mood-chip"
+              onClick={() => setSelectedMood(m.value)}
+              style={
+                active
+                  ? {
+                      padding: "7px 12px",
+                      borderRadius: 20,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      border: "1.5px solid " + m.activeBg,
+                      background: m.activeBg,
+                      color: m.activeText,
+                      transition: "all 0.18s",
+                    }
+                  : {
+                      padding: "7px 12px",
+                      borderRadius: 20,
+                      fontSize: 12,
+                      fontWeight: 500,
+                      cursor: "pointer",
+                      border: "1.5px solid rgba(0,0,0,0.08)",
+                      background: "rgba(0,0,0,0.02)",
+                      color: "var(--sr-muted)",
+                      transition: "all 0.18s",
+                    }
+              }
+            >
+              {m.emoji} {m.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Note + save */}
+      <form onSubmit={saveMood} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <textarea
-          rows={3}
+          rows={2}
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="Optional note – e.g. “Math test tomorrow, a bit stressed but prepared.”"
-          className="w-full rounded-xl border border-[color:var(--ring)] bg-white px-3 py-2 text-xs text-[color:var(--ink)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent-soft)]"
+          placeholder="Anything on your mind?"
+          style={{
+            width: "100%",
+            border: "1.5px solid #e4eaef",
+            borderRadius: 12,
+            padding: "8px 11px",
+            fontSize: 12,
+            color: "var(--sr-ink)",
+            resize: "none",
+            outline: "none",
+            background: "#fafbfc",
+            boxSizing: "border-box",
+          }}
         />
-
-        <div className="flex items-center justify-between gap-2">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
           <button
             type="submit"
             disabled={saving || !selectedMood}
-            className="rounded-xl bg-[color:var(--brand)] px-4 py-2 text-xs font-medium text-white shadow-sm transition hover:bg-[color:var(--brand-600)] disabled:opacity-60"
+            onMouseEnter={(e) => { if (!saving && selectedMood) e.currentTarget.style.background = "#374f5e"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "#456071"; }}
+            style={{
+              background: "#456071",
+              color: "white",
+              border: "none",
+              borderRadius: 11,
+              padding: "8px 16px",
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+              opacity: saving || !selectedMood ? 0.6 : 1,
+              transition: "background 0.15s",
+            }}
           >
-            {saving
-              ? "Saving…"
-              : isEditing
-              ? "Save changes"
-              : "Save today’s mood"}
+            {saving ? "Saving..." : isEditing ? "Save changes" : "Save today's mood"}
           </button>
-
           {isEditing && (
             <button
               type="button"
@@ -286,7 +356,7 @@ export default function MoodTrackerWidget() {
                 setSelectedMood(null);
                 setNote("");
               }}
-              className="text-[11px] text-[color:var(--muted)] hover:underline"
+              style={{ fontSize: 11, fontWeight: 500, color: "#456071", cursor: "pointer", background: "none", border: "none" }}
             >
               Cancel edit
             </button>
@@ -294,50 +364,51 @@ export default function MoodTrackerWidget() {
         </div>
       </form>
 
+      </> /* end today-not-logged / editing branch */
+      )}
+
       {/* History toggle */}
       <button
         type="button"
         onClick={() => setShowHistory((v) => !v)}
-        className="text-[11px] font-medium text-[color:var(--brand)] hover:underline"
+        style={{ fontSize: 11, fontWeight: 500, color: "#456071", cursor: "pointer", background: "none", border: "none", textAlign: "left", padding: 0 }}
       >
         {showHistory ? "Hide mood history" : "Show mood history"}
       </button>
 
       {/* History list */}
       {showHistory && (
-        <div className="max-h-52 overflow-auto rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] p-3 text-xs">
+        <div style={{ maxHeight: 200, overflowY: "auto", borderRadius: 14, border: "1px solid #e4eaef", background: "white", padding: 12 }}>
           {logs.length === 0 && (
-            <div className="text-center text-[color:var(--muted)]">
-              No mood entries yet.
-            </div>
+            <div style={{ textAlign: "center", fontSize: 11, color: "var(--sr-muted)" }}>No mood entries yet.</div>
           )}
-
           {logs.map((l) => {
             const meta = MOODS.find((m) => m.value === l.mood);
             return (
               <div
                 key={l.id}
-                className="mb-2 flex items-start justify-between rounded-lg px-2 py-1 hover:bg-black/5"
+                style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "4px 6px", borderRadius: 8 }}
+                onMouseOver={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.04)"; }}
+                onMouseOut={(e) => { e.currentTarget.style.background = "transparent"; }}
               >
                 <div>
-                  <div className="text-[11px] font-semibold text-[color:var(--ink)]">
-                    {formatPrettyDate(l.date)}
-                  </div>
-                  <div className="text-[11px] text-[color:var(--muted)]">
-                    {meta?.emoji} {meta?.label}
-                    {l.note && <span> — {l.note}</span>}
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--sr-ink)" }}>{formatPrettyDate(l.date)}</div>
+                  <div style={{ fontSize: 11, color: "var(--sr-muted)" }}>
+                    {meta?.emoji} {meta?.label}{l.note ? " \u2014 " + l.note : ""}
                   </div>
                 </div>
-                <div className="flex flex-col items-end gap-1">
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
                   <button
+                    type="button"
                     onClick={() => startEdit(l.id)}
-                    className="text-[10px] text-[color:var(--brand)] hover:underline"
+                    style={{ fontSize: 10, color: "#456071", background: "none", border: "none", cursor: "pointer" }}
                   >
                     Edit
                   </button>
                   <button
+                    type="button"
                     onClick={() => deleteLog(l.id)}
-                    className="text-[10px] text-red-600 hover:underline"
+                    style={{ fontSize: 10, color: "#dc2626", background: "none", border: "none", cursor: "pointer" }}
                   >
                     Delete
                   </button>

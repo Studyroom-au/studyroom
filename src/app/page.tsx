@@ -419,6 +419,7 @@ export default function HomePage() {
               We focus on clear teaching and consistent routines that transfer
               back into the classroom.
             </p>
+            
           </div>
           <div className="space-y-3">
             {philosophyPoints.map((point) => (
@@ -492,9 +493,28 @@ export default function HomePage() {
                     {item.desc}
                   </p>
                 </div>
+                
               ))}
             </div>
+            <div className="overflow-hidden rounded-xl border border-[color:var(--ring)] bg-[#f8f8ff] shadow-sm">
+            <div
+              className="h-64 w-full overflow-hidden rounded-xl"
+              suppressHydrationWarning
+            >
+              <Image
+                src="/IMG_2243.jpeg"
+                alt="Studyroom workshop group smiling together"
+                width={1000}
+                height={900}
+                className="h-full w-full object-cover object-top"
+                style={{ color: "transparent" }}
+              />
+              
+            </div>
+  
           </div>
+          </div>
+          
         </div>
       </section>
 
@@ -558,8 +578,27 @@ export default function HomePage() {
                 className="h-full w-full object-cover object-top"
                 style={{ color: "transparent" }}
               />
+              
             </div>
+  <div className="overflow-hidden rounded-xl border border-[color:var(--ring)] bg-[#f8f8ff] shadow-sm">
+            <div
+              className="h-64 w-full overflow-hidden rounded-xl"
+              suppressHydrationWarning
+            >
+              <Image
+                src="/IMG_4458.jpeg"
+                alt="Studyroom workshop group smiling together"
+                width={1000}
+                height={900}
+                className="h-full w-full object-cover object-top"
+                style={{ color: "transparent" }}
+              />
+              
+            </div>
+  
           </div>
+          </div>
+          
         </div>
       </section>
 

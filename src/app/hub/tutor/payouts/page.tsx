@@ -20,8 +20,8 @@ type SessionRow = {
   studentId: string;
   startAt: Timestamp;
   durationMinutes: number;
-  status: SessionStatus;
-  billingStatus: BillingStatus;
+  status: string;
+  billingStatus: string;
   tutorPayableCents: number;
 };
 
@@ -46,7 +46,7 @@ type CsvRow = {
   when: string;
   student: string;
   durationMinutes: number;
-  status: SessionStatus;
+  status: string;
   payable: string;
 };
 
@@ -56,7 +56,7 @@ function payableCentsForSession(s: SessionRow) {
   if (typeof s.tutorPayableCents === "number" && s.tutorPayableCents > 0) {
     return s.tutorPayableCents;
   }
-  if (s.status !== "COMPLETED") return 0;
+  if (s.status.toLowerCase() !== "completed") return 0;
   return Math.round((s.durationMinutes / 60) * TUTOR_DEFAULT_RATE_CENTS_PER_HOUR);
 }
 
@@ -155,7 +155,7 @@ export default function TutorPayoutsPage() {
   }, [uid]);
 
   const completed = useMemo(
-    () => sessions.filter((s) => s.status === "COMPLETED"),
+    () => sessions.filter((s) => s.status.toLowerCase() === "completed"),
     [sessions]
   );
 
@@ -211,124 +211,86 @@ export default function TutorPayoutsPage() {
     URL.revokeObjectURL(url);
   }
 
+  const inputSt: React.CSSProperties = { border: "1.5px solid rgba(0,0,0,0.1)", borderRadius: 10, padding: "8px 11px", fontSize: 12, fontFamily: "inherit", color: "#1d2428", outline: "none", width: "100%", background: "#fff", boxSizing: "border-box" };
+  const cardSt: React.CSSProperties = { background: "white", borderRadius: 18, padding: 16, border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" };
+
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <header>
-        <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
-          Tutor Portal
-        </p>
-        <h1 className="mt-1 text-3xl font-semibold text-[color:var(--ink)]">
-          Pay period export
-        </h1>
-        <p className="mt-1 text-sm text-[color:var(--muted)]">
-          Select your dates, review completed sessions, then export CSV.
-        </p>
-      </header>
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
 
-      <section className="rounded-3xl border border-[color:var(--ring)] bg-[color:var(--card)] p-6 shadow-sm">
-        <div className="grid gap-4 md:grid-cols-3">
-          <div className="space-y-2">
-            <label htmlFor="start" className="text-xs font-semibold text-[color:var(--muted)]">
-              Start date
-            </label>
-            <input
-              id="start"
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="w-full rounded-xl border border-[color:var(--ring)] bg-white px-3 py-2 text-sm outline-none"
-            />
+      {/* Page header */}
+      <div style={{ marginBottom: 4 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#748398", marginBottom: 4 }}>
+          Payouts
+        </div>
+        <div style={{ fontSize: 20, fontWeight: 700, color: "#1d2428", letterSpacing: "-0.02em" }}>Pay Period Export</div>
+        <div style={{ fontSize: 12, color: "#8a96a3", marginTop: 3 }}>Select dates, review sessions, then export CSV.</div>
+      </div>
+
+      {/* Date range + actions */}
+      <div style={cardSt}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 10, alignItems: "flex-end", marginBottom: 14 }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 600, color: "#748398", marginBottom: 3 }}>Start date</div>
+            <input id="start" type="date" aria-label="Start date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={inputSt} />
           </div>
-
-          <div className="space-y-2">
-            <label htmlFor="end" className="text-xs font-semibold text-[color:var(--muted)]">
-              End date
-            </label>
-            <input
-              id="end"
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="w-full rounded-xl border border-[color:var(--ring)] bg-white px-3 py-2 text-sm outline-none"
-            />
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 600, color: "#748398", marginBottom: 3 }}>End date</div>
+            <input id="end" type="date" aria-label="End date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={inputSt} />
           </div>
-
-          <div className="flex items-end gap-2">
-            <button
-              type="button"
-              onClick={load}
-              className="rounded-xl border border-[color:var(--ring)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--brand)] hover:bg-[#d6e5e3]/40"
-            >
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" onClick={load} style={{ background: "white", color: "#456071", border: "1.5px solid rgba(69,96,113,0.2)", borderRadius: 20, padding: "7px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
               Refresh
             </button>
-
-            <button
-              type="button"
-              onClick={exportCSV}
-              disabled={completed.length === 0}
-              className="brand-cta rounded-xl px-4 py-2 text-sm font-semibold shadow-sm disabled:opacity-60"
-            >
+            <button type="button" onClick={exportCSV} disabled={completed.length === 0} style={{ background: "#456071", color: "white", border: "none", borderRadius: 20, padding: "7px 16px", fontSize: 12, fontWeight: 600, cursor: completed.length === 0 ? "not-allowed" : "pointer", opacity: completed.length === 0 ? 0.5 : 1, fontFamily: "inherit" }}>
               Export CSV
             </button>
           </div>
         </div>
 
-        <div className="mt-5 grid gap-4 md:grid-cols-3">
-          <div className="rounded-2xl border border-[color:var(--ring)] bg-white p-4">
-            <div className="text-xs font-semibold text-[color:var(--muted)]">Completed sessions</div>
-            <div className="mt-1 text-2xl font-semibold text-[color:var(--ink)]">{completed.length}</div>
+        {/* Stat tiles */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10 }}>
+          <div style={{ background: "#f8fafb", borderRadius: 14, padding: "12px 14px", border: "1px solid rgba(0,0,0,0.05)" }}>
+            <div style={{ fontSize: 10, fontWeight: 600, color: "#748398", marginBottom: 4 }}>Completed</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: "#1d2428" }}>{completed.length}</div>
           </div>
-
-          <div className="rounded-2xl border border-[color:var(--ring)] bg-white p-4 md:col-span-2">
-            <div className="text-xs font-semibold text-[color:var(--muted)]">Total payable</div>
-            <div className="mt-1 text-2xl font-semibold text-[color:var(--ink)]">
-              ${(totalCents / 100).toFixed(2)}
-            </div>
-            <div className="mt-1 text-xs text-[color:var(--muted)]">
-              Uses stored tutorPayableCents, falling back to $40/hour when missing.
-            </div>
+          <div style={{ background: "#f8fafb", borderRadius: 14, padding: "12px 14px", border: "1px solid rgba(0,0,0,0.05)" }}>
+            <div style={{ fontSize: 10, fontWeight: 600, color: "#748398", marginBottom: 4 }}>Total payable</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: "#1d2428" }}>${(totalCents / 100).toFixed(2)}</div>
+            <div style={{ fontSize: 10, color: "#8a96a3", marginTop: 2 }}>Uses stored rate, falls back to $40/hr.</div>
           </div>
         </div>
-      </section>
+      </div>
 
-      <section className="rounded-3xl border border-[color:var(--ring)] bg-[color:var(--card)] p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-[color:var(--ink)]">Sessions in period</h2>
+      {/* Sessions list */}
+      <div style={cardSt}>
+        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#748398", marginBottom: 12 }}>Sessions in period</div>
 
         {loading ? (
-          <div className="mt-4 text-sm text-[color:var(--muted)]">Loading…</div>
+          <div style={{ fontSize: 13, color: "#8a96a3" }}>Loading…</div>
         ) : sessions.length === 0 ? (
-          <div className="mt-4 text-sm text-[color:var(--muted)]">No sessions found.</div>
+          <div style={{ border: "1.5px dashed #e4eaef", borderRadius: 12, padding: 28, textAlign: "center", fontSize: 13, color: "#8a96a3" }}>No sessions found.</div>
         ) : (
-          <div className="mt-4 overflow-x-auto">
-            <table className="min-w-[900px] w-full border-separate border-spacing-0">
-              <thead>
-                <tr className="text-left text-xs font-semibold text-[color:var(--muted)]">
-                  <th className="px-3 py-3">When</th>
-                  <th className="px-3 py-3">Student</th>
-                  <th className="px-3 py-3">Duration</th>
-                  <th className="px-3 py-3">Status</th>
-                  <th className="px-3 py-3">Payable</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sessions.map((s) => (
-                  <tr key={s.id} className="border-t border-[color:var(--ring)]">
-                    <td className="px-3 py-3 text-sm text-[color:var(--muted)]">{fmt(s.startAt)}</td>
-                    <td className="px-3 py-3 text-sm font-semibold text-[color:var(--ink)]">
-                      {studentLabel(s.studentId)}
-                    </td>
-                    <td className="px-3 py-3 text-sm text-[color:var(--muted)]">{s.durationMinutes} min</td>
-                    <td className="px-3 py-3 text-sm text-[color:var(--muted)]">{s.status}</td>
-                    <td className="px-3 py-3 text-sm text-[color:var(--muted)]">
-                      {s.status === "COMPLETED" ? `$${(payableCentsForSession(s) / 100).toFixed(2)}` : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {sessions.map((s) => (
+              <div key={s.id} style={{ background: "#f8fafb", borderRadius: 12, padding: "12px 14px", border: "1px solid rgba(0,0,0,0.05)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#1d2428" }}>{studentLabel(s.studentId)}</div>
+                  <div style={{ fontSize: 11, color: "#8a96a3", marginTop: 2 }}>{fmt(s.startAt)} · {s.durationMinutes} min</div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 11, padding: "2px 10px", borderRadius: 20, background: s.status.toLowerCase() === "completed" ? "rgba(69,150,113,0.1)" : "rgba(0,0,0,0.06)", color: s.status.toLowerCase() === "completed" ? "#1a6a4a" : "#748398", fontWeight: 600 }}>
+                    {s.status}
+                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "#1d2428" }}>
+                    {s.status.toLowerCase() === "completed" ? `$${(payableCentsForSession(s) / 100).toFixed(2)}` : "—"}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         )}
-      </section>
+      </div>
+
     </div>
   );
 }

@@ -70,6 +70,9 @@ export default function AdminTutorsPage() {
   const [pendingRows, setPendingRows] = useState<PendingTutorRow[]>([]);
   const [actionBusyUid, setActionBusyUid] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [addTutorEmail, setAddTutorEmail] = useState("");
+  const [addTutorBusy, setAddTutorBusy] = useState(false);
+  const [addTutorMsg, setAddTutorMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   async function load() {
     setLoading(true);
@@ -147,6 +150,53 @@ export default function AdminTutorsPage() {
   useEffect(() => {
     load();
   }, []);
+
+  async function handleAddTutorByEmail() {
+    const email = addTutorEmail.trim().toLowerCase();
+    if (!email) return;
+
+    setAddTutorBusy(true);
+    setAddTutorMsg(null);
+
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) throw new Error("Not authenticated");
+
+      // Step 1: grant tutor access via Admin SDK (looks up by Auth email, not Firestore field)
+      const grantRes = await fetch("/api/admin/grant-tutor", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ email, action: "grant" }),
+      });
+
+      const grantData = (await grantRes.json().catch(() => ({}))) as { ok?: boolean; error?: string; displayName?: string; accessCode?: string };
+
+      if (!grantRes.ok || !grantData.ok) {
+        setAddTutorMsg({ type: "error", text: grantData.error ?? "Failed to grant access." });
+        return;
+      }
+
+      // Step 2: send welcome email (non-fatal)
+      try {
+        await fetch("/api/email/tutor-welcome", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+          body: JSON.stringify({ to: email, displayName: grantData.displayName ?? email, accessCode: grantData.accessCode }),
+        });
+      } catch (emailErr) {
+        console.warn("[add-tutor] welcome email failed (non-fatal):", emailErr);
+      }
+
+      setAddTutorMsg({ type: "success", text: `${email} has been granted tutor access. A welcome email has been sent.` });
+      setAddTutorEmail("");
+      await load();
+    } catch (err) {
+      console.error("[add-tutor]", err);
+      setAddTutorMsg({ type: "error", text: "Something went wrong. Check the console." });
+    } finally {
+      setAddTutorBusy(false);
+    }
+  }
 
   async function decideTutor(uid: string, decision: "approve" | "reject", reason?: string) {
     setActionError(null);
@@ -274,6 +324,53 @@ export default function AdminTutorsPage() {
           </table>
         )}
       </section>
+
+      {/* Add Tutor section */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "20px 0 12px" }}>
+        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#748398", whiteSpace: "nowrap" }}>
+          Add Tutor
+        </span>
+        <div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.07)" }} />
+      </div>
+
+      <div style={{ background: "#fff", borderRadius: 18, padding: "18px 20px", border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 1px 6px rgba(0,0,0,0.04)", marginBottom: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#1d2428", marginBottom: 4 }}>
+          Grant tutor access by email
+        </div>
+        <div style={{ fontSize: 12, color: "#8a96a3", marginBottom: 14, lineHeight: 1.5 }}>
+          The user must already have a Studyroom account. Once added, they&apos;ll receive a
+          welcome email with instructions to check their students and calendar.
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 10, fontWeight: 600, color: "#748398", marginBottom: 4, letterSpacing: "0.04em" }}>
+              User email address
+            </div>
+            <input
+              type="email"
+              value={addTutorEmail}
+              onChange={e => setAddTutorEmail(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && !addTutorBusy && void handleAddTutorByEmail()}
+              placeholder="tutor@example.com"
+              aria-label="Tutor email address"
+              style={{ width: "100%", border: "1.5px solid rgba(0,0,0,0.1)", borderRadius: 10, padding: "9px 13px", fontSize: 13, fontFamily: "inherit", color: "#1d2428", outline: "none", boxSizing: "border-box" }}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleAddTutorByEmail()}
+            disabled={addTutorBusy || !addTutorEmail.trim()}
+            style={{ background: addTutorBusy ? "#748398" : "#456071", color: "#fff", border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 13, fontWeight: 600, cursor: addTutorBusy ? "not-allowed" : "pointer", fontFamily: "inherit", whiteSpace: "nowrap", opacity: (!addTutorEmail.trim() || addTutorBusy) ? 0.55 : 1, transition: "all 0.15s" }}
+          >
+            {addTutorBusy ? "Adding..." : "Add as tutor"}
+          </button>
+        </div>
+        {addTutorMsg && (
+          <div style={{ marginTop: 10, fontSize: 12, fontWeight: 600, color: addTutorMsg.type === "success" ? "#2d5a24" : "#c0445e", background: addTutorMsg.type === "success" ? "#f0f8ec" : "#fdf0f3", borderRadius: 8, padding: "7px 12px", border: `1px solid ${addTutorMsg.type === "success" ? "#c8e6bb" : "#f5c0c8"}` }}>
+            {addTutorMsg.type === "success" ? "✓ " : "✗ "}{addTutorMsg.text}
+          </div>
+        )}
+      </div>
 
       {loading ? (
         <div className="rounded-3xl border border-[color:var(--ring)] bg-[color:var(--card)] p-6 text-sm text-[color:var(--muted)]">

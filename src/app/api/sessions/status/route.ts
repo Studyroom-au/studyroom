@@ -48,6 +48,31 @@ export async function POST(req: Request) {
       role,
     });
 
+    const secret = process.env.INTERNAL_API_SECRET;
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+
+    // Fire-and-forget Xero push when an invoice is created
+    if (result.billingOutcome === "invoice" && result.invoiceId && secret) {
+      fetch(`${baseUrl}/api/billing/push-invoice-to-xero`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-internal-call": secret },
+        body: JSON.stringify({ invoiceId: result.invoiceId }),
+      }).catch((err) => console.error("[sessions/status] xero push failed:", err));
+    }
+
+    // Fire-and-forget session recap email when session is marked complete
+    if (action === "complete" && secret) {
+      fetch(`${baseUrl}/api/email/session-recap`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-internal-call": secret },
+        body: JSON.stringify({
+          sessionId,
+          tutorName: user.name || user.email || "",
+          tutorNotes: "",
+        }),
+      }).catch((err) => console.error("[sessions/status] recap email failed:", err));
+    }
+
     return NextResponse.json(result);
   } catch (e: unknown) {
     console.error("[sessions/status]", e);

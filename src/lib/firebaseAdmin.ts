@@ -2,63 +2,47 @@
 import * as admin from "firebase-admin";
 
 let app: admin.app.App | null = null;
-let warnedMissing = false;
 
-function hasAdminEnv() {
-  return (
-    !!process.env.FIREBASE_PROJECT_ID &&
-    !!process.env.FIREBASE_CLIENT_EMAIL &&
-    !!process.env.FIREBASE_PRIVATE_KEY
-  );
+function getRequiredEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`[firebaseAdmin] Missing env var: ${name}`);
+  }
+  return value;
 }
 
-export function getAdminApp(): admin.app.App | null {
+export function getAdminApp(): admin.app.App {
   if (app) return app;
 
-  if (!hasAdminEnv()) {
-    if (!warnedMissing && process.env.NODE_ENV !== "production") {
-      console.warn(
-        "[firebaseAdmin] Firebase Admin env vars missing. Admin features are disabled in this environment."
-      );
-    }
-    warnedMissing = true;
-    return null;
-  }
+  const projectId = getRequiredEnv("FIREBASE_PROJECT_ID");
+  const clientEmail = getRequiredEnv("FIREBASE_CLIENT_EMAIL");
+  const rawKey = getRequiredEnv("FIREBASE_PRIVATE_KEY");
 
-  const projectId = process.env.FIREBASE_PROJECT_ID as string;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL as string;
-  const rawKey = process.env.FIREBASE_PRIVATE_KEY as string;
+  const privateKey = rawKey.includes("\\n")
+    ? rawKey.replace(/\\n/g, "\n")
+    : rawKey;
 
-  const privateKey = rawKey.includes("\\n") ? rawKey.replace(/\\n/g, "\n") : rawKey;
-
-  try {
-    if (admin.apps.length === 0) {
-      app = admin.initializeApp({
-        credential: admin.credential.cert({
-          projectId,
-          clientEmail,
-          privateKey,
-        }),
-      });
-    } else {
-      app = admin.app();
-    }
-  } catch (err) {
-    console.error("[firebaseAdmin] init failed:", err);
-    return null;
+  if (admin.apps.length === 0) {
+    app = admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId,
+        clientEmail,
+        privateKey,
+      }),
+    });
+  } else {
+    app = admin.app();
   }
 
   return app;
 }
 
-export function getAdminAuth(): admin.auth.Auth | null {
-  const a = getAdminApp();
-  return a ? admin.auth(a) : null;
+export function getAdminAuth(): admin.auth.Auth {
+  return admin.auth(getAdminApp());
 }
 
-export function getAdminDb(): admin.firestore.Firestore | null {
-  const a = getAdminApp();
-  return a ? admin.firestore(a) : null;
+export function getAdminDb(): admin.firestore.Firestore {
+  return admin.firestore(getAdminApp());
 }
 
 function getBearerToken(req: Request) {
@@ -68,11 +52,8 @@ function getBearerToken(req: Request) {
 }
 
 export async function verifyIdTokenFromRequest(req: Request) {
-  const auth = getAdminAuth();
-  if (!auth) throw new Error("Firebase Admin not configured.");
-
   const token = getBearerToken(req);
   if (!token) throw new Error("Missing Authorization token.");
 
-  return await auth.verifyIdToken(token);
+  return await getAdminAuth().verifyIdToken(token);
 }

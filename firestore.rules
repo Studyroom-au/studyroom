@@ -2,7 +2,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ---------------- HELPERS ----------------
     function isAuthed() {
       return request.auth != null;
     }
@@ -11,7 +10,6 @@ service cloud.firestore {
       return isAuthed() && request.auth.uid == uid;
     }
 
-    // Your login is always admin
     function isAdmin() {
       return isAuthed() && request.auth.token.email == "lily.studyroom@gmail.com";
     }
@@ -36,7 +34,6 @@ service cloud.firestore {
       return isAuthed() ? request.auth.token.email : null;
     }
 
-    // For docs that contain assignedTutorId / assignedTutorEmail
     function isAssignedTutorDoc(docData) {
       return isAuthed() && (
         (docData.assignedTutorId != null && docData.assignedTutorId == request.auth.uid) ||
@@ -78,9 +75,7 @@ service cloud.firestore {
         && request.resource.data.title == resource.data.title
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.diff(resource.data).changedKeys().hasOnly([
-          "lastActiveAt",
-          "isActive",
-          "participantCount"
+          "lastActiveAt","isActive","participantCount"
         ]);
 
       allow delete: if false;
@@ -90,15 +85,22 @@ service cloud.firestore {
 
         allow create: if isAuthed()
           && request.resource.data.uid == request.auth.uid
-          && request.resource.data.email == authedEmail()
-          && request.resource.data.keys().hasOnly(["uid","email","text","fileUrl","fileName","createdAt"])
+          && (
+            !("email" in request.resource.data)
+            || request.resource.data.email == null
+            || (authedEmail() != null && request.resource.data.email == authedEmail())
+          )
+          && request.resource.data.keys().hasOnly([
+            "uid","email","name","text","fileUrl","fileName","createdAt"
+          ])
           && (!("text" in request.resource.data) || request.resource.data.text.size() <= 2000)
-          && (!("fileUrl" in request.resource.data) || (request.resource.data.fileUrl == null || request.resource.data.fileUrl.size() <= 300))
-          && (!("fileName" in request.resource.data) || (request.resource.data.fileName == null || request.resource.data.fileName.size() <= 200));
+          && (!("fileUrl" in request.resource.data) || request.resource.data.fileUrl == null
+              || request.resource.data.fileUrl.size() <= 300)
+          && (!("fileName" in request.resource.data) || request.resource.data.fileName == null
+              || request.resource.data.fileName.size() <= 200);
 
         allow delete: if isAuthed() && (
-          resource.data.uid == request.auth.uid ||
-          isTutorOrAdmin()
+          resource.data.uid == request.auth.uid || isTutorOrAdmin()
         );
 
         allow update: if false;
@@ -117,19 +119,40 @@ service cloud.firestore {
       allow delete: if false;
 
       match /pomoState/{docId} {
-        allow read, create, update, delete: if isSelf(uid) && docId == "state";
+        allow read, create, update, delete: if isSelf(uid) || isAdmin();
       }
+
       match /tasks/{taskId} {
-        allow read, create, update, delete: if isSelf(uid);
+        // Tutor can read (task completion on student detail) and write (assign tasks)
+        allow read: if isSelf(uid) || isTutorOrAdmin();
+        allow create, update: if isSelf(uid) || isTutor() || isAdmin();
+        allow delete: if isSelf(uid) || isAdmin();
       }
+
       match /pomoSessions/{pomoId} {
-        allow read, create, update, delete: if isSelf(uid);
+        allow read, create, update, delete: if isSelf(uid) || isAdmin();
       }
+
+      match /pomoHistory/{pomoId} {
+        allow read, create, update, delete: if isSelf(uid) || isAdmin();
+      }
+
       match /moodLogs/{logId} {
-        allow read, create, update, delete: if isSelf(uid);
+        // Tutor can read to show mood history on student detail page
+        allow read: if isSelf(uid) || isTutorOrAdmin();
+        allow create, update, delete: if isSelf(uid);
       }
+
       match /upcoming/{itemId} {
-        allow read, create, update, delete: if isSelf(uid);
+        // Tutor can read to show upcoming deadlines on student detail page
+        allow read: if isSelf(uid) || isTutorOrAdmin();
+        allow create, update, delete: if isSelf(uid);
+      }
+
+      match /streak/{docId} {
+        allow read: if isSelf(uid) || isTutorOrAdmin();
+        allow create, update: if isSelf(uid) || isAdmin();
+        allow delete: if false;
       }
     }
 
@@ -137,19 +160,16 @@ service cloud.firestore {
     match /roles/{uid} {
       allow read: if isSelf(uid) || isTutorOrAdmin();
 
-      // Users can create their own initial non-privileged role document.
       allow create: if isSelf(uid)
         && request.resource.data.keys().hasOnly(["role"])
         && request.resource.data.role in ["student", "parent", "tutor_pending"];
 
-      // Users cannot self-promote; they may only keep their existing role.
       allow update: if isSelf(uid)
         && request.resource.data.keys().hasOnly(["role"])
         && request.resource.data.role == resource.data.role;
 
       allow delete: if false;
 
-      // Admin can manage roles.
       allow write: if isAdmin();
     }
 
@@ -166,20 +186,14 @@ service cloud.firestore {
 
     // ---------------- LEADS ----------------
     match /leads/{leadId} {
-      // Admin can do anything
       allow read, write: if isAdmin();
 
-      // Tutor can read:
-      // - open marketplace leads (new + unclaimed)
-      // - leads they claimed
       allow read: if isTutor() && (
         (resource.data.status == "new" && resource.data.claimedTutorId == null) ||
         (resource.data.claimedTutorId != null && resource.data.claimedTutorId == request.auth.uid)
       );
 
-      // No tutor writes directly (claim happens via API)
       allow write: if false;
-
       allow create, delete: if false;
     }
 
@@ -191,16 +205,12 @@ service cloud.firestore {
     // ---------------- CLIENTS ----------------
     match /clients/{clientId} {
       allow read, write: if isAdmin();
-
-      // Tutor read only if assigned (client doc must contain assignedTutorId/email)
       allow read: if isTutor() && isAssignedTutorDoc(resource.data);
 
-      // Optional: allow tutor to update only tutor notes
       allow update: if isTutor()
         && isAssignedTutorDoc(resource.data)
         && request.resource.data.diff(resource.data).changedKeys().hasOnly([
-          "tutorNotes",
-          "updatedAt"
+          "tutorNotes","updatedAt"
         ]);
 
       allow create, delete: if false;
@@ -209,25 +219,19 @@ service cloud.firestore {
     // ---------------- STUDENTS ----------------
     match /students/{studentId} {
       allow read, write: if isAdmin();
-
       allow read: if isTutor() && isAssignedTutorDoc(resource.data);
 
-      // Tutor confirms only
       allow update: if isTutor()
         && isAssignedTutorDoc(resource.data)
         && request.resource.data.diff(resource.data).changedKeys().hasOnly([
-          "tutorConfirmedAt",
-          "tutorConfirmedBy",
-          "updatedAt"
+          "tutorConfirmedAt","tutorConfirmedBy","hubUid","hubEmail","updatedAt"
         ]);
 
       allow create, delete: if false;
 
-      // ---- Subcollection: student session notes/history ----
       match /sessions/{noteId} {
         allow read, write: if isAdmin();
 
-        // Tutor can read/write notes ONLY if they are assigned to this student
         allow read, create, update: if isTutor()
           && isAssignedTutorDoc(
             get(/databases/$(database)/documents/students/$(studentId)).data
@@ -237,57 +241,34 @@ service cloud.firestore {
       }
     }
 
-    // ---------------- TOP-LEVEL SESSIONS (CALENDAR) ----------------
+    // ---------------- TOP-LEVEL SESSIONS ----------------
     match /sessions/{sessionId} {
-      // Admin override
       allow read, write: if isAdmin();
-
-      // Tutor reads own sessions
       allow read: if isTutor() && sessionTutorMatch(resource.data);
 
-      // Tutor creates own sessions (restricted fields)
-      allow create: if isTutor() && (
-        request.resource.data.tutorId == request.auth.uid
+      allow create: if isTutor()
+        && request.resource.data.tutorId == request.auth.uid
         && (
           !("tutorEmail" in request.resource.data) ||
           request.resource.data.tutorEmail == null ||
           request.resource.data.tutorEmail == authedEmail()
         )
         && request.resource.data.keys().hasOnly([
-          "tutorId",
-          "tutorEmail",
-          "studentId",
-          "clientId",
-          "planId",
-          "startAt",
-          "endAt",
-          "durationMinutes",
-          "durationMins",
-          "modality",
-          "mode",
-          "status",
-          "legacyStatus",
-          "seriesKey",
-          "notes",
-          "createdAt",
-          "updatedAt"
+          "tutorId","tutorEmail","studentId","clientId","planId",
+          "startAt","endAt","durationMinutes","durationMins",
+          "modality","mode","status","legacyStatus","seriesKey",
+          "notes","createdAt","updatedAt"
         ])
-        && request.resource.data.status == "scheduled"
-      );
+        && request.resource.data.status == "scheduled";
 
-      // Tutor can only reschedule/update notes from the client.
       allow update: if isTutor()
         && sessionTutorMatch(resource.data)
         && request.resource.data.diff(resource.data).changedKeys().hasOnly([
-          "startAt",
-          "endAt",
-          "notes",
-          "updatedAt"
+          "startAt","endAt","notes","unitPlanWeek","worksheetId","updatedAt"
         ]);
 
       allow delete: if false;
 
-      // ---- Session logs subcollection (admin + tutor owner) ----
       match /logs/{logId} {
         allow read, write: if isAdmin();
 
@@ -300,12 +281,8 @@ service cloud.firestore {
 
     // ---------------- INVOICES ----------------
     match /invoices/{invoiceId} {
-      // Admin owns invoices
       allow read, write: if isAdmin();
-
-      // Tutors can read their own invoices (optional)
       allow read: if isTutor() && tutorOwnerMatch(resource.data);
-
       allow create, update, delete: if false;
     }
 
@@ -332,10 +309,7 @@ service cloud.firestore {
       allow update: if isTutor()
         && resource.data.assignedTutorId == request.auth.uid
         && request.resource.data.diff(resource.data).changedKeys().hasOnly([
-          "sessionsUsed",
-          "sessionsRemaining",
-          "status",
-          "updatedAt"
+          "sessionsUsed","sessionsRemaining","status","updatedAt"
         ]);
 
       allow create, delete: if false;
@@ -351,9 +325,44 @@ service cloud.firestore {
       allow read, write: if isTutorOrAdmin();
     }
 
+    // ---------------- TUTOR ACCESS CODES ----------------
+    match /tutorAccessCodes/{codeId} {
+      // Admin can manage codes; redemption happens server-side via Admin SDK
+      allow read, write: if isAdmin();
+    }
+
     // ---------------- TUTOR PRIVATE DATA ----------------
-    match /tutors/{uid}/{sub=**}/{doc} {
+    match /tutors/{uid}/{document=**} {
       allow read, write: if isSelf(uid) || isAdmin();
+    }
+
+    // ---------------- BLOG POSTS ----------------
+    match /blogPosts/{slug} {
+      allow read: if resource.data.published == true || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // ---------------- RESOURCES ----------------
+    match /resources/{resourceId} {
+      allow read: if isAdmin() || isTutor()
+        || (isAuthed() && (
+          resource.data.assignedTo == null
+          || resource.data.assignedTo.size() == 0
+          || resource.data.assignedTo.hasAny([request.auth.uid])
+        ));
+
+      allow create: if isTutorOrAdmin()
+        && request.resource.data.keys().hasOnly([
+          "title","subject","type","fileUrl","fileName","fileSize",
+          "uploadedBy","uploadedByName","uploadedAt","assignedTo",
+          "description","createdAt","updatedAt"
+        ]);
+
+      allow update: if isAdmin()
+        || (isTutor() && resource.data.uploadedBy == request.auth.uid);
+
+      allow delete: if isAdmin()
+        || (isTutor() && resource.data.uploadedBy == request.auth.uid);
     }
   }
 }

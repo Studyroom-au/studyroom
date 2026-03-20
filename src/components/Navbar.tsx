@@ -1,10 +1,9 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-// src/components/Navbar.tsx
 "use client";
 
-import { useState, useEffect } from "react";
-import Link from "next/link";
+import { useEffect, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const navLinks = [
@@ -15,6 +14,10 @@ const navLinks = [
   { href: "/contact", label: "Contact" },
   { href: "/blog", label: "Blog" },
 ];
+
+function cx(...parts: Array<string | false | null | undefined>) {
+  return parts.filter(Boolean).join(" ");
+}
 
 function NavLink({
   href,
@@ -31,13 +34,17 @@ function NavLink({
     <Link
       href={href}
       onClick={onClick}
-      className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+      className={cx(
+        "relative rounded-full px-3.5 py-2 text-sm transition-all duration-150",
         active
-          ? "bg-[#374f5e] text-[#f8f8ff]"
-          : "text-[#eaeaea] hover:bg-[#374f5e] hover:text-white"
-      }`}
+          ? "bg-[color:var(--brand-50)] font-semibold text-[color:var(--brand)]"
+          : "font-medium text-[color:var(--ink-soft)] hover:bg-[color:var(--brand-50)]/60 hover:text-[color:var(--brand)]"
+      )}
     >
       {label}
+      {active && (
+        <span className="absolute bottom-1 left-1/2 h-[2px] w-4 -translate-x-1/2 rounded-full bg-[color:var(--brand-soft)]" />
+      )}
     </Link>
   );
 }
@@ -46,113 +53,133 @@ export default function Navbar() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const isActive = (href: string) =>
-    pathname === href || pathname.startsWith(`${href}/`);
+  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
-  // Close the mobile menu after route changes.
   useEffect(() => {
     setMobileOpen(false);
   }, [pathname]);
 
   return (
-    <header className="sticky top-0 z-30 border-b border-[#374f5e] bg-[#456071] backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 md:px-6">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="h-9 w-40 flex items-center">
-            <Image
-              src="/logo.png"
-              alt="Studyroom"
-              width={160}
-              height={36}
-              className="h-full w-auto object-contain"
-              priority
-              suppressHydrationWarning
-            />
-          </div>
-        </Link>
-
-        <nav className="hidden items-center gap-1 md:flex">
-          {navLinks.map((link) => (
-            <NavLink
-              key={link.href}
-              href={link.href}
-              label={link.label}
-              active={isActive(link.href)}
-            />
-          ))}
-        </nav>
-
-        <div className="hidden items-center gap-2 md:flex">
-          <Link
-            href="/login"
-            className="rounded-lg px-3 py-2 text-sm font-semibold text-[#f8f8ff] transition hover:bg-[#374f5e]"
-          >
-            Login
-          </Link>
-          <Link
-            href="/contact"
-            className="rounded-lg bg-[#f8f8ff] px-4 py-2 text-sm font-semibold text-[#456071] shadow-sm transition hover:bg-[#eaeaea]"
-          >
-            Enquire
-          </Link>
-          <Link
-            href="/enrol"
-            className="rounded-lg bg-[#f8f8ff] px-4 py-2 text-sm font-semibold text-[#456071] shadow-sm transition hover:bg-[#eaeaea]"
-          >
-            Enrol
-          </Link>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => setMobileOpen((v) => !v)}
-          className="inline-flex items-center justify-center rounded-lg border border-white/20 px-2 py-1 text-xs font-medium text-[#f8f8ff] md:hidden"
-          aria-label="Toggle navigation menu"
-          aria-expanded={mobileOpen}
+    <header className="sticky top-0 z-30 px-3 pt-3 md:px-4">
+      <div className="mx-auto max-w-6xl">
+        {/* Navbar pill */}
+        <div
+          className="rounded-[28px] bg-white/95 backdrop-blur-md"
+          style={{
+            border: "1px solid rgba(69, 96, 113, 0.15)",
+            boxShadow:
+              "0 1px 3px rgba(20, 32, 44, 0.06), 0 8px 28px rgba(20, 32, 44, 0.09)",
+          }}
         >
-          {mobileOpen ? "Close" : "Menu"}
-        </button>
-      </div>
+        <div className="flex items-center justify-between gap-4 px-4 py-2.5 md:px-5">
+            {/* Brand */}
+            <Link href="/" className="flex flex-col items-start gap-0.5">
+              <div>
+                <Image
+                  src="/logo.png"
+                  alt="Studyroom"
+                  width={120}
+                  height={120}
+                  className="h-[40px] w-[160px] object-contain"
+                  priority
+                  suppressHydrationWarning
+                />
+              </div>
+              
+            </Link>
+            
+            {/* Desktop nav */}
+            <nav className="hidden items-center gap-0.5 md:flex">
+              {navLinks.map((link) => (
+                <NavLink
+                  key={link.href}
+                  href={link.href}
+                  label={link.label}
+                  active={isActive(link.href)}
+                />
+              ))}
+            </nav>
 
-      {mobileOpen && (
-        <div className="border-t border-[#374f5e] bg-[#456071] md:hidden">
-          <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-3">
-            {navLinks.map((link) => (
-              <NavLink
-                key={link.href}
-                href={link.href}
-                label={link.label}
-                active={isActive(link.href)}
-                onClick={() => setMobileOpen(false)}
-              />
-            ))}
-
-            <div className="mt-2 flex flex-col gap-2">
+            {/* Desktop CTA group */}
+            <div className="hidden items-center gap-2 md:flex">
               <Link
                 href="/login"
-                onClick={() => setMobileOpen(false)}
-                className="rounded-lg px-3 py-2 text-sm font-semibold text-[#f8f8ff] ring-1 ring-white/20 transition hover:bg-[#374f5e]"
+                className="rounded-full px-3.5 py-2 text-sm font-medium text-[color:var(--muted)] transition hover:text-[color:var(--brand)]"
               >
-                Login
+                Log in
               </Link>
               <Link
                 href="/contact"
-                onClick={() => setMobileOpen(false)}
-                className="rounded-lg bg-[#f8f8ff] px-3 py-2 text-sm font-semibold text-[#456071] shadow-sm transition hover:bg-[#eaeaea]"
+                className="button-secondary rounded-full px-4 py-2 text-sm font-semibold"
               >
                 Enquire
               </Link>
               <Link
                 href="/enrol"
-                onClick={() => setMobileOpen(false)}
-                className="rounded-lg bg-[#f8f8ff] px-3 py-2 text-sm font-semibold text-[#456071] shadow-sm transition hover:bg-[#eaeaea]"
+                className="brand-cta rounded-full px-4.5 py-2 text-sm font-semibold"
+                style={{ padding: "0.5rem 1.1rem" }}
               >
-                Enrol
+                Enrol now
               </Link>
             </div>
+
+            {/* Mobile toggle */}
+            <button
+              type="button"
+              onClick={() => setMobileOpen((v) => !v)}
+              className="button-secondary inline-flex items-center justify-center rounded-full px-3.5 py-2 text-xs font-semibold md:hidden"
+              aria-label="Toggle navigation menu"
+              aria-expanded={mobileOpen}
+            >
+              {mobileOpen ? "Close" : "Menu"}
+            </button>
           </div>
+
+          {/* Mobile menu */}
+          {mobileOpen && (
+            <div
+              className="px-4 pb-5 pt-3 md:hidden"
+              style={{ borderTop: "1px solid var(--ring-soft)" }}
+            >
+              <div className="flex flex-col gap-1">
+                {navLinks.map((link) => (
+                  <NavLink
+                    key={link.href}
+                    href={link.href}
+                    label={link.label}
+                    active={isActive(link.href)}
+                    onClick={() => setMobileOpen(false)}
+                  />
+                ))}
+              </div>
+
+              <div className="mt-4 grid gap-2">
+                <Link
+                  href="/login"
+                  onClick={() => setMobileOpen(false)}
+                  className="button-ghost rounded-2xl px-4 py-3 text-center text-sm font-medium"
+                >
+                  Log in
+                </Link>
+                <Link
+                  href="/contact"
+                  onClick={() => setMobileOpen(false)}
+                  className="button-secondary rounded-2xl px-4 py-3 text-center text-sm font-semibold"
+                >
+                  Enquire
+                </Link>
+                <Link
+                  href="/enrol"
+                  onClick={() => setMobileOpen(false)}
+                  className="brand-cta rounded-2xl px-4 py-3 text-center text-sm font-semibold"
+                >
+                  Enrol now
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </header>
   );
 }

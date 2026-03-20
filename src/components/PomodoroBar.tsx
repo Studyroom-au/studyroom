@@ -4,12 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Phase = "study" | "break" | "longbreak";
 
-/**
- * Pomodoro that repeats: [Study, Short, Study, Short, Study, Short, Study, Long].
- * Defaults: Study 25m, Short 5m, Long 60m. Students can edit minutes.
- * Controls: Start cycle, Stop, Start/Restart Study, Start/Restart Break.
- * Accurate (wall-clock) ticking, beep + red flash on phase change.
- */
+
 export default function PomodoroBar() {
   // Editable minutes
   const [studyMin, setStudyMin] = useState<number>(25);

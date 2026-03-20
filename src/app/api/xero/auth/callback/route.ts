@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import * as admin from "firebase-admin";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { getXeroClient } from "@/lib/xeroAuthClient";
+import { tokenSetToPlain } from "@/lib/xero";
 
 type TokenSet = {
   access_token?: string;
@@ -124,7 +125,7 @@ export async function GET(req: Request) {
     await db.collection("integrations").doc("xero").set(
       {
         tenantId,
-        tokenSet,
+        tokenSet: tokenSetToPlain(tokenSet),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       },
       { merge: true }

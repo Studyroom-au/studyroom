@@ -1,16 +1,9 @@
-// src/app/hub/tutor/leads/page.tsx  (or /hub/tutors/leads/page.tsx)
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { onAuthStateChanged } from "firebase/auth";
-import {
-  collection,
-  getDocs,
-  query,
-  Timestamp,
-  where,
-} from "firebase/firestore";
+import { collection, getDocs, query, Timestamp, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 
 type LeadStatus = "new" | "claimed" | "converted" | "closed";
@@ -22,13 +15,10 @@ type LeadRow = {
   suburb?: string | null;
   mode?: "online" | "in-home";
   subjects: string[];
-
   status: LeadStatus;
-
   claimedTutorId?: string | null;
   claimedTutorName?: string | null;
   claimedTutorEmail?: string | null;
-
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 };
@@ -40,11 +30,9 @@ type LeadDoc = {
   mode?: unknown;
   subjects?: unknown;
   status?: unknown;
-
   claimedTutorId?: unknown;
   claimedTutorName?: unknown;
   claimedTutorEmail?: unknown;
-
   createdAt?: unknown;
   updatedAt?: unknown;
 };
@@ -52,58 +40,51 @@ type LeadDoc = {
 function asString(v: unknown, fallback = ""): string {
   return typeof v === "string" ? v : fallback;
 }
+
 function asNullableString(v: unknown): string | null {
   return typeof v === "string" ? v : null;
 }
+
 function asStringArray(v: unknown): string[] {
-  return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
 }
+
 function asTimestamp(v: unknown): Timestamp | undefined {
   return v instanceof Timestamp ? v : undefined;
 }
+
 function asMode(v: unknown): "online" | "in-home" | undefined {
   return v === "online" || v === "in-home" ? v : undefined;
 }
+
 function asLeadStatus(v: unknown): LeadStatus {
   return v === "new" || v === "claimed" || v === "converted" || v === "closed" ? v : "new";
 }
 
 function formatDate(ts?: Timestamp) {
-  if (!ts) return "";
+  if (!ts) return "Recent";
   return ts.toDate().toLocaleDateString();
 }
 
-function cn(...classes: Array<string | false | null | undefined>) {
-  return classes.filter(Boolean).join(" ");
+function formatMode(mode?: "online" | "in-home") {
+  if (!mode) return "Flexible";
+  return mode === "in-home" ? "In-home" : "Online";
 }
 
 export default function TutorMarketplacePage() {
   const [loading, setLoading] = useState(true);
-  const [uid, setUid] = useState<string>("");
-  const [email, setEmail] = useState<string | null>(null);
-
+  const [uid, setUid] = useState("");
   const [rows, setRows] = useState<LeadRow[]>([]);
   const [filter, setFilter] = useState<"open" | "mine">("open");
 
-  async function refresh(tutorUid: string) {
+  async function loadLeads(tutorUid: string, activeFilter: "open" | "mine") {
     setLoading(true);
     try {
       const col = collection(db, "leads");
       const snap =
-        filter === "open"
-          ? await getDocs(
-              query(
-                col,
-                where("status", "==", "new"),
-                where("claimedTutorId", "==", null)
-              )
-            )
-          : await getDocs(
-              query(
-                col,
-                where("claimedTutorId", "==", tutorUid)
-              )
-            );
+        activeFilter === "open"
+          ? await getDocs(query(col, where("status", "==", "new"), where("claimedTutorId", "==", null)))
+          : await getDocs(query(col, where("claimedTutorId", "==", tutorUid)));
 
       const list: LeadRow[] = snap.docs.map((d) => {
         const data = d.data() as LeadDoc;
@@ -114,19 +95,15 @@ export default function TutorMarketplacePage() {
           suburb: asNullableString(data.suburb),
           mode: asMode(data.mode),
           subjects: asStringArray(data.subjects),
-
           status: asLeadStatus(data.status),
-
           claimedTutorId: asNullableString(data.claimedTutorId),
           claimedTutorName: asNullableString(data.claimedTutorName),
           claimedTutorEmail: asNullableString(data.claimedTutorEmail),
-
           createdAt: asTimestamp(data.createdAt),
           updatedAt: asTimestamp(data.updatedAt),
         };
       });
 
-      // Sort newest updated/created first
       list.sort((a, b) => {
         const at = a.updatedAt?.toMillis() ?? a.createdAt?.toMillis() ?? 0;
         const bt = b.updatedAt?.toMillis() ?? b.createdAt?.toMillis() ?? 0;
@@ -134,161 +111,133 @@ export default function TutorMarketplacePage() {
       });
 
       setRows(list.slice(0, 300));
-    } catch (e) {
-      console.error("[tutor marketplace] load failed:", e);
+    } catch (error) {
+      console.error("[tutor marketplace] load failed:", error);
       setRows([]);
     } finally {
       setLoading(false);
     }
   }
 
+  const refreshForEffect = useCallback(() => loadLeads(uid, filter), [uid, filter]);
+
   useEffect(() => {
     const off = onAuthStateChanged(auth, (u) => {
       if (!u) return;
       setUid(u.uid);
-      setEmail(u.email ?? null);
     });
     return () => off();
   }, []);
 
   useEffect(() => {
     if (!uid) return;
-    refresh(uid);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uid, filter]);
+    refreshForEffect();
+  }, [uid, filter, refreshForEffect]);
 
   const count = useMemo(() => rows.length, [rows]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <header className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
-          Studyroom · Tutor
-        </p>
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
 
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="text-3xl font-semibold text-[color:var(--ink)]">Leads Marketplace</h1>
-            <p className="text-sm text-[color:var(--muted)]">
-              Browse new leads and claim students you can support. ({count})
-            </p>
-
-            <p className="mt-1 text-xs text-[color:var(--muted)]">
-              Debug: uid=<span className="font-mono">{uid || "—"}</span>{" "}
-              email=<span className="font-mono">{email || "—"}</span>
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setFilter("open")}
-              className={cn(
-                "rounded-xl px-3 py-2 text-sm font-semibold transition",
-                filter === "open"
-                  ? "bg-[color:var(--brand)] text-[color:var(--brand-contrast)]"
-                  : "border border-[color:var(--ring)] bg-white text-[color:var(--brand)] hover:bg-[#d6e5e3]/40"
-              )}
-            >
-              Open leads
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setFilter("mine")}
-              className={cn(
-                "rounded-xl px-3 py-2 text-sm font-semibold transition",
-                filter === "mine"
-                  ? "bg-[color:var(--brand)] text-[color:var(--brand-contrast)]"
-                  : "border border-[color:var(--ring)] bg-white text-[color:var(--brand)] hover:bg-[#d6e5e3]/40"
-              )}
-            >
-              My claimed
-            </button>
-
-            <button
-              type="button"
-              onClick={() => auth.currentUser && refresh(auth.currentUser.uid)}
-              className="rounded-xl border border-[color:var(--ring)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--brand)] hover:bg-[#d6e5e3]/40"
-            >
-              Refresh
-            </button>
-
-            <Link
-              href="/hub/tutor/students"
-              className="rounded-xl border border-[color:var(--ring)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--brand)] hover:bg-[#d6e5e3]/40"
-            >
-              My Students →
-            </Link>
-          </div>
+      {/* Simple page header */}
+      <div style={{ marginBottom: 4 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#748398", marginBottom: 4 }}>
+          Marketplace
         </div>
-      </header>
+        <div style={{ fontSize: 20, fontWeight: 700, color: "#1d2428", letterSpacing: "-0.02em" }}>
+          Open leads
+        </div>
+      </div>
 
-      <section className="rounded-3xl border border-[color:var(--ring)] bg-[color:var(--card)] p-4 shadow-sm">
-        {loading ? (
-          <div className="p-6 text-sm text-[color:var(--muted)]">Loading…</div>
-        ) : rows.length === 0 ? (
-          <div className="p-6 text-sm text-[color:var(--muted)]">
-            {filter === "open" ? "No open leads right now." : "You haven’t claimed any leads yet."}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-[980px] w-full border-separate border-spacing-0 text-sm">
-              <thead>
-                <tr className="text-left text-xs font-semibold text-[color:var(--muted)]">
-                  <th className="px-3 py-3">Created</th>
-                  <th className="px-3 py-3">Student</th>
-                  <th className="px-3 py-3">Year</th>
-                  <th className="px-3 py-3">Mode</th>
-                  <th className="px-3 py-3">Suburb</th>
-                  <th className="px-3 py-3">Subjects</th>
-                  <th className="px-3 py-3">Claimed</th>
-                  <th className="px-3 py-3">Open</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((l) => (
-                  <tr key={l.id} className="border-t border-[color:var(--ring)]">
-                    <td className="px-3 py-3 text-[color:var(--muted)]">
-                      {formatDate(l.createdAt)}
-                    </td>
-                    <td className="px-3 py-3 font-semibold text-[color:var(--ink)]">
-                      {l.studentName}
-                    </td>
-                    <td className="px-3 py-3 text-[color:var(--muted)]">
-                      {l.yearLevel || "—"}
-                    </td>
-                    <td className="px-3 py-3 text-[color:var(--muted)]">
-                      {l.mode ? (l.mode === "in-home" ? "In-home" : "Online") : "—"}
-                    </td>
-                    <td className="px-3 py-3 text-[color:var(--muted)]">
-                      {l.suburb || "—"}
-                    </td>
-                    <td className="px-3 py-3 text-[color:var(--muted)]">
-                      {l.subjects?.length ? l.subjects.join(", ") : "—"}
-                    </td>
-                    <td className="px-3 py-3 text-[color:var(--muted)]">
-                      {l.claimedTutorId ? (l.claimedTutorName || "Yes") : "—"}
-                    </td>
-                    <td className="px-3 py-3">
-                      <Link
-                        href={`/hub/tutor/leads/${l.id}`}
-                        className="inline-flex items-center justify-center rounded-xl border border-[color:var(--ring)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--brand)] transition hover:bg-[#d6e5e3]/40"
-                      >
-                        Open →
-                      </Link>
-                    </td>
-                  </tr>
+      {/* Filter buttons */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <button
+          type="button"
+          onClick={() => setFilter("open")}
+          style={{ background: filter === "open" ? "#456071" : "white", color: filter === "open" ? "white" : "#456071", border: filter === "open" ? "none" : "1.5px solid rgba(69,96,113,0.2)", borderRadius: 20, padding: "6px 16px", fontSize: 12, fontWeight: filter === "open" ? 600 : 500, cursor: "pointer", fontFamily: "inherit" }}
+        >
+          Open leads ({filter === "open" ? count : "…"})
+        </button>
+        <button
+          type="button"
+          onClick={() => setFilter("mine")}
+          style={{ background: filter === "mine" ? "#456071" : "white", color: filter === "mine" ? "white" : "#456071", border: filter === "mine" ? "none" : "1.5px solid rgba(69,96,113,0.2)", borderRadius: 20, padding: "6px 16px", fontSize: 12, fontWeight: filter === "mine" ? 600 : 500, cursor: "pointer", fontFamily: "inherit" }}
+        >
+          My claimed ({filter === "mine" ? count : "…"})
+        </button>
+        <button
+          type="button"
+          onClick={() => auth.currentUser && loadLeads(auth.currentUser.uid, filter)}
+          style={{ background: "white", color: "#456071", border: "1.5px solid rgba(69,96,113,0.2)", borderRadius: 20, padding: "6px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}
+        >
+          Refresh
+        </button>
+        <Link
+          href="/hub/tutor/students"
+          style={{ background: "white", color: "#456071", border: "1.5px solid rgba(69,96,113,0.2)", borderRadius: 20, padding: "6px 16px", fontSize: 12, fontWeight: 500, textDecoration: "none", display: "inline-flex", alignItems: "center" }}
+        >
+          My Students
+        </Link>
+      </div>
+
+      {loading ? (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12 }}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} style={{ background: "white", borderRadius: 18, padding: 16, border: "1px solid rgba(0,0,0,0.06)" }}>
+              <div style={{ height: 14, width: 80, borderRadius: 20, background: "rgba(0,0,0,0.06)", marginBottom: 10 }} />
+              <div style={{ height: 20, width: 140, borderRadius: 20, background: "rgba(0,0,0,0.06)", marginBottom: 8 }} />
+              <div style={{ height: 12, width: "100%", borderRadius: 20, background: "rgba(0,0,0,0.06)" }} />
+            </div>
+          ))}
+        </div>
+      ) : rows.length === 0 ? (
+        <div style={{ border: "1.5px dashed #e4eaef", borderRadius: 16, padding: 40, textAlign: "center", fontSize: 13, color: "#8a96a3" }}>
+          {filter === "open" ? "No open leads right now." : "You haven’t claimed any leads yet."}
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12 }}>
+          {rows.map((lead) => (
+            <div key={lead.id} style={{ background: "white", borderRadius: 18, padding: 16, border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 1px 4px rgba(0,0,0,0.04)", display: "flex", flexDirection: "column" }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, marginBottom: 10 }}>
+                <div>
+                  <div style={{ fontSize: 10, color: "#8a96a3", marginBottom: 3 }}>{formatDate(lead.createdAt)}</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "#1d2428" }}>{lead.studentName}</div>
+                  <div style={{ fontSize: 12, color: "#8a96a3", marginTop: 2 }}>{lead.yearLevel || "Year level pending"}</div>
+                </div>
+                <span style={{ fontSize: 10, fontWeight: 600, padding: "3px 10px", borderRadius: 20, background: "#edf2f6", color: "#456071", whiteSpace: "nowrap", flexShrink: 0 }}>
+                  {formatMode(lead.mode)}
+                </span>
+              </div>
+
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 12 }}>
+                {(lead.subjects.length ? lead.subjects : ["Subject to confirm"]).slice(0, 4).map((subject) => (
+                  <span key={subject} style={{ fontSize: 11, padding: "2px 10px", borderRadius: 20, background: "rgba(69,96,113,0.08)", color: "#456071" }}>
+                    {subject}
+                  </span>
                 ))}
-              </tbody>
-            </table>
+              </div>
 
-            <p className="mt-3 text-xs text-[color:var(--muted)]">
-              Results are fetched with Firestore rule-compatible filters.
-            </p>
-          </div>
-        )}
-      </section>
+              <div style={{ fontSize: 11, color: "#8a96a3", marginBottom: 4 }}>
+                <span style={{ fontWeight: 600, color: "#748398" }}>Suburb: </span>{lead.suburb || "Flexible"}
+              </div>
+              <div style={{ fontSize: 11, color: "#8a96a3", marginBottom: 12 }}>
+                <span style={{ fontWeight: 600, color: "#748398" }}>Status: </span>
+                {lead.claimedTutorId ? lead.claimedTutorName || lead.claimedTutorEmail || "Claimed" : "Available"}
+              </div>
+
+              <div style={{ marginTop: "auto" }}>
+                <Link
+                  href={`/hub/tutor/leads/${lead.id}`}
+                  style={{ display: "inline-block", background: "#456071", color: "white", borderRadius: 20, padding: "6px 14px", fontSize: 12, fontWeight: 600, textDecoration: "none" }}
+                >
+                  Open lead
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
+

@@ -60,6 +60,7 @@ export default function HubTopBar({ active }: { active: HubNavTab }) {
               className="object-contain p-1.5"
             />
           </div>
+          
           <div className="flex flex-col leading-tight">
             <span className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
               Studyroom

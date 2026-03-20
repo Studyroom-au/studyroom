@@ -10,6 +10,21 @@ type StoredXero = {
 
 let cached: { tenantId: string; tokenSet: any; updatedAt: number } | null = null;
 
+export function tokenSetToPlain(tokenSet: any): Record<string, unknown> {
+  // xero-node TokenSet may be a class instance — extract only
+  // the primitive fields Firestore can store.
+  return {
+    access_token: tokenSet.access_token ?? null,
+    refresh_token: tokenSet.refresh_token ?? null,
+    id_token: tokenSet.id_token ?? null,
+    token_type: tokenSet.token_type ?? null,
+    scope: tokenSet.scope ?? null,
+    expires_in: tokenSet.expires_in ?? null,
+    expires_at: tokenSet.expires_at ?? null,
+    session_state: tokenSet.session_state ?? null,
+  };
+}
+
 function envTenant() {
   return process.env.XERO_TENANT_ID || "";
 }
@@ -91,21 +106,21 @@ export async function ensureXeroToken() {
       }
       refreshed = await xero.refreshWithRefreshToken(clientId, clientSecret, refreshToken);
     }
-    await xero.setTokenSet(refreshed);
+    await xero.setTokenSet(tokenSetToPlain(refreshed) as any);
 
     const db = getAdminDb();
     if (db) {
       await db.collection("integrations").doc("xero").set(
         {
           tenantId: stored.tenantId,
-          tokenSet: refreshed,
+          tokenSet: tokenSetToPlain(refreshed),
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         },
         { merge: true }
       );
     }
 
-    cached = { tenantId: stored.tenantId, tokenSet: refreshed, updatedAt: Date.now() };
+    cached = { tenantId: stored.tenantId, tokenSet: tokenSetToPlain(refreshed), updatedAt: Date.now() };
     return { xero, tenantId: stored.tenantId };
   }
 

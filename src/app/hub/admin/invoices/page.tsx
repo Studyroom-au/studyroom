@@ -1,7 +1,7 @@
 // src/app/hub/admin/invoices/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import {
   Timestamp,
@@ -145,6 +145,17 @@ function computeSessionAmountCents(
   return Math.round((session.durationMinutes / 60) * rate);
 }
 
+type PendingXeroInvoice = {
+  id: string;
+  status: string;
+  clientId?: string | null;
+  studentId?: string | null;
+  amountCents?: number | null;
+  issuedAt?: Timestamp | null;
+  parentName?: string;
+  studentName?: string;
+};
+
 export default function AdminInvoicesPage() {
   const [loading, setLoading] = useState(true);
   const [sessions, setSessions] = useState<SessionRow[]>([]);
@@ -152,6 +163,11 @@ export default function AdminInvoicesPage() {
     {}
   );
   const [clientsById, setClientsById] = useState<Record<string, ClientRow>>({});
+
+  const [pendingXero, setPendingXero] = useState<PendingXeroInvoice[]>([]);
+  const [xeroLoading, setXeroLoading] = useState(true);
+  const [pushingId, setPushingId] = useState<string | null>(null);
+  const [xeroMsgMap, setXeroMsgMap] = useState<Record<string, string>>({});
 
   // Load upcoming UNBILLED sessions (next 30 days)
   useEffect(() => {
@@ -250,6 +266,77 @@ export default function AdminInvoicesPage() {
 
   const count = useMemo(() => sessions.length, [sessions]);
 
+  // Load invoices pending Xero push
+  useEffect(() => {
+    const off = onAuthStateChanged(auth, async (u) => {
+      if (!u) return;
+      setXeroLoading(true);
+      try {
+        const qy = query(
+          collection(db, "invoices"),
+          where("status", "in", ["pending_xero", "xero_failed"]),
+          orderBy("issuedAt", "desc")
+        );
+        const snap = await getDocs(qy);
+        const rows: PendingXeroInvoice[] = await Promise.all(
+          snap.docs.map(async (d) => {
+            const data = d.data();
+            let parentName = "—";
+            let studentName = "—";
+            if (data.clientId) {
+              const cs = await getDoc(doc(db, "clients", data.clientId));
+              if (cs.exists()) parentName = (cs.data() as ClientDoc).parentName || "—";
+            }
+            if (data.studentId) {
+              const ss = await getDoc(doc(db, "students", data.studentId));
+              if (ss.exists()) studentName = (ss.data() as StudentDoc).studentName || "—";
+            }
+            return {
+              id: d.id,
+              status: String(data.status ?? ""),
+              clientId: data.clientId ?? null,
+              studentId: data.studentId ?? null,
+              amountCents: data.amountCents ?? null,
+              issuedAt: data.issuedAt ?? null,
+              parentName,
+              studentName,
+            };
+          })
+        );
+        setPendingXero(rows);
+      } finally {
+        setXeroLoading(false);
+      }
+    });
+    return () => off();
+  }, []);
+
+  const pushToXero = useCallback(async (invoiceId: string) => {
+    const user = auth.currentUser;
+    if (!user) return;
+    setPushingId(invoiceId);
+    setXeroMsgMap((prev) => ({ ...prev, [invoiceId]: "" }));
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch("/api/billing/push-invoice-to-xero", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ invoiceId }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setXeroMsgMap((prev) => ({ ...prev, [invoiceId]: json.error || "Failed" }));
+        return;
+      }
+      setXeroMsgMap((prev) => ({ ...prev, [invoiceId]: "Pushed ✓" }));
+      setPendingXero((prev) => prev.filter((r) => r.id !== invoiceId));
+    } catch (e) {
+      setXeroMsgMap((prev) => ({ ...prev, [invoiceId]: e instanceof Error ? e.message : "Error" }));
+    } finally {
+      setPushingId(null);
+    }
+  }, []);
+
   async function createDraftInvoiceForSession(s: SessionRow) {
     const client = clientsById[s.clientId];
     const student = studentsById[s.studentId];
@@ -305,6 +392,58 @@ export default function AdminInvoicesPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
+
+      {/* Pending Xero section */}
+      {(xeroLoading || pendingXero.length > 0) && (
+        <section className="rounded-3xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+          <h2 className="mb-3 text-sm font-semibold text-amber-800">
+            Pending Xero Push ({xeroLoading ? "…" : pendingXero.length})
+          </h2>
+          {xeroLoading ? (
+            <p className="text-xs text-amber-700">Loading…</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full border-separate border-spacing-0 text-sm">
+                <thead>
+                  <tr className="text-left text-xs font-semibold text-amber-700">
+                    <th className="px-3 py-2">Student</th>
+                    <th className="px-3 py-2">Parent</th>
+                    <th className="px-3 py-2">Amount</th>
+                    <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingXero.map((inv) => (
+                    <tr key={inv.id} className="border-t border-amber-200">
+                      <td className="px-3 py-2 font-semibold text-[color:var(--ink)]">{inv.studentName}</td>
+                      <td className="px-3 py-2 text-[color:var(--muted)]">{inv.parentName}</td>
+                      <td className="px-3 py-2 text-[color:var(--muted)]">
+                        {inv.amountCents != null ? money(inv.amountCents) : "—"}
+                      </td>
+                      <td className="px-3 py-2 text-[color:var(--muted)]">{inv.status}</td>
+                      <td className="px-3 py-2">
+                        <button
+                          type="button"
+                          disabled={pushingId === inv.id}
+                          onClick={() => pushToXero(inv.id)}
+                          className="rounded-lg bg-[#456071] px-3 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                        >
+                          {pushingId === inv.id ? "Pushing…" : "Push to Xero"}
+                        </button>
+                        {xeroMsgMap[inv.id] && (
+                          <span className="ml-2 text-xs text-amber-700">{xeroMsgMap[inv.id]}</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
       <header className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">

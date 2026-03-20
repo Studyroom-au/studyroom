@@ -91,6 +91,7 @@ type ClientDoc = {
 
 type InvoiceDoc = {
   status?: InvoiceStatus | null;
+  xeroInvoiceId?: string | null;
 };
 
 type AddModality = "IN_HOME" | "ONLINE";
@@ -150,6 +151,35 @@ export default function TutorSessionsPage() {
     postcode: "",
   });
   const [savingAddress, setSavingAddress] = useState(false);
+  const [xeroPushing, setXeroPushing] = useState(false);
+  const [xeroMsg, setXeroMsg] = useState<string | null>(null);
+  const [logExpanded, setLogExpanded] = useState(false);
+  const [workflowOpen, setWorkflowOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [mobileViewDate, setMobileViewDate] = useState(new Date());
+
+  const pushInvoiceToXero = useCallback(async (invoiceId: string) => {
+    const user = auth.currentUser;
+    if (!user) return;
+    setXeroPushing(true);
+    setXeroMsg(null);
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch("/api/billing/push-invoice-to-xero", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ invoiceId }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setXeroMsg(json.error || "Failed"); return; }
+      setXeroMsg("Pushed to Xero");
+      setInvoices((prev) => ({ ...prev, [invoiceId]: { ...prev[invoiceId], status: "sent" } }));
+    } catch (e) {
+      setXeroMsg(getErrorMessage(e));
+    } finally {
+      setXeroPushing(false);
+    }
+  }, []);
 
   const openSession = useMemo(
     () => sessions.find((s) => s.id === openId) ?? null,
@@ -171,6 +201,7 @@ export default function TutorSessionsPage() {
     const planId = openSession?.data.planId ?? openStudent?.activePlanId ?? "";
     return planId ? plans[planId] ?? null : null;
   }, [openSession, openStudent, plans]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const openEntitlement = useMemo(() => {
     const planId = openSession?.data.planId ?? openStudent?.activePlanId ?? "";
     return planId ? entitlements[planId] ?? null : null;
@@ -304,6 +335,13 @@ export default function TutorSessionsPage() {
     return () => off();
   }, [refresh]);
 
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
   const events = useMemo(() => {
     return sessions.map((s) => {
       const start = s.data.startAt.toDate();
@@ -326,10 +364,17 @@ export default function TutorSessionsPage() {
           billingStatus: s.data.billingStatus,
           billingOutcome: s.data.billingOutcome ?? null,
           status: normalizeSessionStatus(s.data.status),
+          legacyStatus: s.data.status,
+          studentName: students[s.data.studentId]?.studentName ?? "",
+          yearLevel: students[s.data.studentId]?.yearLevel ?? "",
+          planType: (s.data.planId ? plans[s.data.planId]?.type : null)
+            ?? (students[s.data.studentId]?.activePlanId ? plans[students[s.data.studentId].activePlanId!]?.type : null)
+            ?? "casual",
+          modality: normalizeMode(s.data.mode ?? s.data.modality ?? "in_home"),
         },
       };
     });
-  }, [sessions, studentLabel]);
+  }, [sessions, studentLabel, students, plans]);
 
   async function updateSessionStatus(
     sessionId: string,
@@ -505,6 +550,24 @@ export default function TutorSessionsPage() {
     await refresh(user.uid, user.email ?? null);
   }
 
+  function groupByDate(sessionsToGroup: Array<{ id: string; data: SessionDoc }>) {
+    const groups: Record<string, Array<{ id: string; data: SessionDoc }>> = {};
+    sessionsToGroup
+      .filter(s => s.data.startAt)
+      .sort((a, b) => a.data.startAt.toDate().getTime() - b.data.startAt.toDate().getTime())
+      .forEach(s => {
+        const d = s.data.startAt.toDate();
+        const key = d.toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long" });
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(s);
+      });
+    return groups;
+  }
+
+  function handleSessionClick(id: string) {
+    setOpenId(id);
+  }
+
   // ids for accessible labels
   const idStudent = "add-session-student";
   const idWhen = "add-session-when";
@@ -513,73 +576,531 @@ export default function TutorSessionsPage() {
   const idNotes = "add-session-notes";
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4">
-      <header className="space-y-2">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">Tutor Portal</p>
-            <h1 className="text-3xl font-semibold text-[color:var(--ink)]">Sessions</h1>
-            <p className="text-sm text-[color:var(--muted)]">Click a session for details. Drag to reschedule.</p>
-          </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
 
+      {/* Page header */}
+      <div style={{ marginBottom: 4 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#748398", marginBottom: 4 }}>
+          Sessions
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <div style={{ fontSize: 20, fontWeight: 700, color: "#1d2428", letterSpacing: "-0.02em" }}>Sessions Calendar</div>
           <button
             type="button"
             onClick={() => setAddOpen(true)}
-            className="brand-cta rounded-xl px-4 py-2 text-sm font-semibold shadow-sm"
+            style={{ background: "#456071", color: "white", border: "none", borderRadius: 20, padding: "7px 18px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
           >
             Add session
           </button>
         </div>
-      </header>
+        <div style={{ fontSize: 12, color: "#8a96a3", marginTop: 3 }}>Click a session for details. Drag to reschedule.</div>
+      </div>
 
-      <section className="rounded-3xl border border-[color:var(--ring)] bg-[color:var(--card)] p-3 shadow-sm">
-        {loading ? (
-          <div className="p-6 text-sm text-[color:var(--muted)]">Loading…</div>
-        ) : (
-          <FullCalendar
-            plugins={[timeGridPlugin, dayGridPlugin, interactionPlugin]}
-            initialView="timeGridWeek"
-            headerToolbar={{
-              left: "prev,next today",
-              center: "title",
-              right: "timeGridWeek,dayGridMonth",
-            }}
-            height="auto"
-            nowIndicator
-            firstDay={1}
-            slotMinTime="06:00:00"
-            slotMaxTime="21:00:00"
-            slotDuration="00:30:00"
-            editable
-            eventStartEditable
-            eventDurationEditable={false}
-            eventResizableFromStart={false}
-            events={events}
-            eventClick={(arg: EventClickArg) => setOpenId(arg.event.id)}
-            eventDrop={(arg: EventDropArg) => persistReschedule(arg.event.id, arg.event.start!, arg.event.end!)}
-            eventResize={(arg: EventResizeDoneArg) => persistReschedule(arg.event.id, arg.event.start!, arg.event.end!)}
-            eventContent={(arg: EventContentArg) => {
-              const start = arg.event.start ?? new Date();
-              const end =
-                arg.event.end ?? new Date((arg.event.start?.getTime() || Date.now()) + 60 * 60000);
-              const status = normalizeSessionStatus(arg.event.extendedProps?.status);
-              const topLabel = formatSessionStatusLabel(status);
-              const outcome = arg.event.extendedProps?.billingOutcome as BillingOutcome | null;
-
-              return (
-                <div className="sr-event-inner">
-                  <div className="sr-row">
-                    <div className="sr-title">{topLabel}</div>
-                    {outcome === "invoice" && <span className="sr-pill">Invoice</span>}
+      <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 16, alignItems: "flex-start" }}>
+        {isMobile ? (
+          <div style={{ flex: 1 }}>
+            {loading ? (
+              <div style={{ padding: 24, fontSize: 13, color: "#8a96a3" }}>Loading…</div>
+            ) : (
+              <>
+                {/* Month navigator */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#1d2428" }}>Sessions</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => setMobileViewDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
+                      style={{ background: "#f4f7f9", border: "none", borderRadius: 20, padding: "5px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", color: "#456071" }}
+                    >←</button>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "#748398" }}>
+                      {mobileViewDate.toLocaleDateString("en-AU", { month: "long", year: "numeric" })}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setMobileViewDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))}
+                      style={{ background: "#f4f7f9", border: "none", borderRadius: 20, padding: "5px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", color: "#456071" }}
+                    >→</button>
                   </div>
-                  <div className="sr-sub">{arg.event.title}</div>
-                  <div className="sr-time">{niceRange(start, end)}</div>
                 </div>
-              );
-            }}
-          />
+
+                {/* Session list */}
+                {(() => {
+                  const monthSessions = sessions.filter(s => {
+                    const d = s.data.startAt?.toDate?.();
+                    if (!d) return false;
+                    return d.getMonth() === mobileViewDate.getMonth() && d.getFullYear() === mobileViewDate.getFullYear();
+                  });
+                  const groups = groupByDate(monthSessions);
+                  const entries = Object.entries(groups);
+                  if (entries.length === 0) {
+                    return (
+                      <div style={{ background: "#fff", borderRadius: 14, padding: "28px 16px", textAlign: "center", border: "1.5px dashed #e4eaef", fontSize: 13, color: "#8a96a3" }}>
+                        No sessions this month.
+                      </div>
+                    );
+                  }
+                  return entries.map(([dateLabel, daySessions]) => (
+                    <div key={dateLabel} style={{ marginBottom: 16 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#748398", marginBottom: 7, paddingLeft: 4 }}>
+                        {dateLabel}
+                      </div>
+                      {daySessions.map(s => {
+                        const startAt = s.data.startAt.toDate();
+                        const rawStatus = normalizeSessionStatus(s.data.status);
+                        const isSessionCompleted = rawStatus === "completed";
+                        const isSessionCancelled = rawStatus.includes("cancel") || rawStatus === "no_show";
+                        const statusBg = isSessionCompleted ? "#d4edcc" : isSessionCancelled ? "#fce8ee" : "#edf2f6";
+                        const statusFg = isSessionCompleted ? "#2d5a24" : isSessionCancelled ? "#c0445e" : "#456071";
+                        const accentColor = isSessionCompleted ? "#82977e" : isSessionCancelled ? "#e39bb6" : "#456071";
+                        const durMins = s.data.durationMinutes ?? s.data.durationMins ?? 0;
+                        return (
+                          <div
+                            key={s.id}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => handleSessionClick(s.id)}
+                            onKeyDown={e => e.key === "Enter" && handleSessionClick(s.id)}
+                            style={{ background: "#fff", borderRadius: 14, padding: "12px 14px", marginBottom: 8, border: "1px solid rgba(0,0,0,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, cursor: "pointer", borderLeft: `3px solid ${accentColor}` }}
+                          >
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: "#1d2428", marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {students[s.data.studentId]?.studentName ?? "Session"}
+                              </div>
+                              <div style={{ fontSize: 11, color: "#8a96a3" }}>
+                                {startAt.toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit", hour12: true })}
+                                {durMins ? ` · ${durMins} min` : ""}
+                                {s.data.modality ? ` · ${s.data.modality === "ONLINE" ? "Online" : "In-home"}` : ""}
+                              </div>
+                            </div>
+                            <span style={{ fontSize: 10, fontWeight: 600, padding: "3px 9px", borderRadius: 20, whiteSpace: "nowrap", background: statusBg, color: statusFg }}>
+                              {formatSessionStatusLabel(rawStatus)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ));
+                })()}
+
+                <button
+                  type="button"
+                  onClick={() => setAddOpen(true)}
+                  style={{ width: "100%", marginTop: 8, background: "#456071", color: "#fff", border: "none", borderRadius: 12, padding: "12px 0", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+                >
+                  + Add session
+                </button>
+              </>
+            )}
+          </div>
+        ) : (
+          <div style={{ flex: 1, minWidth: 0, background: "white", borderRadius: 20, padding: "16px 20px", border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 1px 6px rgba(0,0,0,0.04)", overflowX: "auto" }}>
+            {loading ? (
+              <div style={{ padding: 24, fontSize: 13, color: "#8a96a3" }}>Loading…</div>
+            ) : (
+              <FullCalendar
+              plugins={[timeGridPlugin, dayGridPlugin, interactionPlugin]}
+              initialView="timeGridWeek"
+              headerToolbar={{
+                left: "prev,today,next",
+                center: "title",
+                right: "timeGridWeek,dayGridMonth",
+              }}
+              buttonText={{
+                today: "Today",
+                week: "Week",
+                month: "Month",
+              }}
+              height="auto"
+              nowIndicator
+              firstDay={1}
+              slotMinTime="06:00:00"
+              slotMaxTime="21:00:00"
+              slotDuration="00:30:00"
+              editable
+              eventStartEditable
+              eventDurationEditable={false}
+              eventResizableFromStart={false}
+              dayMaxEvents={3}
+              events={events}
+              eventClick={(arg: EventClickArg) => handleSessionClick(arg.event.id)}
+              eventDrop={(arg: EventDropArg) => persistReschedule(arg.event.id, arg.event.start!, arg.event.end!)}
+              eventResize={(arg: EventResizeDoneArg) => persistReschedule(arg.event.id, arg.event.start!, arg.event.end!)}
+              eventClassNames={(arg) => {
+                const status = String(
+                  arg.event.extendedProps?.status ?? arg.event.extendedProps?.legacyStatus ?? "scheduled"
+                ).toLowerCase();
+                const classes: string[] = [];
+                if (status === "completed") classes.push("sr-completed");
+                else if (status.includes("cancel") || status === "no_show") classes.push("sr-cancelled");
+                else classes.push("sr-scheduled");
+                return classes;
+              }}
+              eventContent={(arg: EventContentArg) => {
+                const props = arg.event.extendedProps as {
+                  status?: string;
+                  studentName?: string;
+                  yearLevel?: string;
+                  planType?: string;
+                  modality?: string;
+                };
+
+                const rawStatus = String(props.status ?? arg.event.extendedProps?.legacyStatus ?? "scheduled").toLowerCase();
+                const isCompleted = rawStatus === "completed";
+                const isCancelled = rawStatus.includes("cancel") || rawStatus === "no_show";
+
+                const accentColor = isCompleted ? "#82977e" : isCancelled ? "#e39bb6" : "#456071";
+                const bgColor = isCompleted ? "#edf5eb" : isCancelled ? "#fdf2f4" : "#edf2f6";
+                const statusLabel = isCompleted ? "Completed" : isCancelled ? "Cancelled" : "Scheduled";
+                const statusColor = isCompleted ? "#2d5a24" : isCancelled ? "#c0445e" : "#456071";
+
+                const name = props.studentName
+                  ? `${props.studentName}${props.yearLevel ? ` · ${props.yearLevel}` : ""}`
+                  : arg.event.title || "Session";
+
+                const start = arg.event.start;
+                const end = arg.event.end;
+                const timeStr = start && end
+                  ? `${start.toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit", hour12: true })} – ${end.toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit", hour12: true })}`
+                  : "";
+
+                const planType = String(props.planType ?? "").toLowerCase();
+                const planLabel = planType.includes("package") ? "Package" : planType === "casual" ? "Casual" : null;
+                const planBg = planType.includes("package") ? "#edf5eb" : "#e8f0fa";
+                const planColor = planType.includes("package") ? "#2d5a24" : "#3a6090";
+
+                const durationMins = start && end
+                  ? Math.round((end.getTime() - start.getTime()) / 60000)
+                  : 0;
+                const showPill = durationMins >= 45;
+
+                if (arg.view.type === "dayGridMonth" || arg.view.type === "listWeek") {
+                  return (
+                    <div style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      color: statusColor,
+                      padding: "2px 6px",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      maxWidth: "100%",
+                      width: "100%",
+                      lineHeight: 1.3,
+                      display: "block",
+                    }}>
+                      {name}
+                    </div>
+                  );
+                }
+
+                return (
+                  <div style={{
+                    height: "100%",
+                    background: bgColor,
+                    borderLeft: `3px solid ${accentColor}`,
+                    borderRadius: "0 10px 10px 0",
+                    padding: "6px 8px",
+                    overflow: "hidden",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "flex-start",
+                    gap: 2,
+                    opacity: isCancelled ? 0.75 : 1,
+                    cursor: "pointer",
+                  }}>
+                    <div style={{
+                      fontSize: 9,
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      color: statusColor,
+                      lineHeight: 1,
+                    }}>
+                      {statusLabel}
+                    </div>
+                    <div style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: "#1d2428",
+                      lineHeight: 1.3,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}>
+                      {name}
+                    </div>
+                    <div style={{
+                      fontSize: 10,
+                      color: "#8a96a3",
+                      lineHeight: 1,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}>
+                      {timeStr}
+                    </div>
+                    {showPill && planLabel && (
+                      <div style={{
+                        display: "inline-block",
+                        fontSize: 9,
+                        fontWeight: 600,
+                        padding: "2px 7px",
+                        borderRadius: 20,
+                        background: planBg,
+                        color: planColor,
+                        marginTop: 2,
+                        alignSelf: "flex-start",
+                      }}>
+                        {planLabel}
+                      </div>
+                    )}
+                  </div>
+                );
+              }}
+            />
+          )}
+        </div>
         )}
-      </section>
+
+        {/* Inline session detail panel */}
+        {openSession ? (
+          <div style={{ width: isMobile ? "100%" : 380, flexShrink: 0, background: "white", borderRadius: 20, border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 1px 6px rgba(0,0,0,0.04)", overflowY: "auto", maxHeight: "80vh", display: "flex", flexDirection: "column" }}>
+
+            {/* Header */}
+            <div style={{ padding: "16px 18px 14px", borderBottom: "1px solid rgba(0,0,0,0.07)", flexShrink: 0 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "#1d2428", letterSpacing: "-0.01em" }}>
+                    {openStudent?.studentName ?? "Session"}
+                    {openStudent?.yearLevel ? ` · ${openStudent.yearLevel}` : ""}
+                  </div>
+                  <div style={{ fontSize: 12, color: "#8a96a3", marginTop: 2 }}>
+                    {openSession.data.startAt.toDate().toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" })}
+                    {" · "}
+                    {niceRange(openSession.data.startAt.toDate(), openSession.data.endAt.toDate())}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setOpenId(null)}
+                  style={{ background: "rgba(0,0,0,0.05)", border: "none", borderRadius: 8, padding: "4px 10px", fontSize: 11, cursor: "pointer", color: "#677a8a", fontFamily: "inherit", flexShrink: 0 }}
+                >
+                  ✕
+                </button>
+              </div>
+              <div style={{ display: "flex", gap: 5, marginTop: 8, flexWrap: "wrap" }}>
+                <span style={{
+                  fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 20,
+                  background: normalizeSessionStatus(openSession.data.status) === "completed" ? "#d4edcc"
+                    : normalizeSessionStatus(openSession.data.status).includes("cancel") ? "#fce8ee" : "#edf2f6",
+                  color: normalizeSessionStatus(openSession.data.status) === "completed" ? "#2d5a24"
+                    : normalizeSessionStatus(openSession.data.status).includes("cancel") ? "#c0445e" : "#456071",
+                }}>
+                  {formatSessionStatusLabel(normalizeSessionStatus(openSession.data.status))}
+                </span>
+                {openPlan && (
+                  <span style={{ fontSize: 10, fontWeight: 600, padding: "3px 9px", borderRadius: 20, background: "#f4f7f9", color: "#748398" }}>
+                    {formatPlanLabel(normalizePlanType(openPlan.type))}
+                  </span>
+                )}
+                <span style={{ fontSize: 10, fontWeight: 600, padding: "3px 9px", borderRadius: 20, background: "#f4f7f9", color: "#748398" }}>
+                  {formatModeLabel(normalizeMode(openSession.data.mode ?? openSession.data.modality ?? "in_home"))}
+                </span>
+              </div>
+            </div>
+
+            {/* Billing */}
+            <div style={{ padding: "12px 18px", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#748398", marginBottom: 8 }}>Billing</div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#1d2428" }}>
+                    {(() => {
+                      const outcome = openSession.data.billingOutcome;
+                      if (outcome === "no_charge") return "No charge";
+                      if (outcome === "credit") return "Credit issued";
+                      if (outcome === "invoice") return "Invoice";
+                      return "Pending";
+                    })()}
+                  </div>
+                  {openInvoice && (
+                    <div style={{ fontSize: 11, color: "#8a96a3", marginTop: 2 }}>
+                      Status: {openInvoice.status ?? "—"}
+                      {openInvoice.xeroInvoiceId && (
+                        <span style={{ marginLeft: 6, color: "#82977e" }}>· In Xero</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {(openInvoice?.status === "pending_xero" || openInvoice?.status === "xero_failed") && openSession.data.invoiceId && (
+                  <button
+                    type="button"
+                    onClick={() => pushInvoiceToXero(openSession.data.invoiceId!)}
+                    disabled={xeroPushing}
+                    style={{ background: "#2d5a24", color: "#fff", border: "none", borderRadius: 9, padding: "6px 13px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+                  >
+                    {xeroPushing ? "Pushing..." : "Push to Xero"}
+                  </button>
+                )}
+              </div>
+              {xeroMsg && <p style={{ fontSize: 11, color: "#8a96a3", marginTop: 4, margin: 0 }}>{xeroMsg}</p>}
+            </div>
+
+            {/* Parent */}
+            <div style={{ padding: "12px 18px", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#748398", marginBottom: 8 }}>Parent</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#1d2428" }}>{openClient?.parentName || "—"}</div>
+              <div style={{ fontSize: 12, color: "#8a96a3", marginTop: 2 }}>
+                {openClient?.parentEmail || ""}
+                {openClient?.parentPhone ? ` · ${openClient.parentPhone}` : ""}
+              </div>
+            </div>
+
+            {/* Address */}
+            <div style={{ padding: "12px 18px", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#748398", marginBottom: 8 }}>Address</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <input
+                  aria-label="Address line 1"
+                  value={addressDraft.addressLine1}
+                  onChange={e => setAddressDraft(p => ({ ...p, addressLine1: e.target.value }))}
+                  placeholder="Address line 1"
+                  style={{ border: "1.5px solid rgba(0,0,0,0.09)", borderRadius: 9, padding: "7px 11px", fontSize: 12, fontFamily: "inherit", color: "#1d2428", outline: "none" }}
+                />
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                  <input
+                    aria-label="Suburb"
+                    value={addressDraft.suburb}
+                    onChange={e => setAddressDraft(p => ({ ...p, suburb: e.target.value }))}
+                    placeholder="Suburb"
+                    style={{ border: "1.5px solid rgba(0,0,0,0.09)", borderRadius: 9, padding: "7px 11px", fontSize: 12, fontFamily: "inherit", color: "#1d2428", outline: "none" }}
+                  />
+                  <input
+                    aria-label="Postcode"
+                    value={addressDraft.postcode}
+                    onChange={e => setAddressDraft(p => ({ ...p, postcode: e.target.value }))}
+                    placeholder="Postcode"
+                    style={{ border: "1.5px solid rgba(0,0,0,0.09)", borderRadius: 9, padding: "7px 11px", fontSize: 12, fontFamily: "inherit", color: "#1d2428", outline: "none" }}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={saveStudentAddress}
+                  disabled={savingAddress}
+                  style={{ background: savingAddress ? "#b8cad6" : "#456071", color: "#fff", border: "none", borderRadius: 9, padding: "7px 0", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+                >
+                  {savingAddress ? "Saving..." : "Save address"}
+                </button>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div style={{ padding: "12px 18px", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#748398", marginBottom: 8 }}>Actions</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {normalizeSessionStatus(openSession.data.status) !== "completed" && (
+                  <button
+                    type="button"
+                    onClick={() => updateSessionStatus(openSession.id, "complete")}
+                    style={{ background: "#456071", color: "#fff", border: "none", borderRadius: 9, padding: "7px 13px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+                  >
+                    Mark completed
+                  </button>
+                )}
+                <RescheduleSession
+                  sessionId={openSession.id}
+                  currentStart={openSession.data.startAt.toDate()}
+                  currentEnd={openSession.data.endAt.toDate()}
+                  onDone={() => refresh(auth.currentUser?.uid || "", auth.currentUser?.email ?? null)}
+                />
+                <button
+                  type="button"
+                  onClick={() => cancelSession(openSession.id, "PARENT")}
+                  style={{ background: "#fce8ee", color: "#c0445e", border: "none", borderRadius: 9, padding: "7px 13px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+                >
+                  Cancel (parent)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => cancelSession(openSession.id, "STUDYROOM")}
+                  style={{ background: "#f4f7f9", color: "#677a8a", border: "none", borderRadius: 9, padding: "7px 13px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+                >
+                  Cancel (tutor)
+                </button>
+              </div>
+              {/* Recurring — inline */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(0,0,0,0.04)" }}>
+                <span style={{ fontSize: 11, color: "#8a96a3" }}>Repeat:</span>
+                <select
+                  id="recurring-weeks"
+                  aria-label="Number of weeks for recurring sessions"
+                  value={recurringWeeks}
+                  onChange={e => setRecurringWeeks(Number(e.target.value))}
+                  style={{ border: "1.5px solid rgba(0,0,0,0.09)", borderRadius: 8, padding: "4px 8px", fontSize: 11, fontFamily: "inherit", color: "#1d2428", outline: "none" }}
+                >
+                  {[1,2,3,4,6,8,10,12].map(w => (
+                    <option key={w} value={w}>{w} week{w > 1 ? "s" : ""}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={createRecurringFromOpenSession}
+                  disabled={recurringBusy}
+                  style={{ background: "#edf2f6", color: "#456071", border: "none", borderRadius: 8, padding: "5px 11px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+                >
+                  {recurringBusy ? "Creating..." : "Add recurring"}
+                </button>
+              </div>
+            </div>
+
+            {/* How this works — collapsed */}
+            <div style={{ padding: "10px 18px", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+              <button
+                type="button"
+                onClick={() => setWorkflowOpen(v => !v)}
+                style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", padding: 0, fontSize: 11, color: "#8a96a3", fontWeight: 600, display: "flex", alignItems: "center", gap: 5 }}
+              >
+                <span style={{ fontSize: 10 }}>{workflowOpen ? "▲" : "▼"}</span>
+                How this works
+              </button>
+              {workflowOpen && (
+                <div style={{ marginTop: 8, fontSize: 11, color: "#8a96a3", lineHeight: 1.7, background: "#f8f9fa", borderRadius: 9, padding: "10px 12px" }}>
+                  <div>1. Reschedule if the time changes.</div>
+                  <div>2. Mark completed after the lesson finishes.</div>
+                  <div>3. Use parent cancel only when the family cancels. Use Studyroom cancel only when you or admin cancel.</div>
+                  <div>4. Add notes after the session so admin sees the same record.</div>
+                </div>
+              )}
+            </div>
+
+            {/* Session log — collapsed by default */}
+            <div style={{ padding: "12px 18px" }}>
+              <button
+                type="button"
+                onClick={() => setLogExpanded(v => !v)}
+                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", padding: 0 }}
+              >
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#748398" }}>
+                  Session log
+                </div>
+                <span style={{ fontSize: 11, color: "#8a96a3" }}>{logExpanded ? "▲" : "▼"}</span>
+              </button>
+              {logExpanded && (
+                <div style={{ marginTop: 10 }}>
+                  <SessionLogEditor sessionId={openSession.id} />
+                </div>
+              )}
+            </div>
+
+          </div>
+        ) : !isMobile ? (
+          <div style={{ width: 380, flexShrink: 0, background: "white", borderRadius: 20, border: "1.5px dashed #e4eaef", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 24px", minHeight: 200 }}>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>📅</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#1d2428", marginBottom: 4 }}>No session selected</div>
+            <div style={{ fontSize: 11, color: "#8a96a3" }}>Click a session on the calendar to view details.</div>
+          </div>
+        ) : null}
+      </div>
 
       {/* Add Session Drawer */}
       <Drawer open={addOpen} onClose={() => setAddOpen(false)} title="Add Session">
@@ -681,264 +1202,295 @@ export default function TutorSessionsPage() {
         </div>
       </Drawer>
 
-      {/* Existing Session Details Drawer */}
-      <Drawer open={!!openSession} onClose={() => setOpenId(null)} title="Session Details">
-        {openSession && (
-          <>
-            <div className="space-y-1">
-              <h3 className="text-lg font-semibold text-[color:var(--ink)]">
-                {openStudent?.studentName ?? "Student"}
-                {openStudent?.yearLevel ? ` (${openStudent.yearLevel})` : ""}
-              </h3>
-              <p className="text-sm text-[color:var(--muted)]">
-                {niceRange(openSession.data.startAt.toDate(), openSession.data.endAt.toDate())}
-              </p>
-              <p className="text-xs text-[color:var(--muted)]">
-                Status: <b>{formatSessionStatusLabel(normalizeSessionStatus(openSession.data.status))}</b> · Outcome:{" "}
-                <b>{openSession.data.billingOutcome ?? "no_charge"}</b> ·{" "}
-                {formatModeLabel(normalizeMode(openSession.data.mode ?? openSession.data.modality))}
-              </p>
-              <p className="text-xs text-[color:var(--muted)]">
-                Plan: <b>{formatPlanLabel(normalizePlanType(openStudent?.package))}</b>
-                {openSession.data.noticeHours !== null && openSession.data.noticeHours !== undefined
-                  ? ` · Notice: ${openSession.data.noticeHours.toFixed(1)}h`
-                  : ""}
-                {openSession.data.graceApplied ? " · Grace applied" : ""}
-              </p>
-            </div>
-
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
-              <div className="rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] p-3 text-sm">
-                <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">Plan</div>
-                <div className="mt-1 font-semibold text-[color:var(--ink)]">
-                  {formatPlanLabel(normalizePlanType(openPlan?.type ?? openStudent?.package))}
-                </div>
-                <div className="mt-1 text-xs text-[color:var(--muted)]">
-                  {openEntitlement
-                    ? `${openEntitlement.remainingSessions} base remaining · ${openEntitlement.bonusRemaining} bonus`
-                    : "No package balance shown"}
-                </div>
-              </div>
-              <div className="rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] p-3 text-sm">
-                <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">Billing</div>
-                <div className="mt-1 font-semibold text-[color:var(--ink)]">
-                  {openSession.data.billingOutcome ?? "no_charge"}
-                </div>
-                <div className="mt-1 text-xs text-[color:var(--muted)]">
-                  {openInvoice?.status ? `Invoice status: ${openInvoice.status}` : "No invoice linked"}
-                </div>
-              </div>
-              <div className="rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] p-3 text-sm">
-                <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">Tutor action</div>
-                <div className="mt-1 font-semibold text-[color:var(--ink)]">
-                  {normalizeSessionStatus(openSession.data.status) === "scheduled"
-                    ? "Choose what happened"
-                    : "Recorded"}
-                </div>
-                <div className="mt-1 text-xs text-[color:var(--muted)]">
-                  Complete if delivered. Parent cancel if family cancelled. Studyroom cancel if you cancelled.
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 rounded-2xl border border-[color:var(--ring)] bg-white p-3">
-              <div className="text-xs font-semibold text-[color:var(--muted)]">Parent</div>
-              <div className="mt-1 text-sm text-[color:var(--ink)]">{openClient?.parentName || "—"}</div>
-              <div className="text-xs text-[color:var(--muted)]">
-                {openClient?.parentEmail || "—"} {openClient?.parentPhone ? `· ${openClient.parentPhone}` : ""}
-              </div>
-            </div>
-
-            <div className="mt-3 rounded-2xl border border-[color:var(--ring)] bg-white p-3">
-              <div className="text-xs font-semibold text-[color:var(--muted)]">Student Address</div>
-              <div className="mt-2 grid gap-2">
-                <input
-                  aria-label="Address line 1"
-                  value={addressDraft.addressLine1}
-                  onChange={(e) => setAddressDraft((p) => ({ ...p, addressLine1: e.target.value }))}
-                  placeholder="Address line 1"
-                  className="rounded-xl border border-[color:var(--ring)] px-3 py-2 text-sm"
-                />
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    aria-label="Suburb"
-                    value={addressDraft.suburb}
-                    onChange={(e) => setAddressDraft((p) => ({ ...p, suburb: e.target.value }))}
-                    placeholder="Suburb"
-                    className="rounded-xl border border-[color:var(--ring)] px-3 py-2 text-sm"
-                  />
-                  <input
-                    aria-label="Postcode"
-                    value={addressDraft.postcode}
-                    onChange={(e) => setAddressDraft((p) => ({ ...p, postcode: e.target.value }))}
-                    placeholder="Postcode"
-                    className="rounded-xl border border-[color:var(--ring)] px-3 py-2 text-sm"
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={saveStudentAddress}
-                  disabled={savingAddress}
-                  className="rounded-xl border border-[color:var(--ring)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--brand)] hover:bg-[#d6e5e3]/40 disabled:opacity-60"
-                >
-                  {savingAddress ? "Saving..." : "Save address"}
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-3 rounded-2xl border border-[color:var(--ring)] bg-white p-3">
-              <div className="text-xs font-semibold text-[color:var(--muted)]">Recurring Sessions</div>
-              <div className="mt-2 flex items-center gap-2">
-                <label className="sr-only" htmlFor="recurring-weeks">
-                  Number of weeks for recurring sessions
-                </label>
-                <select
-                  id="recurring-weeks"
-                  value={recurringWeeks}
-                  onChange={(e) => setRecurringWeeks(Number(e.target.value))}
-                  className="rounded-xl border border-[color:var(--ring)] px-3 py-2 text-sm"
-                >
-                  {[1, 2, 3, 4, 6, 8, 10, 12].map((w) => (
-                    <option key={w} value={w}>
-                      {w} week{w > 1 ? "s" : ""}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={createRecurringFromOpenSession}
-                  disabled={recurringBusy}
-                  className="brand-cta rounded-xl px-4 py-2 text-sm font-semibold disabled:opacity-60"
-                >
-                  {recurringBusy ? "Creating..." : "Add recurring"}
-                </button>
-              </div>
-              <p className="mt-2 text-xs text-[color:var(--muted)]">Creates weekly sessions from this same time slot.</p>
-            </div>
-
-            <div className="mt-4 space-y-2">
-              <div className="rounded-2xl border border-[color:var(--ring)] bg-[color:var(--card)] p-3">
-                <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">Tutor workflow</div>
-                <div className="mt-2 text-sm text-[color:var(--ink)]">
-                  1. Reschedule if the time changes.
-                </div>
-                <div className="text-sm text-[color:var(--ink)]">
-                  2. Mark completed after the lesson finishes.
-                </div>
-                <div className="text-sm text-[color:var(--ink)]">
-                  3. Use parent cancel only when the family cancels. Use Studyroom cancel only when you or admin cancel.
-                </div>
-                <div className="text-sm text-[color:var(--ink)]">
-                  4. Add notes after the session so admin sees the same record.
-                </div>
-              </div>
-
-              <RescheduleSession
-                sessionId={openSession.id}
-                currentStart={openSession.data.startAt.toDate()}
-                currentEnd={openSession.data.endAt.toDate()}
-                onDone={() => refresh(auth.currentUser?.uid || "", auth.currentUser?.email ?? null)}
-              />
-
-              <div className="flex flex-wrap gap-2">
-                {normalizeSessionStatus(openSession.data.status) !== "completed" && (
-                  <button
-                    type="button"
-                    className="brand-cta rounded-xl px-4 py-2 text-sm font-semibold"
-                    onClick={() => updateSessionStatus(openSession.id, "complete")}
-                  >
-                    Mark completed
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  className="rounded-xl border border-[color:var(--ring)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--brand)] hover:bg-[#d6e5e3]/40"
-                  onClick={() => cancelSession(openSession.id, "PARENT")}
-                >
-                  Cancel (parent)
-                </button>
-
-                <button
-                  type="button"
-                  className="rounded-xl border border-[color:var(--ring)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--brand)] hover:bg-[#d6e5e3]/40"
-                  onClick={() => cancelSession(openSession.id, "STUDYROOM")}
-                >
-                  Cancel (tutor)
-                </button>
-              </div>
-
-              <div className="pt-3">
-                <SessionLogEditor sessionId={openSession.id} />
-              </div>
-            </div>
-          </>
-        )}
-      </Drawer>
 
       <style jsx global>{`
-        .sr-event-inner {
-          padding: 4px 6px;
-          line-height: 1.1;
+        /* ── Reset ── */
+        .fc { font-family: inherit !important; }
+
+        /* ── Page background ── */
+        .fc-theme-standard td,
+        .fc-theme-standard th { border-color: rgba(0,0,0,0.06) !important; }
+
+        /* ── Column headers (day names + dates) ── */
+        .fc .fc-col-header-cell {
+          background: #fff !important;
+          padding: 8px 0 10px !important;
+          border-bottom: 1px solid rgba(0,0,0,0.07) !important;
         }
-        .sr-title {
-          font-size: 12px;
+        .fc .fc-col-header-cell-cushion {
+          display: flex !important;
+          flex-direction: column !important;
+          align-items: center !important;
+          gap: 3px !important;
+          padding: 0 !important;
+          text-decoration: none !important;
+          color: inherit !important;
+        }
+        .fc .fc-col-header-cell-cushion::before {
+          content: attr(data-day-abbr);
+          font-size: 10px;
           font-weight: 700;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          color: #748398;
         }
-        .sr-row {
+        .fc .fc-col-header-cell a {
+          font-size: 18px;
+          font-weight: 700;
+          color: #1d2428;
+          text-decoration: none;
+          width: 32px;
+          height: 32px;
           display: flex;
           align-items: center;
-          gap: 6px;
-          justify-content: space-between;
+          justify-content: center;
+          border-radius: 50%;
         }
-        .sr-sub {
-          margin-top: 2px;
-          font-size: 11px;
-          font-weight: 600;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .sr-time {
-          margin-top: 2px;
-          font-size: 11px;
-          opacity: 0.8;
-        }
-        .sr-pill {
-          font-size: 10px;
-          font-weight: 800;
-          padding: 1px 6px;
-          border-radius: 999px;
-          border: 1px solid color-mix(in oklab, var(--ring), transparent 15%);
-          background: white;
+        .fc .fc-day-today .fc-col-header-cell-cushion,
+        .fc .fc-col-header-cell.fc-day-today a {
+          color: #456071 !important;
         }
 
-        .sr-event {
-          border-radius: 10px !important;
-          border: 1px solid color-mix(in oklab, var(--ring), transparent 15%) !important;
-          background: color-mix(in oklab, var(--card), white 18%) !important;
+        /* ── Today column ── */
+        .fc .fc-day-today {
+          background: #fff9fb !important;
         }
-        .sr-event--cancel {
-          opacity: 0.6;
-          text-decoration: line-through;
-        }
-        .sr-event--invoice {
-          box-shadow: 0 0 0 1px color-mix(in oklab, var(--brand), transparent 55%) inset;
+        .fc .fc-timegrid-col.fc-day-today {
+          background: #fff9fb !important;
         }
 
-        .fc .fc-timegrid-event .fc-event-main,
-        .fc .fc-daygrid-event .fc-event-main {
-          color: var(--ink) !important;
+        /* ── Time labels ── */
+        .fc .fc-timegrid-slot-label {
+          font-size: 10px !important;
+          font-weight: 500 !important;
+          color: #b0bec5 !important;
+          vertical-align: top !important;
+          padding-top: 4px !important;
         }
-        .fc .fc-event-title,
-        .fc .fc-event-time {
-          color: var(--ink) !important;
+        .fc .fc-timegrid-slot-label-cushion {
+          padding: 0 8px 0 0 !important;
         }
-        .fc .fc-event .sr-event-inner {
+
+        /* ── Slot lines ── */
+        .fc .fc-timegrid-slot {
+          height: 56px !important;
+        }
+        .fc .fc-timegrid-slot-minor {
+          border-top-style: dashed !important;
+          border-top-color: rgba(0,0,0,0.04) !important;
+        }
+
+        /* ── Now indicator ── */
+        .fc .fc-timegrid-now-indicator-line {
+          border-color: #e39bb6 !important;
+          border-width: 1.5px !important;
+        }
+        .fc .fc-timegrid-now-indicator-arrow {
+          border-top-color: #e39bb6 !important;
+          border-bottom-color: #e39bb6 !important;
+          border-left-color: #e39bb6 !important;
+        }
+
+        /* ── Toolbar buttons ── */
+        .fc .fc-button {
+          font-family: inherit !important;
+          font-size: 11px !important;
+          font-weight: 600 !important;
+          border-radius: 8px !important;
+          padding: 5px 12px !important;
+          box-shadow: none !important;
+          outline: none !important;
+          transition: all 0.15s !important;
+        }
+        .fc .fc-button-primary {
+          background: #f4f7f9 !important;
+          border-color: transparent !important;
+          color: #456071 !important;
+        }
+        .fc .fc-button-primary:hover {
+          background: #edf2f6 !important;
+          border-color: transparent !important;
+          color: #2a2f33 !important;
+        }
+        .fc .fc-button-primary:not(:disabled).fc-button-active,
+        .fc .fc-button-primary:not(:disabled):active {
+          background: #456071 !important;
+          border-color: #456071 !important;
+          color: #fff !important;
+        }
+        .fc .fc-button-primary:disabled {
+          background: #f4f7f9 !important;
+          border-color: transparent !important;
+          color: #b0bec5 !important;
+          opacity: 1 !important;
+        }
+
+        /* ── Toolbar title ── */
+        .fc .fc-toolbar-title {
+          font-size: 15px !important;
+          font-weight: 700 !important;
+          color: #1d2428 !important;
+          letter-spacing: -0.01em !important;
+        }
+
+        /* ── Event base reset — our eventContent handles everything ── */
+        .fc .fc-timegrid-event,
+        .fc .fc-timegrid-event-harness {
+          box-shadow: none !important;
+        }
+        .fc .fc-event {
+          border: none !important;
+          background: transparent !important;
+          border-radius: 0 !important;
+          padding: 0 !important;
+        }
+        .fc .fc-event:focus::after {
+          display: none !important;
+        }
+
+        /* ── Month view event pills ── */
+        .fc .fc-daygrid-event-harness {
+          max-width: 100% !important;
+          overflow: hidden !important;
+          min-width: 0 !important;
+        }
+        .fc .fc-daygrid-event {
+          border-radius: 6px !important;
+          padding: 0 !important;
+          font-size: 10px !important;
+          font-weight: 600 !important;
+          border: none !important;
+          overflow: hidden !important;
+          max-width: 100% !important;
+          min-width: 0 !important;
           display: block !important;
+          white-space: nowrap !important;
+        }
+        .fc .fc-daygrid-event .fc-event-main {
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+          white-space: nowrap !important;
+          max-width: 100% !important;
+          min-width: 0 !important;
+          display: block !important;
+          padding: 0 !important;
+        }
+        .fc .fc-daygrid-dot-event {
+          overflow: hidden !important;
+          max-width: 100% !important;
+          white-space: nowrap !important;
+        }
+        .fc .fc-daygrid-day-events {
+          min-width: 0 !important;
+          overflow: hidden !important;
+        }
+        .fc .fc-daygrid-event.sr-completed {
+          background: #edf5eb !important;
+          color: #2d5a24 !important;
+        }
+        .fc .fc-daygrid-event.sr-scheduled {
+          background: #edf2f6 !important;
+          color: #456071 !important;
+        }
+        .fc .fc-daygrid-event.sr-cancelled {
+          background: #fdf2f4 !important;
+          color: #c0445e !important;
+          opacity: 0.75 !important;
+        }
+
+        /* ── Month view day numbers — top right ── */
+        .fc .fc-daygrid-day-top {
+          flex-direction: row-reverse !important;
+        }
+        .fc .fc-daygrid-day-number {
+          float: right !important;
+          padding: 4px 8px !important;
+          font-size: 12px !important;
+          font-weight: 600 !important;
+          color: #748398 !important;
+          text-decoration: none !important;
+        }
+
+        /* ── Month view today cell ── */
+        .fc .fc-daygrid-day.fc-day-today {
+          background: #fff9fb !important;
+        }
+        .fc .fc-day-today .fc-daygrid-day-number {
+          background: #456071 !important;
+          color: #fff !important;
+          border-radius: 50% !important;
+          width: 26px !important;
+          height: 26px !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          padding: 0 !important;
+          margin: 4px 4px 0 0 !important;
+        }
+
+        /* ── Scrollbar ── */
+        .fc-scroller::-webkit-scrollbar { width: 4px; }
+        .fc-scroller::-webkit-scrollbar-track { background: transparent; }
+        .fc-scroller::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 4px; }
+
+        /* ── Fix header/body column alignment v2 ── */
+
+        /* Kill the scrollbar-compensation gap FullCalendar adds to header */
+        .fc .fc-scrollgrid-section-header .fc-scroller {
+          overflow: hidden !important;
+        }
+        .fc .fc-scrollgrid-section-body .fc-scroller {
+          overflow-y: auto !important;
+        }
+
+        /* Force both header and body tables to fill their container identically */
+        .fc .fc-scrollgrid-sync-table {
+          width: 100% !important;
+        }
+        .fc .fc-col-header {
+          width: 100% !important;
+        }
+
+        /* Lock the time axis gutter to a fixed width in both header and body */
+        .fc .fc-timegrid-axis {
+          width: 50px !important;
+          min-width: 50px !important;
+          max-width: 50px !important;
+        }
+
+        /* Centre day header text within each column cell */
+        .fc .fc-col-header-cell {
+          text-align: center !important;
+          vertical-align: middle !important;
+        }
+
+        /* Month view: ensure the daygrid body table matches header width */
+        .fc .fc-daygrid-body {
+          width: 100% !important;
+        }
+        .fc .fc-daygrid-body table {
+          width: 100% !important;
+        }
+
+        /* Month view: centre day names in header */
+        .fc .fc-scrollgrid-sync-inner {
+          display: flex !important;
+          justify-content: center !important;
+        }
+
+        /* Remove any stray padding on scrollgrid cells */
+        .fc .fc-scrollgrid-section > td,
+        .fc .fc-scrollgrid-section > th {
+          padding: 0 !important;
+        }
+
+        /* Hide the fake scrollbar spacer FullCalendar inserts in the header */
+        .fc .fc-scrollgrid-section-header td:last-child,
+        .fc .fc-scrollgrid-section-header th:last-child {
+          border-left: none !important;
+        }
+        .fc .fc-scrollgrid-section-header .fc-scroller-liquid-absolute {
+          overflow: hidden !important;
         }
       `}</style>
     </div>
