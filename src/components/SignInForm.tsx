@@ -99,6 +99,10 @@ export default function SignInForm() {
   // Login
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
 
   // Student sign up — account
   const [email, setEmail] = useState("");
@@ -318,7 +322,38 @@ export default function SignInForm() {
     setLoading(true); setError(null);
 
     try {
-      await createUserWithEmailAndPassword(auth, tutorEmail.trim(), tutorPassword);
+      try {
+        await createUserWithEmailAndPassword(auth, tutorEmail.trim(), tutorPassword);
+      } catch (createErr: unknown) {
+        const code = (createErr as AuthError)?.code ?? "";
+        if (code === "auth/email-already-in-use") {
+          try {
+            await signInWithEmailAndPassword(auth, tutorEmail.trim(), tutorPassword);
+          } catch (signInErr: unknown) {
+            const signInCode = (signInErr as AuthError)?.code ?? "";
+            if (signInCode === "auth/wrong-password" || signInCode === "auth/invalid-credential") {
+              setError(
+                "An account with this email already exists but the password is incorrect. Please use the password for your existing Studyroom account."
+              );
+            } else {
+              setError("Could not sign in to your existing account. Please try again.");
+            }
+            setLoading(false);
+            return;
+          }
+        } else if (code === "auth/invalid-email") {
+          setError("Please enter a valid email address.");
+          setLoading(false);
+          return;
+        } else if (code === "auth/weak-password") {
+          setError("Password must be at least 8 characters.");
+          setLoading(false);
+          return;
+        } else {
+          throw createErr;
+        }
+      }
+
       const u = auth.currentUser;
       if (!u) throw new Error("Not signed in.");
       const idToken = await u.getIdToken();
@@ -333,15 +368,30 @@ export default function SignInForm() {
 
       router.push("/hub/tutor");
     } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+      setLoading(false);
+    }
+  }
+
+  async function handleForgotPassword() {
+    if (!forgotEmail.trim()) { setError("Please enter your email address."); return; }
+    setForgotLoading(true);
+    setError(null);
+    try {
+      const { sendPasswordResetEmail } = await import("firebase/auth");
+      await sendPasswordResetEmail(auth, forgotEmail.trim());
+      setForgotSent(true);
+    } catch (err: unknown) {
       const code = (err as AuthError)?.code ?? "";
-      if (code === "auth/email-already-in-use") {
-        setError("An account with this email already exists. Log in first, then contact admin if your role hasn't been set.");
+      if (code === "auth/user-not-found" || code === "auth/invalid-credential") {
+        setForgotSent(true);
       } else if (code === "auth/invalid-email") {
         setError("Please enter a valid email address.");
       } else {
-        setError(err instanceof Error ? err.message : "Something went wrong.");
+        setError("Something went wrong. Please try again.");
       }
-      setLoading(false);
+    } finally {
+      setForgotLoading(false);
     }
   }
 
@@ -439,18 +489,106 @@ export default function SignInForm() {
                 style={inp}
               />
             </div>
-            {error && errBox}
+            {error && !showForgotPassword && errBox}
             <button type="button" onClick={handleLogin} disabled={loading} style={submitBtn}>
               {loading ? "Logging in..." : "Log in"}
             </button>
             <div style={{ textAlign: "center", marginTop: 12 }}>
               <button
                 type="button"
+                onClick={() => {
+                  setShowForgotPassword(v => !v);
+                  setForgotEmail(loginEmail);
+                  setForgotSent(false);
+                  setError(null);
+                }}
                 style={{ background: "none", border: "none", fontSize: 12, color: "#8a96a3", cursor: "pointer", fontFamily: "inherit", textDecoration: "underline" }}
               >
                 Forgot password?
               </button>
             </div>
+            {showForgotPassword && (
+              <div style={{
+                marginTop: 14, background: "#f4f7f9", borderRadius: 12,
+                padding: "14px 16px",
+              }}>
+                {forgotSent ? (
+                  <div style={{ fontSize: 13, color: "#2d5a24", lineHeight: 1.6 }}>
+                    If an account exists for that email, a reset link has been sent.
+                    Check your inbox (and spam folder).
+                    <br />
+                    <button
+                      type="button"
+                      onClick={() => { setShowForgotPassword(false); setForgotSent(false); }}
+                      style={{
+                        marginTop: 10, background: "none", border: "none",
+                        fontSize: 12, color: "#456071", fontWeight: 600,
+                        cursor: "pointer", fontFamily: "inherit", padding: 0,
+                        textDecoration: "underline",
+                      }}
+                    >
+                      Back to log in
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 12, color: "#677a8a", marginBottom: 10 }}>
+                      Enter your email and we&apos;ll send you a reset link.
+                    </div>
+                    <div style={{ marginBottom: 10 }}>
+                      <input
+                        type="email"
+                        value={forgotEmail}
+                        onChange={e => { setForgotEmail(e.target.value); setError(null); }}
+                        onKeyDown={e => e.key === "Enter" && void handleForgotPassword()}
+                        placeholder="your@email.com"
+                        autoComplete="email"
+                        style={{
+                          width: "100%", border: "1.5px solid #e4eaef", borderRadius: 9,
+                          padding: "8px 11px", fontSize: 13, fontFamily: "inherit",
+                          color: "#1d2428", outline: "none", background: "#fff",
+                          boxSizing: "border-box" as const,
+                        }}
+                      />
+                    </div>
+                    {error && (
+                      <div style={{
+                        fontSize: 12, color: "#c0445e", background: "#fce8ee",
+                        borderRadius: 8, padding: "7px 10px", marginBottom: 10,
+                      }}>
+                        {error}
+                      </div>
+                    )}
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        type="button"
+                        onClick={() => void handleForgotPassword()}
+                        disabled={forgotLoading}
+                        style={{
+                          flex: 2, background: "#456071", color: "#fff", border: "none",
+                          borderRadius: 9, padding: "8px 0", fontSize: 12, fontWeight: 700,
+                          cursor: forgotLoading ? "not-allowed" : "pointer",
+                          fontFamily: "inherit", opacity: forgotLoading ? 0.7 : 1,
+                        }}
+                      >
+                        {forgotLoading ? "Sending..." : "Send reset link"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setShowForgotPassword(false); setError(null); }}
+                        style={{
+                          flex: 1, background: "#fff", color: "#677a8a", border: "none",
+                          borderRadius: 9, padding: "8px 0", fontSize: 12, fontWeight: 600,
+                          cursor: "pointer", fontFamily: "inherit",
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
 
