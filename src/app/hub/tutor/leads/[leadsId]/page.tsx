@@ -74,7 +74,8 @@ function joinAddress(parts: Array<string | null>) {
 async function getIdTokenOrThrow() {
   const u = auth.currentUser;
   if (!u) throw new Error("Not signed in.");
-  return await u.getIdToken();
+  // Force refresh so a newly granted tutor role is included in the token.
+  return await u.getIdToken(true);
 }
 
 export default function TutorLeadDetailPage() {

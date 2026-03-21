@@ -42,8 +42,18 @@ export default function HubLayout({ children }: { children: React.ReactNode }) {
       const subStatus = String(userData.subscriptionStatus ?? "");
       const onboardingComplete = Boolean(userData.onboardingComplete);
 
-      if (subStatus !== "active") {
-        router.replace("/subscribe");
+      const isActive = subStatus === "active";
+      const isTrial =
+        subStatus === "trial" &&
+        userData.trialEndsAt &&
+        new Date() < (userData.trialEndsAt.toDate?.() ?? new Date(userData.trialEndsAt));
+
+      if (!isActive && !isTrial) {
+        if (subStatus === "trial") {
+          router.replace("/subscribe?trial_expired=1");
+        } else {
+          router.replace("/subscribe");
+        }
         return;
       }
 

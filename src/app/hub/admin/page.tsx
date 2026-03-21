@@ -33,6 +33,12 @@ const CARDS = [
     href: "/hub/admin/students/add-existing",
     accent: "#c4bbaf",
   },
+  {
+    title: "Promo Codes",
+    description: "Create and manage 7-day trial access codes for students",
+    href: "/hub/admin/promo",
+    accent: "#a8c5b0",
+  },
 ];
 
 function AdminCard({ title, description, href, accent }: {

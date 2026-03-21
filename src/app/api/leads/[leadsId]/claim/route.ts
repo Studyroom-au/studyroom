@@ -23,33 +23,68 @@ export async function POST(
       return NextResponse.json({ ok: false, error: "Missing leadId." }, { status: 400 });
     }
 
+    // ── Role check (outside transaction so we can use queries) ───────────────
+    const isAdminEmail = tutorEmail === "lily.studyroom@gmail.com";
+
+    if (!isAdminEmail) {
+      const roleSnap = await db.collection("roles").doc(tutorUid).get();
+      let role: string | undefined = roleSnap.exists ? (roleSnap.data()?.role as string | undefined) : undefined;
+
+      if (role !== "tutor") {
+        // Fallback: if role doc is missing or wrong, check whether this user
+        // redeemed a tutor access code — if so, grant the role now.
+        const redeemedSnap = await db
+          .collection("tutorAccessCodes")
+          .where("redeemedByUid", "==", tutorUid)
+          .limit(1)
+          .get();
+
+        if (!redeemedSnap.empty) {
+          await db.collection("roles").doc(tutorUid).set(
+            { role: "tutor" },
+            { merge: true }
+          );
+          role = "tutor";
+        }
+      }
+
+      if (role !== "tutor") {
+        if (!roleSnap.exists) {
+          return NextResponse.json(
+            { ok: false, error: "Your tutor role has not been set up yet. Please contact admin." },
+            { status: 403 }
+          );
+        }
+        return NextResponse.json(
+          { ok: false, error: "Only tutors can claim leads." },
+          { status: 403 }
+        );
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     const leadRef = db.collection("leads").doc(leadId);
     const studentRef = db.collection("students").doc(leadId);
     const clientRef = db.collection("clients").doc(leadId);
     const userRef = db.collection("users").doc(tutorUid);
 
     const result = await db.runTransaction(async (tx) => {
-      const userSnap = await tx.get(userRef);
-
-      if (!userSnap.exists) throw new Error("User not found.");
-
-      const userData = userSnap.data()!;
-      const role = userData.role;
-
-      if (role !== "tutor" && role !== "admin") {
-        throw new Error("Unauthorized role.");
-      }
+      const [userSnap, leadSnap] = await Promise.all([
+        tx.get(userRef),
+        tx.get(leadRef),
+      ]);
 
       const tutorName =
-        typeof userData.name === "string" ? userData.name : null;
+        userSnap.exists && typeof userSnap.data()?.name === "string"
+          ? (userSnap.data()!.name as string)
+          : null;
 
-      const leadSnap = await tx.get(leadRef);
       if (!leadSnap.exists) throw new Error("Lead not found.");
 
-      const lead = leadSnap.data() as any;
+      const lead = leadSnap.data() as Record<string, unknown>;
 
-      const status: LeadStatus = lead.status || "new";
-      const claimedTutorId = lead.claimedTutorId ?? null;
+      const status: LeadStatus = (lead.status as LeadStatus) || "new";
+      const claimedTutorId = (lead.claimedTutorId as string | null) ?? null;
 
       if (status !== "new") throw new Error("This lead is not available.");
       if (claimedTutorId) throw new Error("Already claimed.");
@@ -74,9 +109,9 @@ export async function POST(
       tx.set(
         clientRef,
         {
-          parentName: lead.parentName ?? null,
-          parentEmail: lead.parentEmail ?? null,
-          parentPhone: lead.parentPhone ?? null,
+          parentName: (lead.parentName as string | null) ?? null,
+          parentEmail: (lead.parentEmail as string | null) ?? null,
+          parentPhone: (lead.parentPhone as string | null) ?? null,
 
           assignedTutorId: tutorUid,
           assignedTutorEmail: tutorEmail,
@@ -94,9 +129,9 @@ export async function POST(
         {
           clientId: leadId,
 
-          studentName: lead.studentName ?? null,
-          yearLevel: lead.yearLevel ?? null,
-          school: lead.school ?? null,
+          studentName: (lead.studentName as string | null) ?? null,
+          yearLevel: (lead.yearLevel as string | null) ?? null,
+          school: (lead.school as string | null) ?? null,
 
           subjects: Array.isArray(lead.subjects) ? lead.subjects : [],
 
@@ -115,10 +150,11 @@ export async function POST(
 
     return NextResponse.json({ ok: true, studentId: result.studentId }, { status: 200 });
 
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[claim] failed:", err);
+    const message = err instanceof Error ? err.message : "Claim failed.";
     return NextResponse.json(
-      { ok: false, error: err?.message || "Claim failed." },
+      { ok: false, error: message },
       { status: 400 }
     );
   }
