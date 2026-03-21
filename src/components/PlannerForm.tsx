@@ -6,12 +6,37 @@ import { auth, db } from "@/lib/firebase";
 
 function detectSubject(title: string): string {
   const t = title.toLowerCase();
-  if (/math/.test(t)) return "Maths";
-  if (/english|essay|speech|lit/.test(t)) return "English";
+  if (/math|specialist/.test(t)) return "Maths";
+  if (/english|essay|speech|lit|rhetoric|creative writing/.test(t)) return "English";
   if (/chem/.test(t)) return "Chemistry";
-  if (/phys/.test(t)) return "Physics";
-  if (/jap/.test(t)) return "Japanese";
+  if (/phys(?!ical|io)/.test(t)) return "Physics";
   if (/bio/.test(t)) return "Biology";
+  if (/japanese|french|german|spanish|chinese|korean|mandarin|italian|indonesian|arabic|hindi|latin/.test(t)) return "Languages";
+  if (/ancient history|modern history|history/.test(t)) return "History";
+  if (/geog/.test(t)) return "Geography";
+  if (/psych/.test(t)) return "Psychology";
+  if (/music|band|choir|instrumental/.test(t)) return "Music";
+  if (/visual art|studio art|art(?!ificial)/.test(t)) return "Visual Art";
+  if (/drama|theatre/.test(t)) return "Drama";
+  if (/physical education|sport|^pe$|^pe /.test(t)) return "Physical Education";
+  if (/legal studies|law/.test(t)) return "Legal Studies";
+  if (/business|economics|accounting|commerce/.test(t)) return "Business";
+  if (/ict|digital|computer|software|information tech/.test(t)) return "Digital Technology";
+  if (/design|technology|engineering|industrial/.test(t)) return "Technology";
+  if (/health(?! ed)|nutrition/.test(t)) return "Health";
+  if (/health ed/.test(t)) return "Health Education";
+  if (/social science|society|social stud/.test(t)) return "Social Science";
+  if (/science(?! of)/.test(t)) return "Science";
+  if (/study skills|study hall/.test(t)) return "Study Skills";
+  if (/religion|studies of religion/.test(t)) return "Religion";
+  if (/philosophy|ethics/.test(t)) return "Philosophy";
+  if (/film|media|television/.test(t)) return "Media";
+  if (/dance/.test(t)) return "Dance";
+  if (/agriculture|rural/.test(t)) return "Agriculture";
+  if (/marine|aquatic/.test(t)) return "Marine Science";
+  if (/earth|environmental/.test(t)) return "Earth & Environmental";
+  if (/astronomy|space/.test(t)) return "Astronomy";
+  if (/certificate|cert iii|cert iv|tafe|vet/.test(t)) return "VET";
   return "Study";
 }
 
