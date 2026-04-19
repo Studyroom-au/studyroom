@@ -273,11 +273,11 @@ export default function TutoringPage() {
           </div>
  
           <h1 className="text-3xl font-semibold leading-tight text-[color:var(--ink)] md:text-4xl">
-            For the kids who've been trying harder than anyone knows.
+            Tutoring that helps students feel capable, organised and proud of their progress.
           </h1>
  
           <p className="text-base text-[color:var(--muted)] md:max-w-3xl md:text-lg">
-            1:1 tutoring for anxious and neurodivergent learners across Logan and Brisbane Southside Prep to Year 12. Built around how your child actually learns, not how school expects them to.
+           Studyroom supports Prep to Year 12 students with personalised 1:1 tutoring that builds clear skills, consistent routines and steady progress at school.
           </p>
  
           <p className="text-sm text-[color:var(--muted)] md:max-w-3xl">
