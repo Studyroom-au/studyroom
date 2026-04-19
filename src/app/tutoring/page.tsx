@@ -1,13 +1,13 @@
 import Link from "next/link";
-
+ 
 /**
  * TERM 2 PACKAGE SALE
  * Toggle on/off when needed.
  */
-const TERM2_SALE_ACTIVE = true;
+const TERM2_SALE_ACTIVE = false;
 const TERM2_SALE_ENDS = "31 March";
 const TERM2_SALE_LABEL = `Term 2 Early Enrolment Offer ends ${TERM2_SALE_ENDS}`;
-
+ 
 const offers = [
   {
     title: "In-home tutoring",
@@ -18,7 +18,7 @@ const offers = [
     desc: "Live 1:1 sessions delivered online via the Studyroom WebApp from anywhere.",
   },
 ];
-
+ 
 const whoFor = [
   "Prep to Year 12 students who benefit from clear explanations and predictable learning routines",
   "Anxious and neurodivergent learners, including autistic and ADHD students",
@@ -26,7 +26,7 @@ const whoFor = [
   "High achievers aiming for extension, scholarships or top results",
   "Families who value clear communication, steady progress and consistent support",
 ];
-
+ 
 const howItWorks = [
   {
     title: "Enquire",
@@ -45,7 +45,7 @@ const howItWorks = [
     desc: "60-minute sessions that build skill, consistency and measurable progress over time.",
   },
 ];
-
+ 
 /**
  * Packages are the PRIMARY model.
  * Prices shown for in-home and online.
@@ -91,13 +91,13 @@ const packages = [
     tag: "Limited availability",
   },
 ];
-
+ 
 const locations = [
   "In-home: Logan, Beenleigh and Brisbane Southside",
   "Online: Queensland and interstate",
   "School, library and community sessions by arrangement",
 ];
-
+ 
 /**
  * SINGLE SOURCE OF TRUTH:
  * Pricing + policies live here only (not repeated in packages/FAQ).
@@ -152,7 +152,7 @@ const pricingAndPolicies = [
       "No sibling discounts. If siblings are tutored at the same time, it is priced as a group session at $45 per child.",
   },
 ];
-
+ 
 const tutors = [
   {
     name: "Lily",
@@ -175,7 +175,7 @@ const tutors = [
       "Maths tutor supporting all year levels, with additional expertise in senior assessment and assignment support across subjects. Casey uses clear explanations, structured strategies and a calm approach to make complex tasks feel manageable. Students build genuine understanding and lasting confidence so they feel prepared, capable and proud of their progress.",
   },
 ];
-
+ 
 const subjectBlocks = [
   {
     level: "Primary, Prep to Year 6",
@@ -205,7 +205,7 @@ const subjectBlocks = [
     ],
   },
 ];
-
+ 
 /**
  * Shortened “typical session”
  */
@@ -227,18 +227,22 @@ const sessionFlow = [
     text: "Short recap plus a simple plan for home practice or the next session.",
   },
 ];
-
+ 
 /**
  * FAQ: keep helpful, avoid duplicating policies.
  */
 const faqs = [
   {
-    q: "How long are sessions?",
-    a: "All standard sessions are 60 minutes.",
+    q: "We've tried tutoring before and it didn't work. Why would this be different?",
+    a: "Most tutoring fails anxious or neurodivergent kids because the approach is wrong for their brain — not because the child can't learn. At Studyroom we focus on how a child feels in the session first. Confidence comes before content. When a child feels safe, learning follows.",
   },
   {
     q: "Do you support anxious and neurodivergent learners?",
     a: "Yes. Many Studyroom students are anxious, autistic, ADHD or benefit from predictable routines and clear teaching.",
+  },
+  {
+    q: "How long are sessions?",
+    a: "All standard sessions are 60 minutes.",
   },
   {
     q: "What does a package include?",
@@ -253,7 +257,7 @@ const faqs = [
     a: "Yes. We support planning, scaffolding, drafting and exam preparation, especially in Years 11–12.",
   },
 ];
-
+ 
 export default function TutoringPage() {
   return (
     <div className="flex flex-col gap-16 pb-16">
@@ -263,34 +267,30 @@ export default function TutoringPage() {
           <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
             Prep to Year 12 · Logan and Brisbane Southside · In-home and online
           </p>
-
+ 
           <div className="inline-flex items-center rounded-full bg-[#d6e5e3] px-3 py-1 text-xs font-semibold text-[color:var(--brand)]">
             Personalised 1:1 tutoring
           </div>
-
+ 
           <h1 className="text-3xl font-semibold leading-tight text-[color:var(--ink)] md:text-4xl">
-            One-on-one tutoring that brings structure and confidence back into
-            school.
+            For the kids who've been trying harder than anyone knows.
           </h1>
-
+ 
           <p className="text-base text-[color:var(--muted)] md:max-w-3xl md:text-lg">
-            Studyroom provides personalised 1:1 tutoring for Prep to Year 12
-            students across Logan and Brisbane Southside. We support anxious and
-            neurodivergent learners, as well as high-achieving students ready to
-            extend.
+            1:1 tutoring for anxious and neurodivergent learners across Logan and Brisbane Southside Prep to Year 12. Built around how your child actually learns, not how school expects them to.
           </p>
-
+ 
           <p className="text-sm text-[color:var(--muted)] md:max-w-3xl">
             We focus on understanding — not memorising — using clear steps and
             predictable routines so students know what to do next.
           </p>
-
+ 
           <div className="flex flex-wrap gap-3">
             <Link
               href="/contact"
               className="brand-cta inline-flex items-center justify-center rounded-lg px-5 py-3 text-sm font-semibold shadow-sm"
             >
-              Apply for a spot
+              Get in touch
             </Link>
             <Link
               href="/worksheets"
@@ -301,7 +301,7 @@ export default function TutoringPage() {
           </div>
         </div>
       </section>
-
+ 
       {/* PACKAGES */}
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-6xl space-y-6">
@@ -318,7 +318,7 @@ export default function TutoringPage() {
               minutes.
             </p>
           </div>
-
+ 
           <div className="grid gap-4 md:grid-cols-3">
             {packages.map((pkg) => (
               <div
@@ -334,7 +334,7 @@ export default function TutoringPage() {
                       {pkg.desc}
                     </p>
                   </div>
-
+ 
                   <div className="shrink-0 space-y-2 text-right">
                     <div className="rounded-full bg-[#d6e5e3] px-3 py-1 text-xs font-semibold text-[color:var(--brand)]">
                       In-home {pkg.priceInHome}
@@ -344,7 +344,7 @@ export default function TutoringPage() {
                     </div>
                   </div>
                 </div>
-
+ 
                 <div className="mt-4 space-y-2">
                   {pkg.points.map((pt) => (
                     <div key={pt} className="flex items-start gap-3">
@@ -355,20 +355,20 @@ export default function TutoringPage() {
                     </div>
                   ))}
                 </div>
-
+ 
                 <p className="mt-4 text-xs font-semibold text-[color:var(--muted)]">
                   {pkg.tag}
                 </p>
               </div>
             ))}
           </div>
-
+ 
           <div className="flex flex-wrap gap-3">
             <Link
               href="/contact"
               className="inline-flex items-center justify-center rounded-lg bg-[color:var(--brand)] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:shadow-md"
             >
-              Enquire about packages
+              Get in touch
             </Link>
             <Link
               href="#pricing"
@@ -379,7 +379,7 @@ export default function TutoringPage() {
           </div>
         </div>
       </section>
-
+ 
       {/* DELIVERY MODES */}
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-6xl space-y-6">
@@ -407,7 +407,7 @@ export default function TutoringPage() {
           </div>
         </div>
       </section>
-
+ 
       {/* SUBJECTS AND FOCUS AREAS (combined) */}
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-6xl space-y-6">
@@ -441,7 +441,7 @@ export default function TutoringPage() {
           </div>
         </div>
       </section>
-
+ 
       {/* WHO IT'S FOR */}
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-6xl overflow-hidden rounded-3xl bg-[color:var(--card)] p-8 shadow-sm ring-1 ring-[color:var(--ring)]">
@@ -474,7 +474,7 @@ export default function TutoringPage() {
           </div>
         </div>
       </section>
-
+ 
       {/* HOW IT WORKS */}
       <section className="px-4 md:px-6" id="how-it-works">
         <div className="mx-auto max-w-6xl space-y-6">
@@ -501,7 +501,7 @@ export default function TutoringPage() {
           </div>
         </div>
       </section>
-
+ 
       {/* SESSION FLOW (shortened) */}
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-6xl space-y-6">
@@ -529,7 +529,7 @@ export default function TutoringPage() {
           </div>
         </div>
       </section>
-
+ 
       {/* PRICING & POLICIES + LOCATIONS */}
       <section className="px-4 md:px-6" id="pricing">
         <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-2">
@@ -541,7 +541,7 @@ export default function TutoringPage() {
             <p className="mt-2 text-sm text-[color:var(--muted)]">
               Clear pricing and expectations in one place.
             </p>
-
+ 
             <div className="mt-4 space-y-3">
               {pricingAndPolicies.map((item) => (
                 <div
@@ -558,7 +558,7 @@ export default function TutoringPage() {
               ))}
             </div>
           </div>
-
+ 
           {/* LOCATIONS */}
           <div className="rounded-3xl bg-[color:var(--card)] p-8 shadow-sm ring-1 ring-[color:var(--ring)]">
             <h3 className="text-xl font-semibold text-[color:var(--ink)]">
@@ -586,7 +586,7 @@ export default function TutoringPage() {
           </div>
         </div>
       </section>
-
+ 
       {/* FAQ */}
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-6xl space-y-6">
@@ -610,7 +610,7 @@ export default function TutoringPage() {
           </div>
         </div>
       </section>
-
+ 
       {/* TUTOR PROFILES */}
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-6xl space-y-6">
@@ -631,7 +631,7 @@ export default function TutoringPage() {
               Find a tutor →
             </Link>
           </div>
-
+ 
           <div className="grid gap-4 md:grid-cols-3">
             {tutors.map((tutor) => (
               <div
@@ -659,7 +659,7 @@ export default function TutoringPage() {
           </div>
         </div>
       </section>
-
+ 
       {/* FINAL CTA */}
       <section className="px-4 md:px-6">
         <div className="mx-auto flex max-w-6xl flex-col gap-6 rounded-3xl bg-[color:var(--brand)] px-8 py-10 text-white shadow-lg">
@@ -682,7 +682,7 @@ export default function TutoringPage() {
                 href="/contact"
                 className="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-[color:var(--brand)] shadow-sm transition hover:shadow-md"
               >
-                Apply for a spot
+                Get in touch
               </Link>
               <Link
                 href="/worksheets"

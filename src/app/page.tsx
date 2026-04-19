@@ -5,7 +5,7 @@ import Image from "next/image";
  * TERM 2 PACKAGE SALE
  * Toggle on/off when needed.
  */
-const TERM2_SALE_ACTIVE = true;
+const TERM2_SALE_ACTIVE = false;
 const TERM2_SALE_ENDS = "31 March";
 const TERM2_SALE_LABEL = `Term 2 Early Enrolment Offer ends ${TERM2_SALE_ENDS}`;
 
@@ -33,7 +33,7 @@ const services = [
 ];
 
 const philosophyPoints = [
-  "Plans shaped around the student — not a generic program.",
+  "Plans shaped around the student, not a generic program.",
   "Clear routines so school feels more manageable.",
   "Small wins that build real confidence and effort.",
   "Steady challenge without overwhelm.",
@@ -46,6 +46,33 @@ const helpPoints = [
   "Students rebuilding after low marks or tricky school years.",
   "Motivated students aiming for strong grades, extension or scholarships.",
   "Students needing support with organisation and study skills.",
+];
+
+const thisIsForYou = [
+  "Your child shuts down the moment schoolwork gets hard",
+  "You've tried tutors before and nothing clicked",
+  "Homework time ends in tears most nights",
+  "Your child says they're stupid and believes it",
+  "They have ADHD, ASD, or just learn differently",
+  "You're exhausted from trying to help and not knowing how",
+];
+
+/**
+ * WHAT MAKES US DIFFERENT — contrasts with what parents have already tried.
+ */
+const differentiators = [
+  {
+    others: "Most tutoring rushes through content.",
+    us: "We slow down until it makes sense. No moving on until your child is genuinely with us.",
+  },
+  {
+    others: "Most tutors see your child for an hour and disappear.",
+    us: "Our tutors leave session notes. Lily stays involved. You always know how your child is tracking.",
+  },
+  {
+    others: "Most agencies assign whoever's free.",
+    us: "We match based on your child's needs, year level, and how they actually learn.",
+  },
 ];
 
 const whyReasons = [
@@ -105,6 +132,13 @@ const trustPoints = [
   "Neurodiversity aware approach",
 ];
 
+// Featured testimonial pulled to the top
+const featuredTestimonial = {
+  quote:
+    "Before tutoring I would simply give up on trying at maths. After one term I went from a D to a B on my exam. I can now confidently try my best and not be intimidated by hard questions.",
+  name: "Year 8 student",
+};
+
 const testimonials = [
   {
     quote:
@@ -128,13 +162,51 @@ const testimonials = [
   },
   {
     quote:
-      "Before tutoring with lily, I was struggling immensely with mathematics, to a point where i would simply give up on trying. Lily helped explain problems with much more clarity than the questions in my textbook, and after 1 term of tutoring, I went from a D to a B- on my exam. I can now confidently try my best at maths, and not be intimidated by attempting difficult and confusing questions. If you are having trouble with anything, I can't recommend Lily enough! She's kind, patient and 100% perfect for helping people like you and me! Thank you Lily!!",
-    name: "Grade 8 student",
-  },
-  {
-    quote:
       " You've helped my daughter come so far! From failing maths to receiving a maths awards (and enjoying maths now, with confidence) Thank you Lily!",
     name: "Parent of Year 11 student",
+  },
+];
+
+/**
+ * HOMEPAGE FAQ — short answers to the questions parents ask silently.
+ */
+const homeFaqs = [
+  {
+    q: "We've tried tutoring before and it didn't work. Why would this be different?",
+    a: "Most tutoring fails anxious or neurodivergent kids because the approach is wrong for their brain — not because they can't learn. We focus on how a child feels in the session first. Confidence comes before content.",
+  },
+  {
+    q: "Will Lily be my child's tutor?",
+    a: "Depending on availability, sessions may be delivered by one of our tutors — all personally vetted and trained by Lily. Lily is always your main point of contact and stays involved in your child's progress.",
+  },
+  {
+    q: "My child has ADHD or ASD — do you understand what that means for learning?",
+    a: "Yes. This is a core part of our work. Our approach is built around predictable routines, clear teaching, and a calm environment that reduces anxiety rather than adds to it.",
+  },
+  {
+    q: "What if it's not a good fit?",
+    a: "We'd rather help you find the right support than force something that isn't working. If a tutor match isn't right, we find a new one. If we're not the right service for your child, we'll tell you that honestly.",
+  },
+];
+
+/**
+ * WHAT HAPPENS AFTER YOU ENQUIRE — reassurance at point of conversion.
+ */
+const afterEnquiry = [
+  {
+    step: "1",
+    title: "We reply personally",
+    desc: "Within 1–3 business days. A real response from Lily — not an automated reply.",
+  },
+  {
+    step: "2",
+    title: "A no-pressure chat",
+    desc: "We talk about your child, what they need, and what's worked or hasn't in the past.",
+  },
+  {
+    step: "3",
+    title: "A clear plan forward",
+    desc: "If we're a fit, we recommend a package and match you with a tutor. If we're not, we'll tell you that too.",
   },
 ];
 
@@ -155,19 +227,15 @@ export default function HomePage() {
             </p>
 
             <h1 className="text-3xl font-semibold leading-snug text-[color:var(--ink)] md:text-4xl">
-              Tutoring that helps students feel capable, organised and proud of
-              their progress.
+              For the learners who try harder than anyone realises.
             </h1>
 
             <p className="text-base text-[color:var(--muted)] md:text-lg">
-              Studyroom supports Prep to Year 12 students with personalised 1:1
-              tutoring that builds clear skills, consistent routines and steady
-              progress at school.
+              At Studyroom, we provide 1:1 tutoring across Logan and Brisbane Southside that helps students feel capable, organised, and proud of their progress. 
             </p>
 
             <p className="text-sm text-[color:var(--muted)]">
-              We support anxious and neurodivergent learners, as well as
-              motivated students aiming for extension and strong results.
+              We support Prep to Year 12 students with routines built around how their brain actually works. Whether your child is an anxious or neurodivergent learner needing a confidence boost, or a motivated student aiming for extension, we provide the clear skills and steady progress they need to thrive.
             </p>
 
             <div className="flex flex-wrap gap-3">
@@ -175,7 +243,7 @@ export default function HomePage() {
                 href="/contact"
                 className="brand-cta inline-flex items-center justify-center rounded-lg px-5 py-3 text-sm font-semibold shadow-sm"
               >
-                Apply for a spot
+                Get in touch
               </Link>
             </div>
 
@@ -217,7 +285,80 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* PACKAGES TEASER (tight, not policy heavy) */}
+      {/* EMOTIONAL OUTCOME LINE */}
+      <section className="px-4 md:px-6">
+        <div className="mx-auto max-w-4xl text-center">
+          <p className="text-lg font-medium italic leading-relaxed text-[color:var(--ink)] md:text-xl">
+            The students who seem behind are often the ones who've given up trying. That's the first thing we fix.
+          </p>
+        </div>
+      </section>
+
+      {/* THIS IS FOR YOU */}
+      <section className="px-4 md:px-6">
+        <div className="mx-auto max-w-6xl rounded-3xl bg-[color:var(--brand)] px-6 py-12 text-white md:px-10">
+          <div className="grid gap-8 md:grid-cols-2 md:items-start">
+            <div className="space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-white/70">
+                For the parent who's tried everything
+              </p>
+              <h2 className="text-2xl font-semibold leading-tight md:text-3xl">
+                 Your child isn't the problem. The approach has been.
+              </h2>
+              <p className="text-sm text-white/85 md:text-base">
+                Most tutoring is built around content. Ours is built around your child.
+              </p>
+            </div>
+            <div className="space-y-3">
+              {thisIsForYou.map((item) => (
+                <div
+                  key={item}
+                  className="flex items-start gap-3 rounded-xl bg-white/10 p-4 ring-1 ring-white/20"
+                >
+                  <span className="mt-1 h-2 w-2 rounded-full bg-[color:var(--accent-soft)]" />
+                  <p className="text-sm font-medium text-white">{item}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* WHAT MAKES US DIFFERENT */}
+      <section className="px-4 md:px-6">
+        <div className="mx-auto max-w-6xl space-y-6">
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--brand)]">
+              What's different about us
+            </p>
+            <h2 className="text-2xl font-semibold text-[color:var(--ink)]">
+              Not just another tutoring service.
+            </h2>
+            <p className="text-sm text-[color:var(--muted)] md:max-w-3xl md:text-base">
+              If you've tried tutoring before, here's exactly where we do things differently.
+            </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            {differentiators.map((item, i) => (
+              <div
+                key={i}
+                className="rounded-2xl bg-[color:var(--card)] p-6 shadow-sm ring-1 ring-[color:var(--ring)]"
+              >
+                <p className="text-sm font-medium text-[color:var(--muted)]">
+                  {item.others}
+                </p>
+                <div className="my-4 h-px bg-[color:var(--ring)]" />
+                <p className="text-sm font-semibold leading-relaxed text-[color:var(--ink)]">
+                  {item.us}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* PACKAGES TEASER */}
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-6xl space-y-6">
           <div className="flex flex-col gap-2">
@@ -343,7 +484,7 @@ export default function HomePage() {
               href="/contact"
               className="inline-flex items-center justify-center rounded-lg bg-[color:var(--brand)] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:shadow-md"
             >
-              Enquire about packages
+              Get in touch
             </Link>
             <Link
               href="/tutoring"
@@ -419,7 +560,6 @@ export default function HomePage() {
               We focus on clear teaching and consistent routines that transfer
               back into the classroom.
             </p>
-            
           </div>
           <div className="space-y-3">
             {philosophyPoints.map((point) => (
@@ -444,7 +584,7 @@ export default function HomePage() {
             </h2>
             <p className="text-sm text-[color:var(--muted)]">
               Families come to Studyroom when school feels stressful, confusing
-              or stuck — and they want a clear plan forward.
+              or stuck and they want a clear plan forward.
             </p>
             <div className="space-y-3">
               {helpPoints.map((item) => (
@@ -493,37 +633,97 @@ export default function HomePage() {
                     {item.desc}
                   </p>
                 </div>
-                
               ))}
             </div>
             <div className="overflow-hidden rounded-xl border border-[color:var(--ring)] bg-[#f8f8ff] shadow-sm">
-            <div
-              className="h-64 w-full overflow-hidden rounded-xl"
-              suppressHydrationWarning
-            >
-              <Image
-                src="/IMG_2243.jpeg"
-                alt="Studyroom workshop group smiling together"
-                width={1000}
-                height={900}
-                className="h-full w-full object-cover object-top"
-                style={{ color: "transparent" }}
-              />
-              
+              <div
+                className="h-64 w-full overflow-hidden rounded-xl"
+                suppressHydrationWarning
+              >
+                <Image
+                  src="/IMG_2243.jpeg"
+                  alt="Studyroom workshop group smiling together"
+                  width={1000}
+                  height={900}
+                  className="h-full w-full object-cover object-top"
+                  style={{ color: "transparent" }}
+                />
+              </div>
             </div>
-  
           </div>
+        </div>
+      </section>
+
+      {/* FOUNDER STORY WITH PHOTO */}
+      <section className="px-4 md:px-6">
+        <div className="mx-auto max-w-5xl rounded-3xl bg-[color:var(--card)] p-8 shadow-sm ring-1 ring-[color:var(--ring)] md:p-12">
+          <div className="grid gap-8 md:grid-cols-[auto_1fr] md:items-center">
+            {/* PHOTO */}
+            <div className="mx-auto md:mx-0">
+              <div className="h-40 w-40 overflow-hidden rounded-full ring-4 ring-white shadow-md md:h-48 md:w-48">
+                <Image
+                  src="/selfphoto.jpeg"
+                  alt="Lily, founder of Studyroom Australia"
+                  width={400}
+                  height={400}
+                  className="h-full w-full object-cover"
+                />
+              </div>
+            </div>
+
+            {/* TEXT */}
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--brand)]">
+                The founder
+              </p>
+              <h2 className="mt-3 text-2xl font-semibold text-[color:var(--ink)] md:text-3xl">
+                I built Studyroom for us.
+              </h2>
+              <div className="mt-5 space-y-4 text-base text-[color:var(--muted)]">
+                <p>
+                  When a student seems 'behind,' it’s usually because they’ve learned that not trying is less painful than failing. I know this because I lived it—I was the quiet kid who gave up asking for help to avoid the embarrassment of not 'getting it' like everyone else.
+                </p>
+                <p>
+                  At Studyroom, we don't fix kids; we fix the way they are taught. I’ve built our 1:1 sessions around how a child’s brain actually works, not how a classroom expects it to.
+                </p>
+                <p className="font-semibold text-[color:var(--ink)]">
+                  We focus on restoring their confidence first and proving that they aren't 'behind,' they just haven't been given the right map to navigate their learning.
+                </p>
+              </div>
+              <div className="mt-6 flex flex-wrap items-center gap-4">
+                <p className="text-sm font-semibold text-[color:var(--ink)]">
+                  — Lily, Founder
+                </p>
+                <Link
+                  href="/about"
+                  className="text-sm font-semibold text-[color:var(--brand)] hover:text-[color:var(--brand-600)]"
+                >
+                  Read more about Lily →
+                </Link>
+              </div>
+            </div>
           </div>
-          
         </div>
       </section>
 
       {/* RESULTS */}
       <section className="px-4 md:px-6">
-        <div className="mx-auto max-w-6xl space-y-5">
+        <div className="mx-auto max-w-6xl space-y-6">
           <h2 className="text-2xl font-semibold text-[color:var(--ink)]">
             Results and stories
           </h2>
+
+          {/* Featured testimonial */}
+          <div className="rounded-2xl bg-[color:var(--brand)] p-8 text-white md:p-10">
+            <p className="text-lg italic leading-relaxed md:text-xl">
+              “{featuredTestimonial.quote}”
+            </p>
+            <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-white/70">
+              — {featuredTestimonial.name}
+            </p>
+          </div>
+
+          {/* Remaining testimonials */}
           <div className="grid gap-4 md:grid-cols-3">
             {testimonials.map((t) => (
               <div
@@ -565,40 +765,38 @@ export default function HomePage() {
               ))}
             </div>
           </div>
-          <div className="overflow-hidden rounded-xl border border-[color:var(--ring)] bg-[#f8f8ff] shadow-sm">
-            <div
-              className="h-64 w-full overflow-hidden rounded-xl"
-              suppressHydrationWarning
-            >
-              <Image
-                src="/workshop-group.jpeg"
-                alt="Studyroom workshop group smiling together"
-                width={1000}
-                height={900}
-                className="h-full w-full object-cover object-top"
-                style={{ color: "transparent" }}
-              />
-              
+          <div className="space-y-4">
+            <div className="overflow-hidden rounded-xl border border-[color:var(--ring)] bg-[#f8f8ff] shadow-sm">
+              <div
+                className="h-64 w-full overflow-hidden rounded-xl"
+                suppressHydrationWarning
+              >
+                <Image
+                  src="/workshop-group.jpeg"
+                  alt="Studyroom workshop group smiling together"
+                  width={1000}
+                  height={900}
+                  className="h-full w-full object-cover object-top"
+                  style={{ color: "transparent" }}
+                />
+              </div>
             </div>
-  <div className="overflow-hidden rounded-xl border border-[color:var(--ring)] bg-[#f8f8ff] shadow-sm">
-            <div
-              className="h-64 w-full overflow-hidden rounded-xl"
-              suppressHydrationWarning
-            >
-              <Image
-                src="/IMG_4458.jpeg"
-                alt="Studyroom workshop group smiling together"
-                width={1000}
-                height={900}
-                className="h-full w-full object-cover object-top"
-                style={{ color: "transparent" }}
-              />
-              
+            <div className="overflow-hidden rounded-xl border border-[color:var(--ring)] bg-[#f8f8ff] shadow-sm">
+              <div
+                className="h-64 w-full overflow-hidden rounded-xl"
+                suppressHydrationWarning
+              >
+                <Image
+                  src="/IMG_4458.jpeg"
+                  alt="Studyroom workshop group smiling together"
+                  width={1000}
+                  height={900}
+                  className="h-full w-full object-cover object-top"
+                  style={{ color: "transparent" }}
+                />
+              </div>
             </div>
-  
           </div>
-          </div>
-          
         </div>
       </section>
 
@@ -611,8 +809,7 @@ export default function HomePage() {
                 Meet your tutors
               </h2>
               <p className="mt-1 text-xs text-[color:var(--muted)]">
-                A small, vetted team — you always know who is working with your
-                child.
+                 Our small team is hand-picked for their empathy and experience with neurodivergent learners. You’ll always know exactly who is sitting at the table with your child.
               </p>
             </div>
             <Link
@@ -650,21 +847,84 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* HOMEPAGE FAQ */}
+      <section className="px-4 md:px-6">
+        <div className="mx-auto max-w-6xl space-y-6">
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--brand)]">
+              Common questions
+            </p>
+            <h2 className="text-2xl font-semibold text-[color:var(--ink)]">
+              The questions parents usually ask first.
+            </h2>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {homeFaqs.map((item) => (
+              <div
+                key={item.q}
+                className="rounded-2xl bg-[color:var(--card)] p-5 shadow-sm ring-1 ring-[color:var(--ring)]"
+              >
+                <p className="text-sm font-semibold text-[color:var(--ink)]">
+                  {item.q}
+                </p>
+                <p className="mt-2 text-sm text-[color:var(--muted)]">
+                  {item.a}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* WHAT HAPPENS AFTER YOU ENQUIRE */}
+      <section className="px-4 md:px-6">
+        <div className="mx-auto max-w-6xl space-y-6">
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--brand)]">
+              What happens next
+            </p>
+            <h2 className="text-2xl font-semibold text-[color:var(--ink)]">
+              After you enquire.
+            </h2>
+            <p className="text-sm text-[color:var(--muted)] md:max-w-2xl">
+              No pressure. No automated funnels. Just a real conversation about your child and a clear path forward.
+            </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            {afterEnquiry.map((item) => (
+              <div
+                key={item.step}
+                className="rounded-2xl bg-[color:var(--card)] p-6 shadow-sm ring-1 ring-[color:var(--ring)]"
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[color:var(--brand)] text-sm font-bold text-white">
+                  {item.step}
+                </div>
+                <p className="mt-4 text-base font-semibold text-[color:var(--ink)]">
+                  {item.title}
+                </p>
+                <p className="mt-2 text-sm text-[color:var(--muted)]">
+                  {item.desc}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* FINAL CTA */}
       <section className="px-4 md:px-6">
-        <div className="mx-auto max-w-6xl rounded-xl bg-[color:var(--brand)] px-6 py-8 text-white shadow-md">
+        <div className="mx-auto max-w-6xl rounded-xl bg-[color:var(--brand)] px-6 py-10 text-white shadow-md md:px-10 md:py-12">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-white/80">
                 Next step
               </p>
-              <h2 className="text-2xl font-semibold">
-                Tell us about your child and we will reply within 1-3 business
-                days.
+              <h2 className="text-2xl font-semibold md:text-3xl">
+                You don't have to figure this out alone.
               </h2>
-              <p className="text-sm text-white/85">
-                We’ll recommend the best package and map out a clear plan for
-                term progress.
+              <p className="text-sm text-white/85 md:max-w-2xl">
+                Tell us about your child. We'll reply within 1–3 business days with a clear plan for how we can help.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -672,7 +932,7 @@ export default function HomePage() {
                 href="/contact"
                 className="rounded-lg bg-white px-5 py-3 text-sm font-semibold text-[color:var(--brand)] shadow-sm transition hover:shadow-md"
               >
-                Apply for a spot
+                Get in touch
               </Link>
             </div>
           </div>
