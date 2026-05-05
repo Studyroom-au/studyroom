@@ -11,6 +11,7 @@ import {
   getDocs,
   query,
   writeBatch,
+  deleteDoc,
   serverTimestamp,
   Timestamp,
   DocumentData,
@@ -42,7 +43,8 @@ type Lead = {
   package?: string | null;
 
   status: LeadStatus;
-  source?: "direct-enrol" | "contact";
+  source?: "direct-enrol" | "contact" | "manual";
+  sourceDetail?: string | null;
 
   assignedTutorId?: string | null;
   assignedTutorName?: string | null;
@@ -72,6 +74,41 @@ function asNullableString(v: unknown): string | null {
   return typeof v === "string" ? v : null;
 }
 
+function InfoRow({ label, value }: { label: string; value?: string | null }) {
+  if (!value) return null;
+  return (
+    <div className="flex gap-2 text-sm">
+      <span className="w-28 shrink-0 text-xs font-semibold text-[color:var(--muted)]">{label}</span>
+      <span className="text-[color:var(--ink)]">{value}</span>
+    </div>
+  );
+}
+
+function SourceBadge({ source }: { source?: string | null }) {
+  if (source === "contact") {
+    return (
+      <span className="inline-flex items-center rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800 ring-1 ring-sky-200">
+        Inquiry
+      </span>
+    );
+  }
+  if (source === "direct-enrol") {
+    return (
+      <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800 ring-1 ring-emerald-200">
+        Enrolment
+      </span>
+    );
+  }
+  if (source === "manual") {
+    return (
+      <span className="inline-flex items-center rounded-full bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-700 ring-1 ring-gray-200">
+        Manual
+      </span>
+    );
+  }
+  return null;
+}
+
 export default function LeadDetailPage() {
   const params = useParams<{ leadId: string }>();
   const leadId = params.leadId;
@@ -79,6 +116,7 @@ export default function LeadDetailPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const [lead, setLead] = useState<Lead | null>(null);
   const [tutors, setTutors] = useState<TutorOption[]>([]);
@@ -86,7 +124,6 @@ export default function LeadDetailPage() {
   const [status, setStatus] = useState<LeadStatus>("new");
   const [assignedTutorId, setAssignedTutorId] = useState<string>("");
 
-  // Load lead
   useEffect(() => {
     async function loadLead() {
       setLoading(true);
@@ -133,7 +170,13 @@ export default function LeadDetailPage() {
               ? data.status
               : "new",
 
-          source: data.source === "contact" ? "contact" : "direct-enrol",
+          source:
+            data.source === "contact"
+              ? "contact"
+              : data.source === "manual"
+              ? "manual"
+              : "direct-enrol",
+          sourceDetail: asNullableString(data.sourceDetail),
 
           assignedTutorId: asNullableString(data.assignedTutorId) ?? asNullableString(data.claimedTutorId),
           assignedTutorName: asNullableString(data.assignedTutorName) ?? asNullableString(data.claimedTutorName),
@@ -155,7 +198,6 @@ export default function LeadDetailPage() {
     loadLead();
   }, [leadId]);
 
-  // Load tutors (from roles)
   useEffect(() => {
     async function loadTutors() {
       try {
@@ -200,7 +242,19 @@ export default function LeadDetailPage() {
     return tutors.find((t) => t.uid === assignedTutorId) ?? null;
   }, [assignedTutorId, tutors]);
 
-  // ✅ FIXED: Save changes now upserts students/clients when assigning
+  async function deleteLead() {
+    if (!window.confirm("Delete this lead? This cannot be undone.")) return;
+    setDeleting(true);
+    try {
+      await deleteDoc(doc(db, "leads", leadId));
+      router.push("/hub/admin/leads");
+    } catch (e) {
+      console.error(e);
+      alert("Delete failed. Check console.");
+      setDeleting(false);
+    }
+  }
+
   async function saveChanges() {
     if (!lead) return;
     setSaving(true);
@@ -223,7 +277,6 @@ export default function LeadDetailPage() {
 
         if (status === "new" || status === "contacted") patch.status = "assigned";
 
-        // deterministic IDs for MVP (keeps everything aligned)
         const clientId = leadId;
         const studentId = leadId;
 
@@ -345,10 +398,16 @@ export default function LeadDetailPage() {
             <h1 className="text-3xl font-semibold text-[color:var(--ink)]">
               {lead.studentName} · {lead.yearLevel}
             </h1>
-            <p className="text-sm text-[color:var(--muted)]">
-              Parent: <span className="font-semibold text-[color:var(--ink)]">{lead.parentName}</span> ·{" "}
-              <span className="font-semibold text-[color:var(--brand)]">{lead.parentEmail}</span>
-            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm text-[color:var(--muted)]">
+                Parent: <span className="font-semibold text-[color:var(--ink)]">{lead.parentName}</span> ·{" "}
+                <span className="font-semibold text-[color:var(--brand)]">{lead.parentEmail}</span>
+              </p>
+              <SourceBadge source={lead.source} />
+              {lead.source === "manual" && lead.sourceDetail && (
+                <span className="text-xs text-[color:var(--muted)]">via {lead.sourceDetail}</span>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -361,7 +420,53 @@ export default function LeadDetailPage() {
           </div>
         </header>
 
-        {/* Controls */}
+        {/* Enrolment details card */}
+        <section className="mb-6 rounded-3xl border border-[color:var(--ring)] bg-[color:var(--card)] p-6 shadow-sm">
+          <h2 className="mb-4 text-lg font-semibold text-[color:var(--ink)]">Enrolment details</h2>
+          <div className="grid gap-6 sm:grid-cols-2">
+
+            {/* Parent */}
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">Parent</p>
+              <InfoRow label="Name" value={lead.parentName} />
+              <InfoRow label="Email" value={lead.parentEmail} />
+              <InfoRow label="Phone" value={lead.parentPhone} />
+            </div>
+
+            {/* Student */}
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">Student</p>
+              <InfoRow label="Name" value={lead.studentName} />
+              <InfoRow label="Year level" value={lead.yearLevel} />
+              <InfoRow label="School" value={lead.school} />
+            </div>
+
+            {/* Learning */}
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">Learning</p>
+              <InfoRow label="Subjects" value={lead.subjects?.length ? lead.subjects.join(", ") : null} />
+              <InfoRow
+                label="Mode"
+                value={lead.mode === "in-home" ? "In-home" : lead.mode === "online" ? "Online" : null}
+              />
+              <InfoRow label="Suburb" value={lead.suburb} />
+              <InfoRow label="Package" value={lead.package} />
+            </div>
+
+            {/* Context */}
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">Context</p>
+              <InfoRow
+                label="Availability"
+                value={lead.availabilityBlocks?.length ? lead.availabilityBlocks.join(", ") : null}
+              />
+              <InfoRow label="Goals" value={lead.goals} />
+              <InfoRow label="Challenges" value={lead.challenges} />
+            </div>
+          </div>
+        </section>
+
+        {/* Admin actions */}
         <section className="rounded-3xl border border-[color:var(--ring)] bg-[color:var(--card)] p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-[color:var(--ink)]">Admin actions</h2>
 
@@ -422,6 +527,15 @@ export default function LeadDetailPage() {
             >
               Email parent
             </a>
+
+            <button
+              type="button"
+              onClick={deleteLead}
+              disabled={deleting}
+              className="rounded-xl border border-rose-200 bg-rose-50 px-5 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-60"
+            >
+              {deleting ? "Deleting…" : "Delete lead"}
+            </button>
           </div>
         </section>
       </div>

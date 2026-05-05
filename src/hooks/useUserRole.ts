@@ -13,7 +13,7 @@ import { auth, db } from "@/lib/firebase";
  */
 const ADMIN_EMAILS = [
   "lily.studyroom@gmail.com", // ← replace this with your real email
-  // "another-admin@example.com", // you can add more later if needed
+  "contact.studyroomaustralia@gmail.com", // "another-admin@example.com", // you can add more later if needed
 ] as const;
 
 type Role = "student" | "tutor" | "tutor_pending" | "admin";

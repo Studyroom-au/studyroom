@@ -306,6 +306,10 @@ service cloud.firestore {
     }
 
     // ---------------- INVOICES ----------------
+    // NOTE: Invoice writes (create/update) are performed server-side via the
+    // Firebase Admin SDK (invoiceEngine.ts, serverBilling.ts) which bypasses
+    // these client security rules entirely. The `allow create, update, delete: if false`
+    // rule below only applies to client SDK calls — Admin SDK is always permitted.
     match /invoices/{invoiceId} {
       allow read, write: if isAdmin();
       allow read: if isTutor() && tutorOwnerMatch(resource.data);

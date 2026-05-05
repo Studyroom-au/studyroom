@@ -19,7 +19,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   useEffect(() => setMounted(true), []);
   useEffect(() => { setMobileOpen(false); }, [pathname]);
 
-  // Must be logged in
   useEffect(() => {
     const off = onAuthStateChanged(auth, (u) => {
       if (!u) router.replace("/");
@@ -27,7 +26,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return () => off();
   }, [router]);
 
-  // Must be admin
   useEffect(() => {
     if (!mounted) return;
     if (role === null) return;
@@ -44,8 +42,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     " bg-[color:var(--brand)] text-[color:var(--brand-contrast)]";
 
   const isAdminHome = pathname === "/hub/admin";
-  const isMigration = pathname === "/hub/admin/students/add-existing";
+  const isLeads = pathname.startsWith("/hub/admin/leads");
+  const isClients = pathname.startsWith("/hub/admin/clients");
+  const isAddStudent = pathname === "/hub/admin/students/add-existing";
   const isBlog = pathname.startsWith("/hub/admin/blog");
+  const isPackages = pathname.startsWith("/hub/admin/packages");
 
   async function handleSignOut() {
     try {
@@ -56,6 +57,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   const roleLabel = useMemo(() => (role === "admin" ? "Admin" : "User"), [role]);
+
+  const navItems = [
+    { label: "Hub", active: false, path: "/hub" },
+    { label: "Admin Home", active: isAdminHome, path: "/hub/admin" },
+    { label: "Leads", active: isLeads, path: "/hub/admin/leads" },
+    { label: "Clients", active: isClients, path: "/hub/admin/clients" },
+    { label: "Add Student", active: isAddStudent, path: "/hub/admin/students/add-existing" },
+    { label: "Blog", active: isBlog, path: "/hub/admin/blog" },
+    { label: "Package Alerts", active: isPackages, path: "/hub/admin/packages" },
+  ];
 
   if (!mounted) return <div className="min-h-screen" />;
   if (role !== "admin") return <div className="min-h-screen" />;
@@ -74,7 +85,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             }}
           >
             <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 md:px-5">
-              {/* Logo — improved style, no box around image */}
               <Link href="/">
                 <Image
                   src="/logo.png"
@@ -87,12 +97,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </Link>
 
               <div className="flex items-center gap-2">
-                {/* Desktop nav — hidden on mobile */}
+                {/* Desktop nav */}
                 <nav className="hidden items-center gap-2 md:flex">
-                  <button type="button" className={navInactive} onClick={() => router.push("/hub")}>Hub</button>
-                  <button type="button" className={isAdminHome ? navActive : navInactive} onClick={() => router.push("/hub/admin")}>Admin Home</button>
-                  <button type="button" className={isMigration ? navActive : navInactive} onClick={() => router.push("/hub/admin/students/add-existing")}>Add Existing Student</button>
-                  <button type="button" className={isBlog ? navActive : navInactive} onClick={() => router.push("/hub/admin/blog")}>Blog</button>
+                  {navItems.map((item) => (
+                    <button
+                      key={item.label}
+                      type="button"
+                      className={item.active ? navActive : navInactive}
+                      onClick={() => router.push(item.path)}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
                 </nav>
 
                 <span className="hidden items-center rounded-xl border border-[color:var(--ring)] bg-white px-3 py-1 text-xs font-semibold text-[color:var(--muted)] md:inline-flex">
@@ -118,16 +134,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 </button>
               </div>
             </div>
+
             {/* Mobile dropdown */}
             {mobileOpen && (
               <div className="md:hidden" style={{ borderTop: "1px solid rgba(0,0,0,0.06)", padding: "10px 16px 14px" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12 }}>
-                  {[
-                    { label: "Hub", active: false, path: "/hub" },
-                    { label: "Admin Home", active: isAdminHome, path: "/hub/admin" },
-                    { label: "Add Existing Student", active: isMigration, path: "/hub/admin/students/add-existing" },
-                    { label: "Blog", active: isBlog, path: "/hub/admin/blog" },
-                  ].map(item => (
+                  {navItems.map((item) => (
                     <button
                       key={item.label}
                       type="button"

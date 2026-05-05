@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
+import { Timestamp } from "firebase-admin/firestore";
 import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
 import { applySessionAction } from "@/lib/studyroom/serverBilling";
+import { generateFamilyInvoice } from "@/lib/studyroom/invoiceEngine";
+import type { Firestore } from "firebase-admin/firestore";
 
 function getBearerToken(req: Request) {
   const h = req.headers.get("authorization") || "";
@@ -24,6 +27,76 @@ async function requireTutorOrAdmin(uid: string, email?: string | null) {
   const role = roleSnap.exists ? String(roleSnap.data()?.role ?? "student") : "student";
   if (role !== "tutor" && role !== "admin") throw new Error("Not permitted.");
   return { role: role as "tutor" | "admin" };
+}
+
+/** Derive "YYYY-MM-DD" dateKey from a Unix-ms timestamp in Brisbane timezone (UTC+10, no DST). */
+function toBrisbaneDateKey(ms: number): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Australia/Brisbane",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(ms));
+}
+
+async function checkAndMaybeInvoice(sessionId: string, db: Firestore) {
+  try {
+    const sessionSnap = await db.collection("sessions").doc(sessionId).get();
+    if (!sessionSnap.exists) return;
+
+    const session = sessionSnap.data() as {
+      clientId?: string | null;
+      startAt?: FirebaseFirestore.Timestamp | null;
+      status?: string | null;
+    };
+
+    const clientId = String(session.clientId ?? "");
+    if (!clientId) return;
+
+    const startAtMs = (session.startAt as FirebaseFirestore.Timestamp | undefined)?.toMillis?.() ?? 0;
+    if (!startAtMs) return;
+
+    const dateKey = toBrisbaneDateKey(startAtMs);
+
+    // Skip if a family invoice already exists for this clientId + dateKey
+    const existingSnap = await db.collection("invoices")
+      .where("clientId", "==", clientId)
+      .where("dateKey", "==", dateKey)
+      .limit(1)
+      .get();
+    if (!existingSnap.empty) return;
+
+    // Compute Brisbane day boundaries (UTC+10)
+    const [year, month, day] = dateKey.split("-").map(Number);
+    const brisbaneMidnightMs = Date.UTC(year, month - 1, day) - 10 * 3600 * 1000;
+    const startOfDay = Timestamp.fromMillis(brisbaneMidnightMs);
+    const endOfDay = Timestamp.fromMillis(brisbaneMidnightMs + 24 * 3600 * 1000);
+
+    const allSessionsSnap = await db.collection("sessions")
+      .where("clientId", "==", clientId)
+      .where("startAt", ">=", startOfDay)
+      .where("startAt", "<", endOfDay)
+      .get();
+
+    const allSessions = allSessionsSnap.docs.map((d) => d.data() as { status?: string | null });
+
+    const nonCancelledSessions = allSessions.filter((s) => {
+      const st = String(s.status ?? "").toLowerCase();
+      return !st.includes("cancel") && st !== "no_show";
+    });
+
+    if (nonCancelledSessions.length === 0) return;
+
+    const allCompleted = nonCancelledSessions.every((s) =>
+      String(s.status ?? "").toLowerCase() === "completed"
+    );
+
+    if (!allCompleted) return;
+
+    await generateFamilyInvoice({ clientId, dateKey, triggeredBy: "completion" });
+  } catch (err) {
+    console.error("[sessions/status] checkAndMaybeInvoice failed:", err);
+  }
 }
 
 export async function POST(req: Request) {
@@ -51,7 +124,7 @@ export async function POST(req: Request) {
     const secret = process.env.INTERNAL_API_SECRET;
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
 
-    // Fire-and-forget Xero push when an invoice is created
+    // Fire-and-forget Xero push when an individual invoice is created
     if (result.billingOutcome === "invoice" && result.invoiceId && secret) {
       fetch(`${baseUrl}/api/billing/push-invoice-to-xero`, {
         method: "POST",
@@ -71,6 +144,16 @@ export async function POST(req: Request) {
           tutorNotes: "",
         }),
       }).catch((err) => console.error("[sessions/status] recap email failed:", err));
+    }
+
+    // Fire-and-forget family invoice check when a session is completed
+    if (action === "complete") {
+      const db = getAdminDb();
+      if (db) {
+        checkAndMaybeInvoice(sessionId, db).catch((err) =>
+          console.error("[sessions/status] checkAndMaybeInvoice error:", err)
+        );
+      }
     }
 
     return NextResponse.json(result);

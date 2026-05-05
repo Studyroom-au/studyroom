@@ -1,303 +1,565 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   collection,
+  deleteDoc,
+  doc,
   onSnapshot,
   orderBy,
   query,
+  serverTimestamp,
+  setDoc,
+  Timestamp,
   updateDoc,
-  doc,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 
-type PromoCode = {
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+type PromoType =
+  | "free_trial"
+  | "percentage_discount"
+  | "flat_discount"
+  | "full_access"
+  | "package_unlock";
+
+type DiscountAppliesTo = "per_session" | "per_month";
+type PackageTier = "CASUAL" | "PACKAGE_5" | "PACKAGE_12";
+
+type PromoCodeDoc = {
   id: string;
   code: string;
-  trialDays: number;
-  maxUses: number | null;
-  usedCount: number;
-  expiresAt: { toDate?: () => Date } | null;
+  type?: PromoType;
+  durationDays?: number | null;
+  discountPercent?: number | null;
+  discountCents?: number | null;
+  discountAppliesTo?: DiscountAppliesTo | null;
+  packageTier?: PackageTier | null;
+  description?: string;
+  maxRedemptions?: number | null;
+  redemptionCount?: number;
+  expiresAt?: Timestamp | null;
   active: boolean;
-  createdAt: { toDate?: () => Date } | null;
-  createdBy: string;
+  createdAt?: Timestamp | null;
+  createdBy?: string;
+  // legacy fields from old schema
+  trialDays?: number;
+  maxUses?: number | null;
+  usedCount?: number;
 };
 
-const lbl: React.CSSProperties = {
-  fontSize: 10,
-  fontWeight: 700,
-  color: "#748398",
-  textTransform: "uppercase",
-  letterSpacing: "0.1em",
-  marginBottom: 5,
-  display: "block",
-};
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const inp: React.CSSProperties = {
-  width: "100%",
-  border: "1.5px solid #e4eaef",
-  borderRadius: 10,
-  padding: "9px 12px",
-  fontSize: 13,
-  fontFamily: "inherit",
-  color: "#1d2428",
-  outline: "none",
-  background: "#fafbfc",
-  boxSizing: "border-box",
-};
+function generateCode(): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+}
+
+function promoTypeLabel(type?: PromoType): string {
+  switch (type) {
+    case "free_trial": return "Free trial";
+    case "percentage_discount": return "% Discount";
+    case "flat_discount": return "Flat discount";
+    case "full_access": return "Full access";
+    case "package_unlock": return "Package unlock";
+    default: return "Legacy trial";
+  }
+}
+
+function promoDetails(c: PromoCodeDoc): string {
+  if (!c.type) {
+    return `Free access — ${c.trialDays ?? "?"} days (legacy)`;
+  }
+  switch (c.type) {
+    case "free_trial":
+      return `Free access — ${c.durationDays ?? "?"} days`;
+    case "percentage_discount":
+      return `${c.discountPercent ?? "?"}% off for ${c.durationDays ?? "?"} days`;
+    case "flat_discount": {
+      const dollars = c.discountCents != null ? `$${(c.discountCents / 100).toFixed(0)}` : "$?";
+      const applies = c.discountAppliesTo === "per_month" ? "per month" : "per session";
+      return `${dollars} off ${applies} for ${c.durationDays ?? "?"} days`;
+    }
+    case "full_access":
+      return "Full access — no expiry ⚠️";
+    case "package_unlock": {
+      const tier =
+        c.packageTier === "PACKAGE_5" ? "Package 5"
+        : c.packageTier === "PACKAGE_12" ? "Package 12"
+        : c.packageTier === "CASUAL" ? "Casual"
+        : "?";
+      return `${tier} — ${c.durationDays ?? "?"} days`;
+    }
+    default:
+      return "—";
+  }
+}
+
+function formatExpiry(ts?: Timestamp | null): string {
+  if (!ts) return "—";
+  if (typeof ts.toDate === "function") return ts.toDate().toLocaleDateString("en-AU");
+  return "—";
+}
+
+// ─── Field component ─────────────────────────────────────────────────────────
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className="text-xs font-semibold text-[color:var(--muted)]">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+const inputCls =
+  "w-full rounded-xl border border-[color:var(--ring)] bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[color:var(--brand)]/30";
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AdminPromoPage() {
   const router = useRouter();
   const [uid, setUid] = useState<string | null>(null);
-  const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
-  const [newCode, setNewCode] = useState("");
-  const [newMaxUses, setNewMaxUses] = useState<number | "">("");
-  const [newExpiry, setNewExpiry] = useState("");
-  const [creatingCode, setCreatingCode] = useState(false);
+  const [promoCodes, setPromoCodes] = useState<PromoCodeDoc[]>([]);
+
+  // Form state
+  const [code, setCode] = useState(() => generateCode());
+  const [promoType, setPromoType] = useState<PromoType>("free_trial");
+  const [durationDays, setDurationDays] = useState<number | "">(14);
+  const [discountPercent, setDiscountPercent] = useState<number | "">(25);
+  const [discountDollars, setDiscountDollars] = useState<number | "">(10);
+  const [discountAppliesTo, setDiscountAppliesTo] = useState<DiscountAppliesTo>("per_session");
+  const [packageTier, setPackageTier] = useState<PackageTier>("CASUAL");
+  const [description, setDescription] = useState("");
+  const [maxRedemptions, setMaxRedemptions] = useState<number | "">("");
+  const [expiryDate, setExpiryDate] = useState("");
+  const [active, setActive] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubAuth = auth.onAuthStateChanged((u) => {
+    const off = auth.onAuthStateChanged((u) => {
       if (!u) { router.replace("/"); return; }
       setUid(u.uid);
     });
-    return () => unsubAuth();
+    return () => off();
   }, [router]);
 
   useEffect(() => {
     if (!uid) return;
     const unsub = onSnapshot(
       query(collection(db, "promoCodes"), orderBy("createdAt", "desc")),
-      snap =>
-        setPromoCodes(
-          snap.docs.map(d => ({ id: d.id, ...d.data() })) as PromoCode[]
-        )
+      (snap) => setPromoCodes(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as PromoCodeDoc)
+      )
     );
     return () => unsub();
   }, [uid]);
 
-  async function handleCreateCode() {
-    if (!newCode.trim()) { setError("Please enter a code."); return; }
-    setCreatingCode(true);
+  function resetForm() {
+    setCode(generateCode());
+    setPromoType("free_trial");
+    setDurationDays(14);
+    setDiscountPercent(25);
+    setDiscountDollars(10);
+    setDiscountAppliesTo("per_session");
+    setPackageTier("CASUAL");
+    setDescription("");
+    setMaxRedemptions("");
+    setExpiryDate("");
+    setActive(true);
+  }
+
+  async function handleCreate() {
+    const trimmedCode = code.trim().toUpperCase();
+    if (!trimmedCode) { setError("Code is required."); return; }
+
+    setSaving(true);
     setError(null);
     setSuccess(null);
 
     try {
       const u = auth.currentUser;
-      if (!u) return;
-      const idToken = await u.getIdToken();
+      if (!u) { setError("Not signed in."); return; }
 
-      const res = await fetch("/api/admin/promo/create", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({
-          code: newCode.trim().toUpperCase(),
-          trialDays: 7,
-          maxUses: newMaxUses !== "" ? Number(newMaxUses) : null,
-          expiresAt: newExpiry || null,
-        }),
-      });
+      let expiresAt: Timestamp | null = null;
+      if (expiryDate) {
+        expiresAt = Timestamp.fromDate(new Date(expiryDate + "T00:00:00"));
+      }
 
-      const data = await res.json() as { ok?: boolean; error?: string };
-      if (!data.ok) { setError(data.error ?? "Failed to create code."); return; }
+      const payload: Omit<PromoCodeDoc, "id"> = {
+        code: trimmedCode,
+        type: promoType,
+        durationDays: promoType === "full_access" ? null : (durationDays === "" ? null : Number(durationDays)),
+        discountPercent: promoType === "percentage_discount" ? (discountPercent === "" ? null : Number(discountPercent)) : null,
+        discountCents: promoType === "flat_discount" ? (discountDollars === "" ? null : Math.round(Number(discountDollars) * 100)) : null,
+        discountAppliesTo: promoType === "flat_discount" ? discountAppliesTo : null,
+        packageTier: promoType === "package_unlock" ? packageTier : null,
+        description: description.trim(),
+        maxRedemptions: maxRedemptions === "" ? null : Number(maxRedemptions),
+        redemptionCount: 0,
+        expiresAt,
+        active,
+        createdAt: serverTimestamp() as Timestamp,
+        createdBy: u.uid,
+      };
 
-      setNewCode("");
-      setNewMaxUses("");
-      setNewExpiry("");
-      setSuccess("Promo code created.");
-    } catch {
-      setError("Something went wrong.");
+      await setDoc(doc(db, "promoCodes", trimmedCode), payload);
+      setSuccess(`Promo code "${trimmedCode}" created.`);
+      resetForm();
+    } catch (e) {
+      console.error(e);
+      setError(e instanceof Error ? e.message : "Failed to create code.");
     } finally {
-      setCreatingCode(false);
+      setSaving(false);
     }
   }
 
-  async function handleToggleCode(codeId: string, active: boolean) {
+  async function handleToggleActive(codeId: string, newActive: boolean) {
     try {
-      await updateDoc(doc(db, "promoCodes", codeId), { active });
+      await updateDoc(doc(db, "promoCodes", codeId), { active: newActive });
     } catch {
       setError("Failed to update code.");
     }
   }
 
+  async function handleDelete(codeId: string, codeStr: string) {
+    if (!window.confirm(`Delete promo code "${codeStr}"? This cannot be undone.`)) return;
+    setDeletingId(codeId);
+    try {
+      await deleteDoc(doc(db, "promoCodes", codeId));
+    } catch {
+      setError("Failed to delete code.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   return (
-    <div style={{ paddingBottom: 100 }}>
-      {/* Page header */}
-      <div style={{ marginBottom: 28 }}>
-        <div style={{
-          fontSize: 10, fontWeight: 600, letterSpacing: "0.18em",
-          textTransform: "uppercase", color: "#82977e", marginBottom: 6,
-        }}>
-          Studyroom · Admin
-        </div>
-        <h1 style={{
-          fontSize: 36, fontWeight: 700, color: "#1a1f24", margin: 0,
-          letterSpacing: "-0.02em", lineHeight: 1.1,
-        }}>
-          Promo Codes
-        </h1>
-        <p style={{ fontSize: 14, color: "#6b7280", marginTop: 6, marginBottom: 0 }}>
-          Create and manage 7-day trial access codes for students
-        </p>
-      </div>
+    <div className="app-bg min-h-[100svh]">
+      <div className="mx-auto max-w-5xl space-y-6 px-4 py-8">
 
-      {/* Feedback messages */}
-      {error && (
-        <div style={{
-          fontSize: 12, color: "#c0445e", background: "#fce8ee",
-          borderRadius: 9, padding: "8px 12px", marginBottom: 14,
-        }}>
-          {error}
-        </div>
-      )}
-      {success && (
-        <div style={{
-          fontSize: 12, color: "#2d5a24", background: "#d4edcc",
-          borderRadius: 9, padding: "8px 12px", marginBottom: 14,
-        }}>
-          {success}
-        </div>
-      )}
+        {/* Header */}
+        <header className="space-y-1">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
+            Studyroom · Admin
+          </p>
+          <h1 className="text-3xl font-semibold text-[color:var(--ink)]">Promo Codes</h1>
+          <p className="text-sm text-[color:var(--muted)]">
+            Create and manage discount codes, free trials, and package unlocks.
+          </p>
+        </header>
 
-      {/* Create new code */}
-      <div style={{
-        background: "#fff", borderRadius: 16, padding: "18px 18px",
-        border: "1px solid rgba(0,0,0,0.06)", marginBottom: 14,
-      }}>
-        <div style={{
-          fontSize: 10, fontWeight: 700, letterSpacing: "0.18em",
-          textTransform: "uppercase", color: "#748398", marginBottom: 14,
-          display: "flex", alignItems: "center", gap: 10,
-        }}>
-          <span>Create new code</span>
-          <div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.07)" }} />
-        </div>
-
-        <div style={{
-          display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 12,
-        }}>
-          <div>
-            <label style={lbl}>Code</label>
-            <input
-              value={newCode}
-              onChange={e => { setNewCode(e.target.value.toUpperCase()); setError(null); setSuccess(null); }}
-              placeholder="STUDYROOM7"
-              style={{ ...inp, fontFamily: "monospace", letterSpacing: "0.08em" }}
-            />
+        {/* Feedback */}
+        {error && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
           </div>
-          <div>
-            <label style={lbl}>Max uses (blank = unlimited)</label>
-            <input
-              type="number"
-              value={newMaxUses}
-              onChange={e => setNewMaxUses(e.target.value === "" ? "" : Number(e.target.value))}
-              placeholder="e.g. 50"
-              style={inp}
-            />
+        )}
+        {success && (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            {success}
           </div>
-          <div>
-            <label style={lbl}>Expires (optional)</label>
-            <input
-              type="date"
-              value={newExpiry}
-              onChange={e => setNewExpiry(e.target.value)}
-              style={inp}
-            />
+        )}
+
+        {/* Create form */}
+        <section className="rounded-3xl border border-[color:var(--ring)] bg-[color:var(--card)] p-6 shadow-sm">
+          <h2 className="mb-5 text-base font-semibold text-[color:var(--ink)]">Create new code</h2>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+
+            {/* Code + type — always visible */}
+            <Field label="Code (auto-generated, editable)">
+              <input
+                value={code}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
+                placeholder="ABC123"
+                className={inputCls + " font-mono tracking-widest"}
+              />
+            </Field>
+
+            <Field label="Promo type">
+              <select
+                aria-label="Promo type"
+                value={promoType}
+                onChange={(e) => setPromoType(e.target.value as PromoType)}
+                className={inputCls}
+              >
+                <option value="free_trial">Free trial — full access for N days</option>
+                <option value="percentage_discount">Percentage discount — X% off for N days</option>
+                <option value="flat_discount">Flat discount — $X off per session or month</option>
+                <option value="full_access">
+                  Full access — permanent (no expiry) ⚠️
+                </option>
+                <option value="package_unlock">Package unlock — unlock a package tier</option>
+              </select>
+            </Field>
+
+            {/* Type-specific fields */}
+            {promoType === "full_access" && (
+              <div className="sm:col-span-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                ⚠️ <strong>Full access — permanent</strong> grants indefinite platform access with no expiry. Use sparingly.
+              </div>
+            )}
+
+            {promoType === "percentage_discount" && (
+              <Field label="Discount (%)">
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={discountPercent}
+                  onChange={(e) => setDiscountPercent(e.target.value === "" ? "" : Number(e.target.value))}
+                  placeholder="25"
+                  className={inputCls}
+                />
+              </Field>
+            )}
+
+            {promoType === "flat_discount" && (
+              <>
+                <Field label="Discount amount ($)">
+                  <input
+                    type="number"
+                    min={1}
+                    step={0.01}
+                    value={discountDollars}
+                    onChange={(e) => setDiscountDollars(e.target.value === "" ? "" : Number(e.target.value))}
+                    placeholder="10"
+                    className={inputCls}
+                  />
+                </Field>
+                <Field label="Applies to">
+                  <select
+                    aria-label="Applies to"
+                    value={discountAppliesTo}
+                    onChange={(e) => setDiscountAppliesTo(e.target.value as DiscountAppliesTo)}
+                    className={inputCls}
+                  >
+                    <option value="per_session">Per session</option>
+                    <option value="per_month">Per month</option>
+                  </select>
+                </Field>
+              </>
+            )}
+
+            {promoType === "package_unlock" && (
+              <Field label="Package tier">
+                <select
+                  aria-label="Package tier"
+                  value={packageTier}
+                  onChange={(e) => setPackageTier(e.target.value as PackageTier)}
+                  className={inputCls}
+                >
+                  <option value="CASUAL">Casual</option>
+                  <option value="PACKAGE_5">Package 5</option>
+                  <option value="PACKAGE_12">Package 12</option>
+                </select>
+              </Field>
+            )}
+
+            {promoType !== "full_access" && (
+              <Field label="Duration (days)">
+                <input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={durationDays}
+                  onChange={(e) => setDurationDays(e.target.value === "" ? "" : Number(e.target.value))}
+                  placeholder="14"
+                  className={inputCls}
+                />
+              </Field>
+            )}
+
+            {/* Common fields */}
+            <Field label="Description / internal note">
+              <input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="E.g. Facebook ad campaign April 2026"
+                className={inputCls}
+              />
+            </Field>
+
+            <Field label="Max redemptions (blank = unlimited)">
+              <input
+                type="number"
+                min={1}
+                value={maxRedemptions}
+                onChange={(e) => setMaxRedemptions(e.target.value === "" ? "" : Number(e.target.value))}
+                placeholder="50"
+                className={inputCls}
+              />
+            </Field>
+
+            <Field label="Expiry date (optional)">
+              <input
+                type="date"
+                aria-label="Expiry date"
+                value={expiryDate}
+                onChange={(e) => setExpiryDate(e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+
+            <Field label="Active">
+              <div className="flex items-center gap-3 py-2">
+                <button
+                  type="button"
+                  aria-label={active ? "Deactivate" : "Activate"}
+                  onClick={() => setActive((v) => !v)}
+                  className={
+                    "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none " +
+                    (active ? "bg-[color:var(--brand)]" : "bg-gray-200")
+                  }
+                >
+                  <span
+                    className={
+                      "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition-transform " +
+                      (active ? "translate-x-5" : "translate-x-0")
+                    }
+                  />
+                </button>
+                <span className="text-sm text-[color:var(--muted)]">{active ? "Active" : "Inactive"}</span>
+              </div>
+            </Field>
           </div>
-        </div>
 
-        <button
-          onClick={handleCreateCode}
-          disabled={creatingCode}
-          style={{
-            background: "#456071", color: "#fff", border: "none",
-            borderRadius: 10, padding: "8px 20px", fontSize: 12,
-            fontWeight: 700, cursor: creatingCode ? "not-allowed" : "pointer",
-            fontFamily: "inherit", opacity: creatingCode ? 0.7 : 1,
-          }}
-        >
-          {creatingCode ? "Creating..." : "Create code"}
-        </button>
-      </div>
-
-      {/* Existing codes */}
-      <div style={{
-        fontSize: 10, fontWeight: 700, letterSpacing: "0.18em",
-        textTransform: "uppercase", color: "#748398", marginBottom: 10,
-        display: "flex", alignItems: "center", gap: 10,
-      }}>
-        <span>Existing codes</span>
-        <div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.07)" }} />
-      </div>
-
-      {promoCodes.length === 0 && (
-        <div style={{ fontSize: 13, color: "#8a96a3", padding: "12px 0" }}>
-          No promo codes yet.
-        </div>
-      )}
-
-      {promoCodes.map(c => (
-        <div key={c.id} style={{
-          background: "#fff", borderRadius: 14, padding: "11px 16px",
-          border: "1px solid rgba(0,0,0,0.06)", marginBottom: 8,
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-        }}>
-          <div>
-            <div style={{
-              fontSize: 13, fontWeight: 700, color: "#1d2428",
-              fontFamily: "monospace", letterSpacing: "0.08em",
-            }}>
-              {c.code}
-            </div>
-            <div style={{ fontSize: 11, color: "#8a96a3", marginTop: 2 }}>
-              {c.trialDays} days ·{" "}
-              {c.maxUses
-                ? `${c.usedCount ?? 0}/${c.maxUses} uses`
-                : `${c.usedCount ?? 0} uses (unlimited)`}
-              {c.expiresAt
-                ? ` · expires ${new Date(c.expiresAt.toDate?.() ?? c.expiresAt as unknown as Date).toLocaleDateString("en-AU")}`
-                : ""}
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <span style={{
-              fontSize: 10, fontWeight: 600, padding: "2px 9px", borderRadius: 20,
-              background: c.active ? "#d4edcc" : "#f4f7f9",
-              color: c.active ? "#2d5a24" : "#748398",
-            }}>
-              {c.active ? "Active" : "Inactive"}
-            </span>
+          <div className="mt-6 flex flex-wrap gap-3">
             <button
-              onClick={() => handleToggleCode(c.id, !c.active)}
-              style={{
-                background: "#f4f7f9", color: "#456071", border: "none",
-                borderRadius: 8, padding: "4px 12px", fontSize: 11,
-                fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
-              }}
+              type="button"
+              onClick={handleCreate}
+              disabled={saving}
+              className={"brand-cta rounded-xl px-6 py-2 text-sm font-semibold shadow-sm " + (saving ? "opacity-60 cursor-not-allowed" : "")}
             >
-              {c.active ? "Deactivate" : "Activate"}
+              {saving ? "Creating…" : "Create code"}
+            </button>
+            <button
+              type="button"
+              onClick={resetForm}
+              className="rounded-xl border border-[color:var(--ring)] bg-white px-5 py-2 text-sm font-semibold text-[color:var(--muted)] transition hover:bg-[#d6e5e3]/40"
+            >
+              Reset
             </button>
           </div>
-        </div>
-      ))}
+        </section>
 
-      {/* Back */}
-      <button
-        type="button"
-        onClick={() => router.push("/hub/admin")}
-        style={{
-          background: "white", color: "#456071", border: "1.5px solid #b8cad6",
-          borderRadius: 12, padding: "10px 20px", fontSize: 13, fontWeight: 500,
-          cursor: "pointer", fontFamily: "inherit", marginTop: 16,
-        }}
-      >
-        ← Back to Admin
-      </button>
+        {/* Existing codes table */}
+        <section className="rounded-3xl border border-[color:var(--ring)] bg-[color:var(--card)] shadow-sm">
+          <div className="border-b border-[color:var(--ring)] px-5 py-4">
+            <h2 className="text-base font-semibold text-[color:var(--ink)]">
+              Existing codes{promoCodes.length > 0 ? ` (${promoCodes.length})` : ""}
+            </h2>
+          </div>
+
+          {promoCodes.length === 0 ? (
+            <div className="p-6 text-sm text-[color:var(--muted)]">No promo codes yet.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full border-separate border-spacing-0 text-sm">
+                <thead>
+                  <tr className="text-left text-xs font-semibold text-[color:var(--muted)]">
+                    <th className="px-4 py-3">Code</th>
+                    <th className="px-4 py-3">Type</th>
+                    <th className="px-4 py-3">Details</th>
+                    <th className="px-4 py-3 whitespace-nowrap">Max uses</th>
+                    <th className="px-4 py-3">Redeemed</th>
+                    <th className="px-4 py-3">Expires</th>
+                    <th className="px-4 py-3">Active</th>
+                    <th className="px-4 py-3">Delete</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {promoCodes.map((c) => {
+                    const redeemed = c.redemptionCount ?? c.usedCount ?? 0;
+                    const maxUses = c.maxRedemptions ?? c.maxUses ?? null;
+                    return (
+                      <tr key={c.id} className="border-t border-[color:var(--ring)] align-middle">
+                        {/* Code */}
+                        <td className="px-4 py-3">
+                          <span className="font-mono text-sm font-bold tracking-widest text-[color:var(--ink)]">
+                            {c.code}
+                          </span>
+                          {c.description ? (
+                            <div className="mt-0.5 text-xs text-[color:var(--muted)]">{c.description}</div>
+                          ) : null}
+                        </td>
+
+                        {/* Type */}
+                        <td className="px-4 py-3 text-xs text-[color:var(--muted)]">
+                          {promoTypeLabel(c.type)}
+                        </td>
+
+                        {/* Details */}
+                        <td className="px-4 py-3 text-[color:var(--ink)]">
+                          {promoDetails(c)}
+                        </td>
+
+                        {/* Max uses */}
+                        <td className="px-4 py-3 text-[color:var(--muted)]">
+                          {maxUses != null ? maxUses : "∞"}
+                        </td>
+
+                        {/* Redeemed */}
+                        <td className="px-4 py-3 text-[color:var(--muted)]">{redeemed}</td>
+
+                        {/* Expires */}
+                        <td className="px-4 py-3 text-[color:var(--muted)] whitespace-nowrap">
+                          {formatExpiry(c.expiresAt)}
+                        </td>
+
+                        {/* Active toggle */}
+                        <td className="px-4 py-3">
+                          <button
+                            type="button"
+                            aria-label={c.active ? "Deactivate code" : "Activate code"}
+                            onClick={() => handleToggleActive(c.id, !c.active)}
+                            className={
+                              "relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors " +
+                              (c.active ? "bg-[color:var(--brand)]" : "bg-gray-200")
+                            }
+                          >
+                            <span
+                              className={
+                                "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition-transform " +
+                                (c.active ? "translate-x-4" : "translate-x-0")
+                              }
+                            />
+                          </button>
+                        </td>
+
+                        {/* Delete */}
+                        <td className="px-4 py-3">
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(c.id, c.code)}
+                            disabled={deletingId === c.id}
+                            className="inline-flex items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-60"
+                          >
+                            {deletingId === c.id ? "…" : "Delete"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <button
+          type="button"
+          onClick={() => router.push("/hub/admin")}
+          className="rounded-xl border border-[color:var(--ring)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--brand)] transition hover:bg-[#d6e5e3]/40"
+        >
+          ← Back to Admin
+        </button>
+      </div>
     </div>
   );
 }

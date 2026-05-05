@@ -1,5 +1,13 @@
 export const SESSION_DURATION_MINS = 60;
 export const CASUAL_INVOICE_DUE_DAYS = 3;
+
+export const CASUAL_RATES = {
+  standard: 7500,     // $75.00 in cents
+  backToBack: 6000,   // $60.00 — consecutive sessions, gap ≤ 15 min
+  sameTime: 4000,     // $40.00 — overlapping sessions
+} as const;
+
+export type CasualRateType = "standard" | "backToBack" | "sameTime";
 export const WITHDRAWAL_NOTICE_DAYS = 14;
 export const LATE_CANCELLATION_HOURS = 24;
 export const LATE_FEE_GRACE_DAYS = 7;

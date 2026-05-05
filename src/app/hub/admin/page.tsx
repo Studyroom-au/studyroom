@@ -2,6 +2,56 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+
+function ExportButton() {
+  const [status, setStatus] = useState<"idle" | "loading" | "ok" | "err">("idle");
+  const [msg, setMsg] = useState("");
+
+  async function handleExport() {
+    setStatus("loading");
+    setMsg("");
+    try {
+      const res = await fetch("/api/admin/export", { method: "POST" });
+      const json = await res.json() as { ok?: boolean; error?: string; counts?: { clients: number; leads: number; students: number } };
+      if (!res.ok) throw new Error(json.error ?? "Export failed");
+      const c = json.counts;
+      setMsg(`Exported: ${c?.clients ?? 0} clients · ${c?.leads ?? 0} leads · ${c?.students ?? 0} students`);
+      setStatus("ok");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Export failed");
+      setStatus("err");
+    }
+    setTimeout(() => setStatus("idle"), 5000);
+  }
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+      <button
+        type="button"
+        onClick={handleExport}
+        disabled={status === "loading"}
+        style={{
+          background: status === "ok" ? "#82977e" : "#456071",
+          color: "white",
+          border: "none",
+          borderRadius: 12,
+          padding: "10px 20px",
+          fontSize: 13,
+          fontWeight: 500,
+          cursor: status === "loading" ? "not-allowed" : "pointer",
+          fontFamily: "inherit",
+          opacity: status === "loading" ? 0.7 : 1,
+          transition: "background 0.15s",
+        }}
+      >
+        {status === "loading" ? "Exporting…" : status === "ok" ? "Exported ✓" : "Export to Sheets"}
+      </button>
+      {msg && (
+        <span style={{ fontSize: 12, color: status === "err" ? "#dc2626" : "#6b7280" }}>{msg}</span>
+      )}
+    </div>
+  );
+}
 const CARDS = [
   {
     title: "Leads",
@@ -38,6 +88,12 @@ const CARDS = [
     description: "Create and manage 7-day trial access codes for students",
     href: "/hub/admin/promo",
     accent: "#a8c5b0",
+  },
+  {
+    title: "Package Alerts",
+    description: "Students with 3 or fewer sessions remaining in their package",
+    href: "/hub/admin/packages",
+    accent: "#e39bb6",
   },
 ];
 
@@ -125,10 +181,13 @@ export default function AdminHubPage() {
         ))}
       </div>
 
-      {/* Back to Hub */}
-      <button
-        type="button"
-        onClick={() => router.push("/hub")}
+      {/* Export + Back */}
+      <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", marginTop: 8 }}>
+        <ExportButton />
+
+        <button
+          type="button"
+          onClick={() => router.push("/hub")}
         style={{
           background: "white",
           color: "#456071",
@@ -146,6 +205,7 @@ export default function AdminHubPage() {
       >
         ← Back to Hub
       </button>
+      </div>
 
     </div>
   );

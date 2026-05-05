@@ -1,9 +1,10 @@
+//src/app/hub/admin/studetns/[studentId]/page
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { collection, doc, getDoc, getDocs, query, where, Timestamp } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, query, serverTimestamp, where, writeBatch, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 type StudentDoc = {
@@ -12,6 +13,7 @@ type StudentDoc = {
   school?: string | null;
   clientId?: string | null;
   assignedTutorId?: string | null;
+  assignedTutorName?: string | null;
   assignedTutorEmail?: string | null;
   subjects?: string[];
   goals?: string | null;
@@ -20,6 +22,12 @@ type StudentDoc = {
   suburb?: string | null;
   addressLine1?: string | null;
   postcode?: string | null;
+};
+
+type TutorOption = {
+  uid: string;
+  name: string;
+  email: string;
 };
 
 type ClientDoc = {
@@ -50,6 +58,10 @@ export default function AdminStudentDetailPage() {
   const [student, setStudent] = useState<StudentDoc | null>(null);
   const [client, setClient] = useState<ClientDoc | null>(null);
   const [sessions, setSessions] = useState<Array<{ id: string; data: SessionDoc }>>([]);
+  const [tutorOptions, setTutorOptions] = useState<TutorOption[]>([]);
+  const [selectedTutorId, setSelectedTutorId] = useState<string>("");
+  const [savingTutor, setSavingTutor] = useState(false);
+  const [tutorSaved, setTutorSaved] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -65,6 +77,7 @@ export default function AdminStudentDetailPage() {
 
         const s = studentSnap.data() as StudentDoc;
         setStudent(s);
+        setSelectedTutorId(s.assignedTutorId ?? "");
 
         if (s.clientId) {
           const clientSnap = await getDoc(doc(db, "clients", s.clientId));
@@ -77,12 +90,65 @@ export default function AdminStudentDetailPage() {
         const rows = sessionSnap.docs.map((d) => ({ id: d.id, data: d.data() as SessionDoc }));
         rows.sort((a, b) => (b.data.startAt?.toMillis() || 0) - (a.data.startAt?.toMillis() || 0));
         setSessions(rows);
+
+        const rolesSnap = await getDocs(query(collection(db, "roles"), where("role", "==", "tutor")));
+        const options: TutorOption[] = [];
+        await Promise.all(
+          rolesSnap.docs.map(async (roleDoc) => {
+            const uid = roleDoc.id;
+            try {
+              const userSnap = await getDoc(doc(db, "users", uid));
+              const data = userSnap.exists() ? (userSnap.data() as { name?: string; displayName?: string; email?: string }) : {};
+              options.push({
+                uid,
+                name: data.name || data.displayName || "",
+                email: data.email || "",
+              });
+            } catch {
+              options.push({ uid, name: "", email: "" });
+            }
+          })
+        );
+        options.sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
+        setTutorOptions(options);
       } finally {
         setLoading(false);
       }
     }
     load();
   }, [studentId]);
+
+  async function handleSaveTutor() {
+    const tutor = tutorOptions.find((t) => t.uid === selectedTutorId) ?? null;
+    setSavingTutor(true);
+    try {
+      const batch = writeBatch(db);
+      batch.update(doc(db, "students", studentId), {
+        assignedTutorId: tutor?.uid ?? null,
+        assignedTutorName: tutor?.name ?? null,
+        assignedTutorEmail: tutor?.email ?? null,
+        updatedAt: serverTimestamp(),
+      });
+      if (student?.clientId) {
+        batch.update(doc(db, "clients", student.clientId), {
+          assignedTutorId: tutor?.uid ?? null,
+          assignedTutorName: tutor?.name ?? null,
+          assignedTutorEmail: tutor?.email ?? null,
+          updatedAt: serverTimestamp(),
+        });
+      }
+      await batch.commit();
+      setStudent((prev) =>
+        prev
+          ? { ...prev, assignedTutorId: tutor?.uid ?? null, assignedTutorName: tutor?.name ?? null, assignedTutorEmail: tutor?.email ?? null }
+          : prev
+      );
+      setTutorSaved(true);
+      setTimeout(() => setTutorSaved(false), 2000);
+    } finally {
+      setSavingTutor(false);
+    }
+  }
 
   const completedCount = useMemo(
     () => sessions.filter((s) => s.data.status === "COMPLETED").length,
@@ -142,6 +208,36 @@ export default function AdminStudentDetailPage() {
           <div className="md:col-span-2"><span className="font-semibold text-[color:var(--ink)]">Subjects:</span> {student.subjects?.length ? student.subjects.join(", ") : "—"}</div>
           <div className="md:col-span-2"><span className="font-semibold text-[color:var(--ink)]">Goals:</span> {student.goals || "—"}</div>
           <div className="md:col-span-2"><span className="font-semibold text-[color:var(--ink)]">Challenges:</span> {student.challenges || "—"}</div>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-[color:var(--ring)] bg-white p-4">
+        <h2 className="mb-3 font-semibold text-[color:var(--ink)]">Assigned tutor</h2>
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={selectedTutorId}
+            onChange={(e) => setSelectedTutorId(e.target.value)}
+            aria-label="Assigned tutor"
+            className="rounded-xl border border-[color:var(--ring)] bg-white px-3 py-2 text-sm text-[color:var(--ink)] focus:outline-none"
+          >
+            <option value="">Unassigned</option>
+            {tutorOptions.map((t) => (
+              <option key={t.uid} value={t.uid}>
+                {t.name ? `${t.name} (${t.email})` : t.email || t.uid}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={handleSaveTutor}
+            disabled={savingTutor || selectedTutorId === (student?.assignedTutorId ?? "")}
+            className="rounded-xl border border-[color:var(--ring)] bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+          >
+            {savingTutor ? "Saving…" : "Save"}
+          </button>
+          {tutorSaved && (
+            <span className="text-sm font-semibold text-emerald-600">Saved</span>
+          )}
         </div>
       </section>
 

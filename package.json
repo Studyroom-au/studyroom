@@ -26,6 +26,7 @@
     "express": "^5.1.0",
     "firebase": "^12.9.0",
     "firebase-admin": "^13.6.1",
+    "googleapis": "^171.4.0",
     "gray-matter": "^4.0.3",
     "livekit-client": "^2.15.7",
     "livekit-server-sdk": "^2.13.2",

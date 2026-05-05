@@ -1,3 +1,4 @@
+//src/app/hub/tutor/sessions/page.tsx
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -210,6 +211,19 @@ export default function TutorSessionsPage() {
     const invoiceId = openSession?.data.invoiceId ?? "";
     return invoiceId ? invoices[invoiceId] ?? null : null;
   }, [openSession, invoices]);
+
+  const packageWarnings = useMemo(() => {
+    const warnings: Array<{ key: string; studentName: string; remaining: number; urgent: boolean }> = [];
+    for (const [planId, ent] of Object.entries(entitlements)) {
+      const remaining = Number(ent.remainingSessions ?? 0);
+      if (remaining <= 0 || remaining > 3) continue;
+      const studentEntry = Object.entries(students).find(([, s]) => s.activePlanId === planId);
+      if (!studentEntry) continue;
+      const studentName = studentEntry[1].studentName ?? "Student";
+      warnings.push({ key: planId, studentName, remaining, urgent: remaining === 1 });
+    }
+    return warnings.sort((a, b) => a.remaining - b.remaining);
+  }, [entitlements, students]);
 
   useEffect(() => {
     if (!openStudent) return;
@@ -595,6 +609,23 @@ export default function TutorSessionsPage() {
         </div>
         <div style={{ fontSize: 12, color: "#8a96a3", marginTop: 3 }}>Click a session for details. Drag to reschedule.</div>
       </div>
+
+      {/* Package session warnings */}
+      {packageWarnings.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {packageWarnings.map(({ key, studentName, remaining, urgent }) =>
+            urgent ? (
+              <div key={key} className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-800">
+                🔴 {studentName} — {remaining} session remaining
+              </div>
+            ) : (
+              <div key={key} className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+                ⚠ {studentName} — {remaining} session{remaining !== 1 ? "s" : ""} remaining
+              </div>
+            )
+          )}
+        </div>
+      )}
 
       <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 16, alignItems: "flex-start" }}>
         {isMobile ? (
