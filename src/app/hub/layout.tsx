@@ -36,6 +36,12 @@ export default function HubLayout({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      // Parents use the parent view, not the hub
+      if (role === "parent") {
+        router.replace("/parent");
+        return;
+      }
+
       // Check subscription status
       const userSnap = await getDoc(doc(db, "users", u.uid));
       const userData = userSnap.exists() ? userSnap.data() : {};

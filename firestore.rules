@@ -146,6 +146,10 @@ service cloud.firestore {
         allow create, update, delete: if isSelf(uid);
       }
 
+      match /upcoming/{assessmentId}/checkpoints/{checkpointId} {
+        allow read, create, update, delete: if isSelf(uid);
+      }
+
       match /streak/{docId} {
         allow read: if isSelf(uid) || isTutorOrAdmin();
         allow create, update: if isSelf(uid) || isAdmin();
@@ -380,14 +384,25 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ---------------- BETA FEEDBACK ----------------
+    match /betaFeedback/{docId} {
+      allow create: if isAuthed()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly([
+          "type","message","uid","email","role","page","createdAt"
+        ])
+        && request.resource.data.message.size() <= 2000;
+      allow read: if isAdmin();
+      allow update, delete: if false;
+    }
+
     // ---------------- RESOURCES ----------------
     match /resources/{resourceId} {
-      allow read: if isAdmin() || isTutor()
-        || (isAuthed() && (
-          resource.data.assignedTo == null
-          || resource.data.assignedTo.size() == 0
-          || resource.data.assignedTo.hasAny([request.auth.uid])
-        ));
+      // Any authenticated user may read resources.
+      // Client-side filtering in hub/page.tsx restricts which resources each
+      // student actually sees. Using resource.data here would cause Firestore
+      // to deny the unfiltered collection query with permission-denied.
+      allow read: if isAuthed();
 
       allow create: if isTutorOrAdmin()
         && request.resource.data.keys().hasOnly([

@@ -8,6 +8,8 @@ const HIDE_CHROME_PATTERNS = [
   /^\/room(\/|$)/,
   /^\/hub(\/|$)/,
   /^\/lobby(\/|$)/,
+  /^\/parent(\/|$)/,
+  /^\/legal(\/|$)/,
 ];
 
 export default function SiteShell({

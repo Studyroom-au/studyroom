@@ -1,4 +1,5 @@
-﻿import { NextResponse } from "next/server";
+﻿//src/app/api/enrol/route.ts
+import { NextResponse } from "next/server";
 import * as admin from "firebase-admin";
 import nodemailer from "nodemailer";
 import { getAdminApp } from "@/lib/firebaseAdmin";

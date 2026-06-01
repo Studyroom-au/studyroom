@@ -7,6 +7,7 @@ import { Invoice } from "xero-node";
 type SessionRecord = {
   tutorId?: string;
   xeroInvoiceId?: string | null;
+  invoiceId?: string | null;
 };
 
 function getErrorMessage(error: unknown) {
@@ -76,9 +77,27 @@ export async function POST(req: Request) {
 
     await sessionRef.update({
       xeroInvoiceId: null,
+      xeroInvoiceStatus: null,
       billingStatus: "READY_TO_INVOICE",
       updatedAt: new Date(),
     });
+
+    // Reset the linked invoice doc so it re-queues for a new Xero draft.
+    // Status returns to pending_xero rather than void so it appears in the
+    // admin "Needs Attention" queue and the admin can regenerate a draft later.
+    const invoiceId = String(session.invoiceId ?? "");
+    if (invoiceId) {
+      await db.collection("invoices").doc(invoiceId).set(
+        {
+          xeroInvoiceId: null,
+          xeroInvoiceStatus: null,
+          xeroError: null,
+          status: "pending_xero",
+          updatedAt: new Date(),
+        },
+        { merge: true }
+      );
+    }
 
     return NextResponse.json({ ok: true });
   } catch (e: unknown) {

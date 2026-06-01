@@ -18,6 +18,11 @@ import {
   setDoc,
   serverTimestamp,
   increment,
+  getDocs,
+  collection,
+  query,
+  where,
+  limit,
 } from "firebase/firestore";
 
 import SafeVideoArea from "@/components/SafeVideoArea";
@@ -147,11 +152,14 @@ export default function RoomPage() {
   const canModerate = isTutor;
 
   const [authReady, setAuthReady] = useState<null | boolean>(null);
+  const [roomBlocked, setRoomBlocked] = useState(false);
   const [url, setUrl] = useState<string>();
   const [token, setToken] = useState<string>();
   const [error, setError] = useState<string | null>(null);
 
-  // Require sign-in & refresh token so rules/app-claims apply immediately
+  // Require sign-in & refresh token so rules/app-claims apply immediately.
+  // Also checks whether a parent has disabled room access for this student.
+  // Tutors/admins have no student record so the query returns empty → allowed.
   useEffect(() => {
     const off = onAuthStateChanged(auth, async (u) => {
       if (!u) {
@@ -164,6 +172,18 @@ export default function RoomPage() {
       } catch {
         /* ignore token refresh errors; user is still authed */
       }
+
+      try {
+        const snap = await getDocs(
+          query(collection(db, "students"), where("hubUid", "==", u.uid), limit(1))
+        );
+        if (!snap.empty && snap.docs[0].data().roomAccessEnabled === false) {
+          setRoomBlocked(true);
+        }
+      } catch {
+        /* if the check fails, default to allowing access */
+      }
+
       setAuthReady(true);
     });
     return () => off();
@@ -209,6 +229,19 @@ export default function RoomPage() {
     }, 2000);
     return () => clearTimeout(t);
   }, []);
+
+  if (roomBlocked) return (
+    <div style={{ background: "#f0f2f5", minHeight: "100svh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ background: "#fff", borderRadius: 18, padding: 32, border: "1px solid rgba(0,0,0,0.06)", maxWidth: 400, textAlign: "center" }}>
+        <div style={{ fontSize: 32, marginBottom: 12 }}>🔒</div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: "#1d2428", marginBottom: 8 }}>Study rooms are locked</div>
+        <div style={{ fontSize: 13, color: "#8a96a3", lineHeight: 1.6 }}>
+          Your parent has disabled access to study rooms.
+          Ask them to re-enable it from the Parent View.
+        </div>
+      </div>
+    </div>
+  );
 
   if (error) return <div className="p-4 text-red-600">{error}</div>;
   if (authReady === null) return (

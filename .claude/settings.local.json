@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(npx tsc:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(node -e ' *)",
+      "Bash(node)",
+      "Bash(not exist *)",
+      "Bash(New-Item -ItemType Directory -Force -Path \"d:\\\\Studyroom App\\\\studyroom\\\\src\\\\app\\\\api\\\\signup\\\\family\")"
     ]
   }
 }

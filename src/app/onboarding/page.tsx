@@ -20,6 +20,11 @@ const REFERRAL_OPTIONS = [
   "Other",
 ];
 
+const SUBJECTS = [
+  "Maths", "English", "Science", "HASS / Humanities",
+  "Health / PE", "Business", "Arts", "Technology", "Languages", "Other",
+];
+
 function getAge(dobString: string): number | null {
   if (!dobString) return null;
   const today = new Date();
@@ -44,6 +49,8 @@ export default function OnboardingPage() {
   const [parentName, setParentName] = useState("");
   const [parentEmail, setParentEmail] = useState("");
   const [parentPhone, setParentPhone] = useState("");
+  const [parentPassword, setParentPassword] = useState("");
+  const [subjects, setSubjects] = useState<string[]>([]);
   const [referral, setReferral] = useState("");
   const [consentTerms, setConsentTerms] = useState(false);
   const [consentPrivacy, setConsentPrivacy] = useState(false);
@@ -51,6 +58,10 @@ export default function OnboardingPage() {
 
   const studentAge = getAge(dob);
   const parentOptional = studentAge !== null && studentAge >= 16;
+
+  function toggleSubject(s: string) {
+    setSubjects(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
+  }
 
   useEffect(() => {
     const off = onAuthStateChanged(auth, async (u) => {
@@ -76,6 +87,9 @@ export default function OnboardingPage() {
         setError("Please enter a valid parent email address."); return;
       }
       if (!parentPhone.trim()) { setError("Please enter a contact phone number."); return; }
+      if (parentPassword.trim().length < 6) {
+        setError("Please set a parent login password (minimum 6 characters)."); return;
+      }
     }
     if (!consentTerms) { setError("Please agree to the terms of service."); return; }
     if (!consentPrivacy) { setError("Please agree to the privacy policy."); return; }
@@ -102,10 +116,11 @@ export default function OnboardingPage() {
           yearLevel,
           dob,
           school,
-          subjects: [],
+          subjects,
           parentName: parentOptional ? "" : parentName,
-          parentEmail: parentOptional ? loginEmail : parentEmail,
+          parentEmail: parentOptional ? "" : parentEmail,
           parentPhone: parentOptional ? "" : parentPhone,
+          parentPassword: parentPassword.trim() || undefined,
           referral,
           loginEmail,
         }),
@@ -198,7 +213,7 @@ export default function OnboardingPage() {
             </div>
           </div>
 
-          <div style={{ marginBottom: 20 }}>
+          <div style={{ marginBottom: 14 }}>
             <label style={lbl}>
               School{" "}
               <span style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0, fontSize: 10, color: "#b0bec5" }}>
@@ -208,6 +223,41 @@ export default function OnboardingPage() {
             <input style={inp} value={school}
               onChange={e => setSchool(e.target.value)}
               placeholder="School name" />
+          </div>
+
+          <div style={{ marginBottom: 20 }}>
+            <label style={lbl}>
+              Subjects{" "}
+              <span style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0, fontSize: 10, color: "#b0bec5" }}>
+                (optional — select all that apply)
+              </span>
+            </label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+              {SUBJECTS.map(s => {
+                const active = subjects.includes(s);
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => toggleSubject(s)}
+                    style={{
+                      padding: "6px 13px",
+                      borderRadius: 20,
+                      fontSize: 12,
+                      fontWeight: active ? 600 : 500,
+                      cursor: "pointer",
+                      border: active ? "1.5px solid #456071" : "1.5px solid #d4dce4",
+                      background: active ? "#456071" : "#fafbfc",
+                      color: active ? "#fff" : "#748398",
+                      transition: "all 0.15s",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    {s}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div style={divider} />
@@ -261,7 +311,7 @@ export default function OnboardingPage() {
             </div>
           </div>
 
-          <div style={{ marginBottom: 20 }}>
+          <div style={field}>
             <label style={lbl}>
               Phone
               {parentOptional && <span style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0, fontSize: 10, color: "#b0bec5" }}> (optional)</span>}
@@ -271,6 +321,23 @@ export default function OnboardingPage() {
               value={parentPhone} onChange={e => setParentPhone(e.target.value)}
               placeholder="04xx xxx xxx" />
           </div>
+
+          {parentEmail.trim() && (
+            <div style={{ marginBottom: 20 }}>
+              <label style={lbl}>Parent login password</label>
+              <input
+                type="password"
+                style={inp}
+                value={parentPassword}
+                onChange={e => setParentPassword(e.target.value)}
+                placeholder="Min 6 characters"
+                autoComplete="new-password"
+              />
+              <div style={{ fontSize: 11, color: "#8a96a3", marginTop: 5 }}>
+                Your parent can use this to log in at studyroom.au/parent to track progress.
+              </div>
+            </div>
+          )}
 
           <div style={divider} />
 
@@ -362,6 +429,7 @@ export default function OnboardingPage() {
           )}
 
           <button
+            type="button"
             onClick={handleSubmit}
             disabled={saving}
             style={{

@@ -16,6 +16,15 @@ export async function POST(req: NextRequest) {
     const uid = decoded.uid;
     const email = decoded.email ?? "";
 
+    // Callers may override success/cancel URLs (e.g. parent portal → /parent).
+    let successUrl = `${process.env.NEXT_PUBLIC_APP_URL}/onboarding?session_id={CHECKOUT_SESSION_ID}`;
+    let cancelUrl = `${process.env.NEXT_PUBLIC_APP_URL}/subscribe`;
+    try {
+      const body = await req.json() as { successUrl?: string; cancelUrl?: string };
+      if (body.successUrl) successUrl = body.successUrl;
+      if (body.cancelUrl) cancelUrl = body.cancelUrl;
+    } catch { /* no body is fine */ }
+
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       payment_method_types: ["card"],
@@ -27,8 +36,8 @@ export async function POST(req: NextRequest) {
         },
       ],
       metadata: { uid, email },
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/onboarding?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/subscribe`,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
       subscription_data: {
         metadata: { uid, email },
       },

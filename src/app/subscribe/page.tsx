@@ -147,7 +147,7 @@ function SubscribePageInner() {
             <div>
               <div style={{ fontSize: 14, fontWeight: 700, color: "#1d2428" }}>Monthly membership</div>
               <div style={{ fontSize: 12, color: "#8a96a3", marginTop: 3, lineHeight: 1.5 }}>
-                Full access to your student hub, session booking, and tutor tools.
+                A calm digital study space for students who want more structure, focus and support.
               </div>
             </div>
             <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 16 }}>
@@ -158,10 +158,10 @@ function SubscribePageInner() {
 
           {/* Feature list */}
           {[
-            "Student hub with deadline tracker",
-            "Mood and study tools",
-            "Session history and tutor notes",
-            "Cancel anytime",
+            "Assessment deadline tracker",
+            "Mood check-ins",
+            "Study rooms",
+            "Calm study tools",
           ].map(f => (
             <div key={f} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
               <div style={{ width: 16, height: 16, borderRadius: "50%", background: "#d4edcc", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>

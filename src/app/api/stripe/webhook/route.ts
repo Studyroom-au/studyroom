@@ -36,11 +36,17 @@ export async function POST(req: NextRequest) {
         updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true });
 
-      // Set student role
-      await db.collection("roles").doc(uid).set({
-        role: "student",
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
+      // Only assign student role if the account is not already a parent.
+      // Parent accounts are billing owners for family subscriptions and must
+      // keep their role so /parent portal access is preserved.
+      const roleSnap = await db.collection("roles").doc(uid).get();
+      const existingRole = roleSnap.exists ? String(roleSnap.data()?.role ?? "") : "";
+      if (existingRole !== "parent") {
+        await db.collection("roles").doc(uid).set({
+          role: "student",
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+      }
     }
   }
 

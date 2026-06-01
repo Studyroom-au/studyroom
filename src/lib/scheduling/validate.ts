@@ -1,3 +1,4 @@
+//src/lib/scheduling/validate.ts
 import { Timestamp, type Firestore } from "firebase-admin/firestore";
 
 export type AppRole = "tutor" | "admin";

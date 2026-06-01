@@ -1,3 +1,4 @@
+//src/app/api/enquiry/route.ts
 import { NextResponse } from "next/server";
 import * as admin from "firebase-admin";
 import nodemailer from "nodemailer";

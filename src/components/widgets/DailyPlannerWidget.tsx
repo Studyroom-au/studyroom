@@ -1,18 +1,15 @@
+//src/components/widget/DailyPlannerWidget
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   collection,
   addDoc,
   deleteDoc,
   doc,
-  onSnapshot,
-  orderBy,
-  query,
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
-import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 
 type UpcomingItem = {
@@ -22,8 +19,8 @@ type UpcomingItem = {
   dueDate: string; // stored as "YYYY-MM-DD"
   handoutDate?: string | null;
   draftDate?: string | null;
-  status: string;
-  notes: string;
+  status?: string | null;
+  notes?: string | null;
   completed: boolean;
 };
 
@@ -61,9 +58,7 @@ function describeDistance(due: Date | null): string {
   return `Overdue by ${Math.abs(diffDays)} days`;
 }
 
-export default function DailyPlannerWidget() {
-  const [authReady, setAuthReady] = useState(false);
-  const [items, setItems] = useState<UpcomingItem[]>([]);
+export default function DailyPlannerWidget({ items }: { items: UpcomingItem[] }) {
   const [err, setErr] = useState<string | null>(null);
   const [newItem, setNewItem] = useState({
     subject: "",
@@ -75,57 +70,6 @@ export default function DailyPlannerWidget() {
     notes: "",
   });
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    const off = onAuthStateChanged(auth, async (u) => {
-      if (u) {
-        try {
-          await u.getIdToken(true);
-        } catch {
-          // ignore
-        }
-        setAuthReady(true);
-      } else {
-        setAuthReady(false);
-        setItems([]);
-      }
-    });
-    return () => off();
-  }, []);
-
-  useEffect(() => {
-    if (!authReady) return;
-    const u = auth.currentUser;
-    if (!u) return;
-
-    const q = query(
-      collection(db, "users", u.uid, "upcoming"),
-      orderBy("dueDate", "asc")
-    );
-    const off = onSnapshot(
-      q,
-      (snap) => {
-        const list: UpcomingItem[] = [];
-        snap.forEach((d) => {
-          const data = d.data();
-          list.push({
-            id: d.id,
-            subject: String(data.subject || ""),
-            title: String(data.title || ""),
-            dueDate: String(data.dueDate || ""),
-            handoutDate: data.handoutDate ? String(data.handoutDate) : null,
-            draftDate: data.draftDate ? String(data.draftDate) : null,
-            status: String(data.status || ""),
-            notes: String(data.notes || ""),
-            completed: Boolean(data.completed),
-          });
-        });
-        setItems(list);
-      },
-      (e) => setErr(e.message || "Failed to load items")
-    );
-    return () => off();
-  }, [authReady]);
 
   async function addItem(e: React.FormEvent) {
     e.preventDefault();
@@ -186,16 +130,6 @@ export default function DailyPlannerWidget() {
   const upcoming = useMemo(() => items.slice(0, 12), [items]);
 
   const inputStyle: React.CSSProperties = { border: "1px solid #e4eaef", borderRadius: 10, padding: "7px 10px", fontSize: 12, background: "white", outline: "none", width: "100%", boxSizing: "border-box", color: "var(--sr-ink)", fontFamily: "inherit" };
-
-  // Simple skeleton while auth is wiring up
-  if (!authReady) {
-    return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <div style={{ height: 32, width: "100%", borderRadius: 10, background: "rgba(0,0,0,0.06)" }} />
-        <div style={{ height: 64, width: "100%", borderRadius: 10, background: "rgba(0,0,0,0.06)" }} />
-      </div>
-    );
-  }
 
   return (
     <section style={{ display: "flex", flexDirection: "column", gap: 12 }}>

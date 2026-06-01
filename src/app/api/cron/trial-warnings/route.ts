@@ -85,10 +85,10 @@ export async function GET(req: NextRequest) {
       Studyroom Australia
     </p>
     <h1 style="margin:0 0 10px;font-size:20px;font-weight:700;color:#1d2428">
-      Your free trial ends ${endsText}.
+      Your Studyroom trial ends ${endsText}.
     </h1>
     <p style="margin:0 0 20px;font-size:13px;color:#677a8a;line-height:1.6">
-      Your 7-day trial access to Studyroom expires ${endsText}. Subscribe now to keep
+      Your trial access to Studyroom expires ${endsText}. Subscribe now to keep
       access to your student hub, session history, and tutor tools.
     </p>
   </td></tr>

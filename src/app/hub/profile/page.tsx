@@ -9,6 +9,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { useUserRole } from "@/hooks/useUserRole";
+import SubPageHeader from "@/components/hub/SubPageHeader";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -36,6 +37,14 @@ export default function ProfilePage() {
   const [parentEmail, setParentEmail] = useState("");
   const [parentPhone, setParentPhone] = useState("");
 
+  // Billing (independent students only)
+  const [subStatus, setSubStatus] = useState("");
+  const [trialEndsAt, setTrialEndsAt] = useState<Date | null>(null);
+  const [stripeCustomerId, setStripeCustomerId] = useState("");
+  const [isBillingOwner, setIsBillingOwner] = useState(false);
+  const [billingBusy, setBillingBusy] = useState(false);
+  const [billingError, setBillingError] = useState<string | null>(null);
+
   useEffect(() => {
     const off = onAuthStateChanged(auth, async (u) => {
       if (!u) {
@@ -57,6 +66,20 @@ export default function ProfilePage() {
           String(userData.displayName || u.displayName || u.email?.split("@")[0] || "")
         );
 
+        // Billing owner: independent students manage their own subscription.
+        // Family students have a parentUid pointing to someone else — parent is their billing owner.
+        const storedParentUid = String(userData.parentUid ?? "");
+        const accountType = String(userData.accountType ?? "");
+        const ownsOwnBilling =
+          accountType === "independent" ||
+          !storedParentUid ||
+          storedParentUid === u.uid;
+        setIsBillingOwner(ownsOwnBilling);
+        setSubStatus(String(userData.subscriptionStatus ?? ""));
+        const trialTs = userData.trialEndsAt;
+        setTrialEndsAt(trialTs?.toDate?.() ?? null);
+        setStripeCustomerId(String(userData.stripeCustomerId ?? ""));
+
         // Load student record linked to this user
         const studentSnap = await getDocs(
           query(collection(db, "students"), where("hubUid", "==", u.uid), limit(1))
@@ -74,14 +97,21 @@ export default function ProfilePage() {
               : []
           );
 
-          // Load client record for parent info
+          // Load client record for parent info.
+          // Students don't have Firestore read access to the clients collection, so
+          // this is wrapped in its own try/catch — a failure here doesn't break the
+          // rest of the profile, it just means parent info won't display.
           if (studentData.clientId) {
-            const clientSnap = await getDoc(doc(db, "clients", studentData.clientId));
-            if (clientSnap.exists()) {
-              const clientData = clientSnap.data();
-              setParentName(String(clientData.parentName || ""));
-              setParentEmail(String(clientData.parentEmail || ""));
-              setParentPhone(String(clientData.parentPhone || ""));
+            try {
+              const clientSnap = await getDoc(doc(db, "clients", studentData.clientId));
+              if (clientSnap.exists()) {
+                const clientData = clientSnap.data();
+                setParentName(String(clientData.parentName || ""));
+                setParentEmail(String(clientData.parentEmail || ""));
+                setParentPhone(String(clientData.parentPhone || ""));
+              }
+            } catch {
+              // Expected for student accounts — clients collection is admin/tutor/parent only
             }
           }
         }
@@ -116,6 +146,45 @@ export default function ProfilePage() {
     }
   }
 
+  async function handleSubscribe() {
+    setBillingBusy(true); setBillingError(null);
+    try {
+      const u = auth.currentUser;
+      if (!u) throw new Error("Not signed in.");
+      const token = await u.getIdToken();
+      const res = await fetch("/api/stripe/create-checkout", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      });
+      const d = await res.json() as { url?: string; error?: string };
+      if (!res.ok || !d.url) throw new Error(d.error ?? "Could not start checkout.");
+      window.location.href = d.url;
+    } catch (err) {
+      setBillingError(err instanceof Error ? err.message : "Something went wrong.");
+      setBillingBusy(false);
+    }
+  }
+
+  async function handleManageBilling() {
+    setBillingBusy(true); setBillingError(null);
+    try {
+      const u = auth.currentUser;
+      if (!u) throw new Error("Not signed in.");
+      const token = await u.getIdToken();
+      const res = await fetch("/api/stripe/customer-portal", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ returnUrl: `${window.location.origin}/hub/profile` }),
+      });
+      const d = await res.json() as { url?: string; error?: string };
+      if (!res.ok || !d.url) throw new Error(d.error ?? "Could not open billing portal.");
+      window.location.href = d.url;
+    } catch (err) {
+      setBillingError(err instanceof Error ? err.message : "Something went wrong.");
+      setBillingBusy(false);
+    }
+  }
+
   const inp: React.CSSProperties = {
     width: "100%", border: "1.5px solid #e4eaef", borderRadius: 10,
     padding: "9px 12px", fontSize: 13, fontFamily: "inherit",
@@ -142,59 +211,18 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <div style={{ background: "#f0f2f5", minHeight: "100svh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ fontSize: 13, color: "#8a96a3" }}>Loading your profile…</div>
+      <div style={{ background: "#f0f2f5", minHeight: "100svh" }}>
+        <SubPageHeader title="Your profile" />
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "60px 0" }}>
+          <div style={{ fontSize: 13, color: "#8a96a3" }}>Loading your profile…</div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{ background: "#f0f2f5", minHeight: "100svh", padding: "0 0 60px" }}>
-
-      {/* Header */}
-      <div style={{
-        background: "#fff", borderRadius: "0 0 20px 20px",
-        padding: "16px 20px 14px", marginBottom: 20,
-        border: "1px solid rgba(0,0,0,0.07)",
-      }}>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#748398", marginBottom: 4 }}>
-              Studyroom
-            </div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: "#1d2428", letterSpacing: "-0.02em" }}>
-              {displayName || "Your profile"}
-            </div>
-            <div style={{ fontSize: 13, color: "#8a96a3", marginTop: 3 }}>
-              {email}
-            </div>
-            <div style={{ marginTop: 8 }}>
-              <span style={{
-                fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 20,
-                background: role === "tutor" ? "#edf2f6" : role === "admin" ? "#fce8ee" : "#edf5eb",
-                color: role === "tutor" ? "#456071" : role === "admin" ? "#c0445e" : "#2d5a24",
-                textTransform: "uppercase", letterSpacing: "0.1em",
-              }}>
-                {role === "admin" ? "Admin" : role === "tutor" ? "Tutor" : "Student"}
-              </span>
-            </div>
-          </div>
-
-          {/* Back to hub button */}
-          <button
-            type="button"
-            onClick={() => router.push("/hub")}
-            style={{
-              fontSize: 12, fontWeight: 600, color: "#677a8a",
-              background: "#f4f7f9", border: "none", borderRadius: 20,
-              padding: "6px 14px", cursor: "pointer", fontFamily: "inherit",
-              flexShrink: 0, marginTop: 4,
-            }}
-          >
-            ← Hub
-          </button>
-        </div>
-      </div>
+    <div style={{ background: "#f0f2f5", minHeight: "100svh", paddingBottom: 60 }}>
+      <SubPageHeader title="Your profile" />
 
       <div style={{ padding: "0 16px", maxWidth: 600, margin: "0 auto" }}>
 
@@ -321,7 +349,7 @@ export default function ProfilePage() {
             />
           </div>
 
-          <div>
+          <div style={{ marginBottom: 14 }}>
             <label style={fieldLbl}>Email</label>
             <div style={{
               border: "1.5px solid #e4eaef", borderRadius: 10,
@@ -334,7 +362,85 @@ export default function ProfilePage() {
               To change your email contact Studyroom admin.
             </div>
           </div>
+
+          <div>
+            <label style={fieldLbl}>Role</label>
+            <span style={{
+              fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 20,
+              background: role === "tutor" ? "#edf2f6" : role === "admin" ? "#fce8ee" : "#edf5eb",
+              color: role === "tutor" ? "#456071" : role === "admin" ? "#c0445e" : "#2d5a24",
+              textTransform: "uppercase" as const, letterSpacing: "0.1em",
+              display: "inline-block",
+            }}>
+              {role === "admin" ? "Admin" : role === "tutor" ? "Tutor" : "Student"}
+            </span>
+          </div>
         </div>
+
+        {/* ── BILLING (independent students only) ── */}
+        {isBillingOwner && role === "student" && (() => {
+          const isActive = subStatus === "active";
+          const daysLeft = trialEndsAt ? Math.ceil((trialEndsAt.getTime() - Date.now()) / 86400000) : null;
+          const trialExpired = daysLeft !== null && daysLeft <= 0;
+          const isTrial = subStatus === "trial" && !trialExpired;
+          const btnStyle: React.CSSProperties = {
+            background: billingBusy ? "#b8cad6" : "#456071", color: "#fff",
+            border: "none", borderRadius: 10, padding: "9px 20px",
+            fontSize: 13, fontWeight: 600,
+            cursor: billingBusy ? "not-allowed" : "pointer",
+            fontFamily: "inherit",
+          };
+          return (
+            <div style={{
+              background: "#fff", borderRadius: 18, padding: "18px 18px",
+              border: "1px solid rgba(0,0,0,0.06)", marginBottom: 14,
+            }}>
+              {sectionHdr("Billing & access")}
+              {isActive ? (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#2d5a24", flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "#2d5a24" }}>Active subscription</span>
+                  </div>
+                  {stripeCustomerId && (
+                    <button type="button" onClick={handleManageBilling} disabled={billingBusy} style={btnStyle}>
+                      {billingBusy ? "…" : "Manage billing"}
+                    </button>
+                  )}
+                </div>
+              ) : isTrial ? (
+                <>
+                  <p style={{ fontSize: 12, color: "#1d2428", margin: "0 0 4px", lineHeight: 1.6 }}>
+                    <strong>Free trial</strong>
+                    {daysLeft === 1 ? " — ends tomorrow." : daysLeft !== null && daysLeft > 1 ? ` — ${daysLeft} days remaining.` : "."}
+                  </p>
+                  {trialEndsAt && (
+                    <p style={{ fontSize: 11, color: "#8a96a3", margin: "0 0 14px", lineHeight: 1.6 }}>
+                      Your trial ends on {trialEndsAt.toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" })}. After that, Studyroom is $9.95/month.
+                    </p>
+                  )}
+                  <button type="button" onClick={handleSubscribe} disabled={billingBusy} style={btnStyle}>
+                    {billingBusy ? "Redirecting…" : "Subscribe — $9.95/month"}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p style={{ fontSize: 12, color: subStatus === "trial" ? "#c0445e" : "#8a96a3", margin: "0 0 14px", lineHeight: 1.6 }}>
+                    {subStatus === "trial"
+                      ? "Your trial has ended. Subscribe to continue using Studyroom."
+                      : "Subscribe to unlock full access to your student hub, study tools, and study rooms."}
+                  </p>
+                  <button type="button" onClick={handleSubscribe} disabled={billingBusy} style={btnStyle}>
+                    {billingBusy ? "Redirecting…" : "Subscribe — $9.95/month"}
+                  </button>
+                </>
+              )}
+              {billingError && (
+                <p style={{ fontSize: 11, color: "#c0445e", marginTop: 10, marginBottom: 0 }}>{billingError}</p>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ── LEGAL ── */}
         <div style={{

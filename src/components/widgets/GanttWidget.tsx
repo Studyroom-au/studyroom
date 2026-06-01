@@ -1,11 +1,11 @@
+//src/components/widget/GanttWidget.tsx
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { collection, doc, onSnapshot, orderBy, query, updateDoc } from "firebase/firestore";
-import { onAuthStateChanged } from "firebase/auth";
+import { doc, updateDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 
-type UpcomingItem = {
+export type UpcomingItem = {
   id: string;
   subject: string;
   title: string;
@@ -14,9 +14,22 @@ type UpcomingItem = {
   draftDate?: string | null;
   draftCompleted?: boolean;
   completed: boolean;
+  status?: string | null;
 };
 
-// ── Colour palette ──────────────────────────────────────────
+const STATUS_NEXT: Record<string, string> = {
+  "Not started": "In progress",
+  "In progress": "Submitted",
+  "Submitted": "Not started",
+};
+
+function statusPillStyle(status: string): React.CSSProperties {
+  if (status === "In progress") return { background: "#fef3e2", color: "#a06020" };
+  if (status === "Submitted")   return { background: "#d4edcc", color: "#2d5a24" };
+  return { background: "rgba(0,0,0,0.06)", color: "#748398" };
+}
+
+// ── Colour palette (emoji badge backgrounds) ────────────────
 const SR_PALETTE = [
   { color: "#456071", light: "#edf2f6", mid: "#b8cad6" },
   { color: "#82977e", light: "#edf5eb", mid: "#bdd4b9" },
@@ -37,6 +50,27 @@ function getSubjectStyle(subject: string) {
   }
   const idx = Math.abs(hash) % SR_PALETTE.length;
   return SR_PALETTE[idx];
+}
+
+// ── Brand-aligned bar & pin colours ─────────────────────────
+const SUBJECT_COLOURS: Record<string, { bar: string; pin: string }> = {
+  english:   { bar: "#b8cad6", pin: "#456071" },
+  maths:     { bar: "#bde4af", pin: "#82977e" },
+  math:      { bar: "#bde4af", pin: "#82977e" },
+  science:   { bar: "#b8cad6", pin: "#748398" },
+  history:   { bar: "#e8d5c4", pin: "#a0724a" },
+  geography: { bar: "#c8d8c8", pin: "#5a7a5a" },
+  art:       { bar: "#f2d4e0", pin: "#c0607a" },
+  music:     { bar: "#d4cce8", pin: "#7060a8" },
+  default:   { bar: "#dde4ea", pin: "#456071" },
+};
+
+function getSubjectColour(subject: string): { bar: string; pin: string } {
+  const s = subject.toLowerCase();
+  for (const [key, val] of Object.entries(SUBJECT_COLOURS)) {
+    if (key !== "default" && s.includes(key)) return val;
+  }
+  return SUBJECT_COLOURS.default;
 }
 
 function getSubjectEmoji(subject: string): string {
@@ -86,55 +120,38 @@ function getDiffFromToday(dateStr: string) {
 function clamp(v: number) { return Math.max(-2, Math.min(102, v)); }
 
 const TOTAL_DAYS = 42;
-const ROW_H = 56;
+const ROW_H = 74;
 
-export default function GanttWidget() {
-  const [authReady, setAuthReady] = useState(false);
-  const [items, setItems] = useState<UpcomingItem[]>([]);
+export default function GanttWidget({
+  items,
+  selectedId: externalSelectedId,
+  onSelectId,
+  showCompleted: externalShowCompleted,
+  onShowCompleted,
+}: {
+  items: UpcomingItem[];
+  selectedId?: string | null;
+  onSelectId?: (id: string | null) => void;
+  showCompleted?: boolean;
+  onShowCompleted?: (v: boolean) => void;
+}) {
   const [weekOffset, setWeekOffset] = useState(0);
-  const [tooltipInfo, setTooltipInfo] = useState<{ x: number; y: number; text: string } | null>(null);
+  const [tooltipInfo, setTooltipInfo] = useState<{ x: number; y: number; text: string; pinned?: boolean; key?: string } | null>(null);
   const [completedAnims, setCompletedAnims] = useState<Set<string>>(new Set());
+  const [internalSelectedId, setInternalSelectedId] = useState<string | null>(null);
+  const [internalShowCompleted, setInternalShowCompleted] = useState(false);
 
-  useEffect(() => {
-    const off = onAuthStateChanged(auth, async (u) => {
-      if (u) {
-        try { await u.getIdToken(true); } catch { /* ignore */ }
-        setAuthReady(true);
-      } else {
-        setAuthReady(false);
-        setItems([]);
-      }
-    });
-    return () => off();
-  }, []);
-
-  useEffect(() => {
-    if (!authReady) return;
-    const u = auth.currentUser;
-    if (!u) return;
-    const q = query(
-      collection(db, "users", u.uid, "upcoming"),
-      orderBy("dueDate", "asc")
-    );
-    const unsub = onSnapshot(q, (snap) => {
-      const list: UpcomingItem[] = [];
-      snap.forEach((d) => {
-        const data = d.data();
-        list.push({
-          id: d.id,
-          subject: String(data.subject || ""),
-          title: String(data.title || ""),
-          dueDate: String(data.dueDate || ""),
-          handoutDate: data.handoutDate ? String(data.handoutDate) : null,
-          draftDate: data.draftDate ? String(data.draftDate) : null,
-          draftCompleted: Boolean(data.draftCompleted),
-          completed: Boolean(data.completed),
-        });
-      });
-      setItems(list);
-    });
-    return () => unsub();
-  }, [authReady]);
+  const isControlled = onSelectId !== undefined;
+  const selectedId = isControlled ? (externalSelectedId ?? null) : internalSelectedId;
+  function setSelectedId(id: string | null) {
+    if (isControlled) onSelectId(id);
+    else setInternalSelectedId(id);
+  }
+  const showCompleted = onShowCompleted !== undefined ? (externalShowCompleted ?? false) : internalShowCompleted;
+  function toggleShowCompleted() {
+    if (onShowCompleted !== undefined) onShowCompleted(!(externalShowCompleted ?? false));
+    else setInternalShowCompleted(v => !v);
+  }
 
   const today = useMemo(() => toMidnight(new Date()), []);
 
@@ -192,8 +209,7 @@ export default function GanttWidget() {
     }
   }
 
-  async function toggleDraft(id: string, e: React.MouseEvent) {
-    e.stopPropagation();
+  async function toggleDraft(id: string) {
     const u = auth.currentUser;
     if (!u) return;
     const item = items.find(i => i.id === id);
@@ -201,14 +217,21 @@ export default function GanttWidget() {
     await updateDoc(doc(db, "users", u.uid, "upcoming", id), { draftCompleted: !item.draftCompleted });
   }
 
-  if (!authReady) {
-    return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {[1, 2, 3].map((i) => (
-          <div key={i} style={{ height: 28, background: "rgba(0,0,0,0.06)", borderRadius: 6 }} />
-        ))}
-      </div>
-    );
+  // Clear any pinned milestone tooltip when the user navigates weeks or opens the detail panel
+  useEffect(() => { setTooltipInfo(null); }, [weekOffset, selectedId]);
+
+  async function cycleStatus(id: string, current: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    const u = auth.currentUser;
+    if (!u) return;
+    const next = STATUS_NEXT[current] ?? "In progress";
+    await updateDoc(doc(db, "users", u.uid, "upcoming", id), { status: next });
+  }
+
+  async function saveStatus(id: string, newStatus: string) {
+    const u = auth.currentUser;
+    if (!u) return;
+    await updateDoc(doc(db, "users", u.uid, "upcoming", id), { status: newStatus });
   }
 
   return (
@@ -228,17 +251,22 @@ export default function GanttWidget() {
         .sr-nav-btn:active { transform: scale(0.96); }
         .sr-label-row {
           height: ${ROW_H}px; display: flex; align-items: center;
-          padding: 0 12px; gap: 8px;
+          padding: 0 10px; gap: 8px;
           border-bottom: 1px solid rgba(0,0,0,0.04);
           cursor: pointer; transition: background 0.15s;
         }
         .sr-label-row:hover { background: rgba(69,96,113,0.03); }
         .sr-label-emoji {
-          width: 30px; height: 30px; border-radius: 8px;
+          width: 28px; height: 28px; border-radius: 8px;
           display: flex; align-items: center; justify-content: center;
-          font-size: 15px; flex-shrink: 0; transition: transform 0.2s;
+          font-size: 14px; flex-shrink: 0; transition: transform 0.2s;
+          align-self: flex-start; margin-top: 3px;
         }
         .sr-label-row:hover .sr-label-emoji { transform: scale(1.1) rotate(-4deg); }
+        .sr-title-clamp {
+          display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+          overflow: hidden; line-height: 1.3;
+        }
         .sr-track-row {
           height: ${ROW_H}px; position: relative;
           border-bottom: 1px solid rgba(0,0,0,0.04);
@@ -246,8 +274,8 @@ export default function GanttWidget() {
         }
         .sr-track-row:hover { background: rgba(69,96,113,0.02); }
         .sr-week-cell {
-          flex: 1; text-align: center; padding: 9px 0 7px;
-          font-size: 10px; font-weight: 600; color: #8a96a3;
+          flex: 1; text-align: center; padding: 10px 0 8px;
+          font-size: 11px; font-weight: 600; color: #8a96a3;
           border-right: 1px solid rgba(0,0,0,0.04);
           font-family: 'Space Mono', monospace;
         }
@@ -257,66 +285,32 @@ export default function GanttWidget() {
           height: 26px; display: flex; align-items: center; z-index: 3;
           transition: filter 0.2s;
         }
-        .sr-bar-wrap:hover { filter: brightness(1.05); z-index: 5; }
+        .sr-bar-wrap:hover { filter: brightness(1.08); z-index: 5; }
         .sr-completing { animation: srComplete 0.7s ease forwards; }
         @keyframes srComplete {
           0%   { transform: translateY(-50%) scale(1); opacity: 1; }
           30%  { transform: translateY(-50%) scale(1.04); }
           100% { transform: translateY(-50%) scale(0.9); opacity: 0.3; }
         }
-        .sr-seg-draft {
-          height: 100%; border-radius: 8px 0 0 8px;
-          display: flex; align-items: center; padding: 0 8px;
-          font-size: 10px; font-weight: 600; color: white;
+        .sr-bar-fill {
+          height: 100%; width: 100%; border-radius: 10px;
+          display: flex; align-items: center; padding: 0 10px;
+          font-size: 10px; font-weight: 700;
           white-space: nowrap; overflow: hidden;
-          box-shadow: 0 2px 6px rgba(69,96,113,0.18);
-          transition: opacity 0.4s, filter 0.4s;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+          transition: opacity 0.4s;
         }
-        .sr-seg-draft.done { opacity: 0.4; filter: saturate(0.5); }
-        .sr-seg-final {
-          height: 100%; border-radius: 0 8px 8px 0;
-          display: flex; align-items: center; padding: 0 6px;
-          border: 1.5px dashed; border-left: none;
-          font-size: 9px; font-weight: 600;
-          white-space: nowrap; overflow: hidden;
-          color: rgba(0,0,0,0.35); position: relative;
-          transition: all 0.4s;
-        }
-        .sr-seg-final::after {
-          content: ''; position: absolute; inset: 0;
-          background: repeating-linear-gradient(
-            -45deg, transparent, transparent 4px,
-            rgba(255,255,255,0.28) 4px, rgba(255,255,255,0.28) 8px
-          );
-          pointer-events: none; transition: opacity 0.4s;
-        }
-        .sr-seg-final.unlocked { border: none; color: white; box-shadow: 0 2px 6px rgba(69,96,113,0.18); }
-        .sr-seg-final.unlocked::after { opacity: 0; }
-        .sr-seg-final.solo { border-radius: 8px; border: none; color: white; box-shadow: 0 2px 6px rgba(69,96,113,0.18); }
-        .sr-seg-final.solo::after { opacity: 0; }
-        .sr-milestone {
+        .sr-milestone-flag {
           position: absolute; top: 50%;
-          transform: translate(-50%, -50%);
-          width: 11px; height: 11px; border-radius: 50%;
-          border: 2.5px solid white;
-          box-shadow: 0 0 0 1px rgba(69,96,113,0.15), 0 1px 3px rgba(0,0,0,0.1);
+          transform: translate(-50%, -100%);
           z-index: 6; cursor: pointer; transition: transform 0.15s;
+          padding-bottom: 1px; line-height: 0;
         }
-        .sr-milestone:hover { transform: translate(-50%, -50%) scale(1.3); }
-        .sr-due-pill {
-          position: absolute; top: 50%; transform: translateY(-50%);
-          font-family: 'Space Mono', monospace;
-          font-size: 9px; font-weight: 700;
-          padding: 2px 7px; border-radius: 20px;
-          white-space: nowrap; z-index: 7; pointer-events: none;
-        }
-        .sr-gridline {
-          position: absolute; top: 0; bottom: 0; width: 1px;
-          background: rgba(69,96,113,0.06); pointer-events: none; z-index: 0;
-        }
+        .sr-milestone-flag:hover { transform: translate(-50%, -100%) scale(1.18); }
+        .sr-milestone-flag.sr-flag-active { transform: translate(-50%, -100%) scale(1.18); }
         .sr-today-line {
           position: absolute; top: 0; bottom: 0; width: 2px;
-          background: #e39bb6; z-index: 10; pointer-events: none; border-radius: 1px;
+          background: #c47fa0; z-index: 10; pointer-events: none; border-radius: 1px;
         }
         .sr-done-row { opacity: 0.35; }
         .sr-done-row:hover { opacity: 0.5; }
@@ -329,10 +323,10 @@ export default function GanttWidget() {
         }
         .sr-tooltip {
           position: fixed; background: #1d2428; color: white;
-          padding: 7px 11px; border-radius: 9px;
-          font-size: 11px; line-height: 1.5; z-index: 100;
-          pointer-events: none; max-width: 200px;
-          box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+          padding: 8px 12px; border-radius: 10px;
+          font-size: 11px; line-height: 1.6; z-index: 100;
+          pointer-events: none; max-width: 180px; white-space: pre-line;
+          box-shadow: 0 8px 24px rgba(0,0,0,0.2);
         }
       `}</style>
 
@@ -349,33 +343,12 @@ export default function GanttWidget() {
         </span>
       </div>
 
-      {/* Legend */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 12, alignItems: "center" }}>
-        {[
-          { bg: "#456071", border: "none", label: "Draft period" },
-          { bg: "#edf2f6", border: "1.5px dashed #b8cad6", label: "Final (locked)" },
-          { bg: "#456071", border: "none", label: "Final (unlocked)" },
-        ].map((l, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, color: "#8a96a3", fontWeight: 500 }}>
-            <div style={{
-              width: 14, height: 9, borderRadius: 3, flexShrink: 0,
-              background: l.bg, border: l.border,
-            }} />
-            {l.label}
-          </div>
-        ))}
-        <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, color: "#8a96a3", fontWeight: 500 }}>
-          <div style={{ width: 2, height: 11, borderRadius: 2, background: "#e39bb6", flexShrink: 0 }} />
-          Today
-        </div>
-      </div>
-
       {/* Grid */}
       <div style={{
         overflowX: "auto", borderRadius: 14,
         border: "1.5px solid rgba(69,96,113,0.12)", background: "#fff",
       }}>
-        <div style={{ display: "grid", minWidth: 700, gridTemplateColumns: "160px 1fr" }}>
+        <div style={{ display: "grid", minWidth: 680, gridTemplateColumns: "136px 1fr" }}>
 
           {/* Column headers */}
           <div style={{
@@ -387,10 +360,15 @@ export default function GanttWidget() {
           }}>
             Assessment
           </div>
-          <div style={{ display: "flex", borderBottom: "1.5px solid rgba(69,96,113,0.1)" }}>
+          <div style={{ display: "flex", borderBottom: "1.5px solid rgba(69,96,113,0.1)", position: "relative" }}>
             {weekHeaders.map((w, i) => (
               <div key={i} className="sr-week-cell">{w.label}</div>
             ))}
+            {todayInView && (
+              <div style={{ position: "absolute", top: 0, bottom: 0, left: `${(todayIdx / TOTAL_DAYS) * 100}%`, width: 2, background: "#c47fa0", zIndex: 5, borderRadius: 1, pointerEvents: "none" }}>
+                <span style={{ position: "absolute", top: 3, left: 4, fontSize: 8, fontWeight: 700, color: "#c47fa0", whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.06em" }}>Today</span>
+              </div>
+            )}
           </div>
 
           {/* Active rows */}
@@ -399,22 +377,14 @@ export default function GanttWidget() {
             .sort((a, b) => getDiffFromToday(a.dueDate) - getDiffFromToday(b.dueDate))
             .map(item => {
               const subjectStyle = getSubjectStyle(item.subject);
+              const subjectColour = getSubjectColour(item.subject);
               const emoji = getSubjectEmoji(item.subject);
-              const diff = getDiffFromToday(item.dueDate);
               const isCompleting = completedAnims.has(item.id);
-              const hasDraft = !!item.draftDate;
 
               const startDate = (item.handoutDate || item.draftDate || item.dueDate) as string;
               const barLeft = clamp(dayToPercent(startDate));
               const barRight = clamp(dayToPercent(item.dueDate));
               const barWidth = Math.max(2, barRight - barLeft);
-
-              let draftWidth = 0;
-              let finalWidth = barWidth;
-              if (hasDraft) {
-                draftWidth = Math.max(0, clamp(dayToPercent(item.draftDate!)) - barLeft);
-                finalWidth = Math.max(2, barRight - clamp(dayToPercent(item.draftDate!)));
-              }
 
               const milestones = [
                 item.handoutDate ? { date: item.handoutDate, label: "Handout", emoji: "📋" } : null,
@@ -422,58 +392,34 @@ export default function GanttWidget() {
                 { date: item.dueDate, label: "Final due", emoji: "🏁" },
               ].filter((m): m is { date: string; label: string; emoji: string } => m !== null);
 
-              let pillBg = "#edf0f3", pillColor = "#748398", pillText = `${diff}d`;
-              if (diff < 0) {
-                pillBg = "#fce8ee"; pillColor = "#c0445e";
-                pillText = `${Math.abs(diff)}d late`;
-              } else if (diff === 0) {
-                pillBg = "#fce8ee"; pillColor = "#c0445e"; pillText = "TODAY";
-              } else if (diff <= 3) {
-                pillBg = "#fce8ee"; pillColor = "#c0445e";
-              } else if (diff <= 7) {
-                pillBg = "#fdf3e3"; pillColor = "#a06020";
-              }
-
               return [
                 <div
                   key={`l-${item.id}`}
                   className="sr-label-row"
-                  onClick={() => handleCompletionWithAnim(item.id, false)}
-                  style={{ borderRight: "1.5px solid rgba(69,96,113,0.1)" }}
+                  onClick={() => setSelectedId(selectedId === item.id ? null : item.id)}
+                  style={{ borderRight: "1.5px solid rgba(69,96,113,0.1)", alignItems: "flex-start", paddingTop: 10, paddingBottom: 10 }}
                 >
                   <div className="sr-label-emoji" style={{ background: subjectStyle.light }}>{emoji}</div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{
-                      fontSize: 11.5, fontWeight: 600, color: "#1d2428",
-                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 98,
-                    }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div className="sr-title-clamp" style={{ fontSize: 11, fontWeight: 600, color: "#1d2428" }}>
                       {item.title}
                     </div>
-                    <div style={{ fontSize: 10, color: "#8a96a3", display: "flex", alignItems: "center", gap: 4 }}>
-                      <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 60 }}>
-                        {item.subject}
-                      </span>
-                      {hasDraft && (
-                        <span
-                          onClick={e => { e.stopPropagation(); void toggleDraft(item.id, e); }}
-                          style={{
-                            fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 6,
-                            cursor: "pointer", transition: "all 0.2s", flexShrink: 0,
-                            background: item.draftCompleted ? "#d4edcc" : "rgba(69,96,113,0.08)",
-                            color: item.draftCompleted ? "#2d5a24" : "#748398",
-                          }}
-                        >
-                          {item.draftCompleted ? "✓ Draft" : "Draft"}
-                        </span>
-                      )}
-                    </div>
+                    <button
+                      type="button"
+                      onClick={e => void cycleStatus(item.id, item.status ?? "Not started", e)}
+                      style={{
+                        marginTop: 4, fontSize: 9, fontWeight: 700,
+                        padding: "2px 6px", borderRadius: 6, border: "none",
+                        cursor: "pointer", fontFamily: "inherit",
+                        ...statusPillStyle(item.status ?? "Not started"),
+                      }}
+                    >
+                      {item.status ?? "Not started"}
+                    </button>
                   </div>
                 </div>,
 
                 <div key={`t-${item.id}`} className="sr-track-row">
-                  {[1, 2, 3, 4, 5].map(gi => (
-                    <div key={gi} className="sr-gridline" style={{ left: `${(gi / 6) * 100}%` }} />
-                  ))}
                   {todayInView && (
                     <div className="sr-today-line" style={{ left: `${(todayIdx / TOTAL_DAYS) * 100}%` }} />
                   )}
@@ -482,120 +428,247 @@ export default function GanttWidget() {
                     className={`sr-bar-wrap${isCompleting ? " sr-completing" : ""}`}
                     style={{ left: `${barLeft}%`, width: `${barWidth}%` }}
                   >
-                    {hasDraft && draftWidth > 0 && (
-                      <div
-                        className={`sr-seg-draft${item.draftCompleted ? " done" : ""}`}
-                        style={{ width: `${(draftWidth / barWidth) * 100}%`, background: subjectStyle.color }}
-                      >
-                        {draftWidth > 8 && (item.draftCompleted ? "✓" : "Draft")}
-                      </div>
-                    )}
-                    <div
-                      className={`sr-seg-final${!hasDraft ? " solo" : ""}${hasDraft && item.draftCompleted ? " unlocked" : ""}`}
-                      style={{
-                        width: hasDraft ? `${(finalWidth / barWidth) * 100}%` : "100%",
-                        background: (item.draftCompleted || !hasDraft) ? subjectStyle.color : subjectStyle.light,
-                        borderColor: (!item.draftCompleted && hasDraft) ? subjectStyle.mid : "transparent",
-                      }}
-                    >
-                      {finalWidth > 6 && (item.title.length <= 12 ? item.title : item.subject.split(" ")[0])}
+                    <div className="sr-bar-fill" style={{ background: subjectColour.bar, color: subjectColour.pin }}>
+                      {barWidth > 8 && (item.title.length <= 14 ? item.title : item.subject.split(" ")[0])}
                     </div>
                   </div>
 
                   {milestones.map((m, mi) => {
                     const pos = clamp(dayToPercent(m.date));
                     if (pos < -1 || pos > 101) return null;
+                    const mDiff = getDiffFromToday(m.date);
+                    const mDays = mDiff < 0
+                      ? `${Math.abs(mDiff)} day${Math.abs(mDiff) === 1 ? "" : "s"} overdue`
+                      : mDiff === 0 ? "Today"
+                      : mDiff === 1 ? "Tomorrow"
+                      : `In ${mDiff} days`;
+                    const tipText = `${m.label}\n${formatShort(new Date(m.date))}\n${mDays}`;
+                    const pinKey = `${item.id}-${mi}`;
+                    const isPinned = tooltipInfo?.pinned && tooltipInfo.key === pinKey;
+                    const pinColor = subjectColour.pin;
                     return (
                       <div
                         key={mi}
-                        className="sr-milestone"
-                        style={{ left: `${pos}%`, background: subjectStyle.color }}
-                        onMouseEnter={e => setTooltipInfo({
-                          x: e.clientX, y: e.clientY - 44,
-                          text: `${m.emoji} ${m.label}: ${formatShort(new Date(m.date))}`,
-                        })}
-                        onMouseLeave={() => setTooltipInfo(null)}
-                      />
-                    );
-                  })}
-
-                  {(() => {
-                    const pp = clamp(dayToPercent(item.dueDate));
-                    if (pp < -1 || pp > 96) return null;
-                    return (
-                      <div
-                        className="sr-due-pill"
-                        style={{ left: `calc(${pp}% + 10px)`, background: pillBg, color: pillColor }}
+                        className={`sr-milestone-flag${isPinned ? " sr-flag-active" : ""}`}
+                        style={{ left: `${pos}%` }}
+                        onMouseEnter={e => {
+                          if (!tooltipInfo?.pinned) {
+                            setTooltipInfo({ x: e.clientX, y: e.clientY - 60, text: tipText });
+                          }
+                        }}
+                        onMouseLeave={() => {
+                          if (!tooltipInfo?.pinned) setTooltipInfo(null);
+                        }}
+                        onClick={e => {
+                          e.stopPropagation();
+                          if (isPinned) {
+                            setTooltipInfo(null);
+                          } else {
+                            setTooltipInfo({ x: e.clientX, y: e.clientY - 70, text: tipText, pinned: true, key: pinKey });
+                          }
+                        }}
                       >
-                        {pillText}
+                        <svg width="14" height="20" viewBox="0 0 14 20" aria-hidden="true">
+                          <path d="M7 0C3.13 0 0 3.13 0 7c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill={pinColor}/>
+                        </svg>
                       </div>
                     );
-                  })()}
+                  })}
                 </div>,
               ];
             })}
 
-          {/* Completed section */}
-          {items.filter(item => item.completed).length > 0 && (
-            <>
-              <div className="sr-section-label">✓ Completed</div>
-              {items.filter(item => item.completed).map(item => {
-                const subjectStyle = getSubjectStyle(item.subject);
-                const emoji = getSubjectEmoji(item.subject);
-                const startDate = (item.handoutDate || item.draftDate || item.dueDate) as string;
-                const barLeft = clamp(dayToPercent(startDate));
-                const barRight = clamp(dayToPercent(item.dueDate));
-                const barWidth = Math.max(2, barRight - barLeft);
-                return [
-                  <div
-                    key={`l-${item.id}`}
-                    className="sr-label-row sr-done-row"
-                    onClick={() => handleCompletionWithAnim(item.id, true)}
-                    style={{ borderRight: "1.5px solid rgba(69,96,113,0.1)" }}
-                  >
-                    <div className="sr-label-emoji" style={{ background: subjectStyle.light }}>{emoji}</div>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{
-                        fontSize: 11.5, fontWeight: 600, color: "#1d2428",
-                        textDecoration: "line-through",
-                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 98,
-                      }}>{item.title}</div>
-                      <div style={{ fontSize: 10, color: "#8a96a3" }}>{item.subject}</div>
-                    </div>
-                  </div>,
-                  <div key={`t-${item.id}`} className="sr-track-row sr-done-row">
-                    {[1, 2, 3, 4, 5].map(gi => (
-                      <div key={gi} className="sr-gridline" style={{ left: `${(gi / 6) * 100}%` }} />
-                    ))}
-                    {todayInView && (
-                      <div className="sr-today-line" style={{ left: `${(todayIdx / TOTAL_DAYS) * 100}%` }} />
-                    )}
-                    <div className="sr-bar-wrap" style={{ left: `${barLeft}%`, width: `${barWidth}%` }}>
-                      <div
-                        className="sr-seg-final solo"
-                        style={{ width: "100%", background: subjectStyle.color, opacity: 0.5 }}
-                      >
-                        {item.title}
+          {/* Completed section — collapsed by default */}
+          {(() => {
+            const doneItems = items.filter(item => item.completed);
+            if (doneItems.length === 0) return null;
+            return (
+              <>
+                <div
+                  className="sr-section-label"
+                  onClick={toggleShowCompleted}
+                  style={{ cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}
+                >
+                  <span>✓ {doneItems.length} completed</span>
+                  <span style={{ fontSize: 9, opacity: 0.65, fontWeight: 600, letterSpacing: "0.04em" }}>
+                    {showCompleted ? "▼ Hide" : "▸ Show"}
+                  </span>
+                </div>
+                {showCompleted && doneItems.map(item => {
+                  const subjectStyle = getSubjectStyle(item.subject);
+                  const subjectColour = getSubjectColour(item.subject);
+                  const emoji = getSubjectEmoji(item.subject);
+                  const startDate = (item.handoutDate || item.draftDate || item.dueDate) as string;
+                  const barLeft = clamp(dayToPercent(startDate));
+                  const barRight = clamp(dayToPercent(item.dueDate));
+                  const barWidth = Math.max(2, barRight - barLeft);
+                  return [
+                    <div
+                      key={`l-${item.id}`}
+                      className="sr-label-row sr-done-row"
+                      onClick={() => setSelectedId(selectedId === item.id ? null : item.id)}
+                      style={{ borderRight: "1.5px solid rgba(69,96,113,0.1)", alignItems: "flex-start", paddingTop: 10, paddingBottom: 10 }}
+                    >
+                      <div className="sr-label-emoji" style={{ background: subjectStyle.light }}>{emoji}</div>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div className="sr-title-clamp" style={{ fontSize: 11, fontWeight: 600, color: "#1d2428", textDecoration: "line-through" }}>
+                          {item.title}
+                        </div>
+                        <div style={{ marginTop: 3, fontSize: 9, color: "#8a96a3" }}>{item.subject}</div>
                       </div>
-                    </div>
-                  </div>,
-                ];
-              })}
-            </>
-          )}
+                    </div>,
+                    <div key={`t-${item.id}`} className="sr-track-row sr-done-row">
+                      {todayInView && (
+                        <div className="sr-today-line" style={{ left: `${(todayIdx / TOTAL_DAYS) * 100}%` }} />
+                      )}
+                      <div className="sr-bar-wrap" style={{ left: `${barLeft}%`, width: `${barWidth}%` }}>
+                        <div className="sr-bar-fill" style={{ background: subjectColour.bar, color: subjectColour.pin }}>
+                          {barWidth > 8 && item.title}
+                        </div>
+                      </div>
+                    </div>,
+                  ];
+                })}
+              </>
+            );
+          })()}
 
           {/* Empty state */}
           {items.length === 0 && (
             <div style={{
-              gridColumn: "1/-1", padding: "36px 20px",
-              textAlign: "center", fontSize: 13, color: "#8a96a3",
+              gridColumn: "1/-1", padding: "40px 24px",
+              textAlign: "center",
             }}>
-              No assessments yet. Add one above.
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#8a96a3", marginBottom: 4 }}>
+                Nothing planned yet
+              </div>
+              <div style={{ fontSize: 12, color: "#b0bec5", lineHeight: 1.6 }}>
+                Add your first deadline below — one step at a time.
+              </div>
             </div>
           )}
 
         </div>
       </div>
+
+      {/* Detail panel — only when not controlled externally */}
+      {!isControlled && (() => {
+        const sel = selectedId ? items.find(i => i.id === selectedId) : null;
+        if (!sel) return null;
+        const diff = getDiffFromToday(sel.dueDate);
+        const accent = diff < 0 || diff <= 4 ? "#c97777" : diff <= 14 ? "#c4954a" : "#748398";
+        const timing = diff < 0 ? "Needs attention" : diff === 0 ? "Due today" : diff === 1 ? "Due tomorrow" : `Due in ${diff} days`;
+        return (
+          <div style={{
+            marginTop: 10, background: "white", borderRadius: 14,
+            border: "1px solid rgba(0,0,0,0.08)", borderLeft: `3px solid ${accent}`,
+            padding: "14px 16px",
+          }}>
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
+              <div style={{ flex: 1, minWidth: 0, paddingRight: 10 }}>
+                <div style={{ fontSize: 10, color: "#8a96a3", marginBottom: 2 }}>{sel.subject}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#1d2428", lineHeight: 1.3 }}>{sel.title}</div>
+                <div style={{ marginTop: 4, fontSize: 11, fontWeight: 600, color: accent }}>{timing}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedId(null)}
+                style={{ fontSize: 14, color: "#8a96a3", background: "none", border: "none", cursor: "pointer", padding: "2px 4px", lineHeight: 1, fontFamily: "inherit", flexShrink: 0 }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Dates row */}
+            <div style={{ display: "flex", gap: 16, marginBottom: 12, flexWrap: "wrap" }}>
+              {sel.handoutDate && (
+                <div>
+                  <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#8a96a3", marginBottom: 2 }}>Handout</div>
+                  <div style={{ fontSize: 12, color: "#1d2428" }}>{formatShort(new Date(sel.handoutDate))}</div>
+                </div>
+              )}
+              {sel.draftDate && (
+                <div>
+                  <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#8a96a3", marginBottom: 2 }}>Draft due</div>
+                  <div style={{ fontSize: 12, color: "#1d2428" }}>{formatShort(new Date(sel.draftDate))}</div>
+                </div>
+              )}
+              <div>
+                <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#8a96a3", marginBottom: 2 }}>Final due</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#1d2428" }}>{formatShort(new Date(sel.dueDate))}</div>
+              </div>
+            </div>
+
+            {/* Status selector */}
+            {!sel.completed && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#8a96a3", marginBottom: 6 }}>Status</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {(["Not started", "In progress", "Submitted"] as const).map(s => {
+                    const isActive = (sel.status ?? "Not started") === s;
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => void saveStatus(sel.id, s)}
+                        style={{
+                          fontSize: 11, fontWeight: 600, padding: "5px 12px", borderRadius: 8,
+                          border: isActive ? "none" : "1.5px solid rgba(0,0,0,0.08)",
+                          cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s",
+                          ...(isActive ? statusPillStyle(s) : { background: "transparent", color: "#8a96a3" }),
+                        }}
+                      >
+                        {s}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Draft toggle */}
+            {sel.draftDate && !sel.completed && (
+              <div style={{ marginBottom: 12 }}>
+                <button
+                  type="button"
+                  onClick={() => void toggleDraft(sel.id)}
+                  style={{
+                    fontSize: 11, fontWeight: 600, padding: "5px 12px", borderRadius: 8, border: "none",
+                    cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s",
+                    ...(sel.draftCompleted
+                      ? { background: "#d4edcc", color: "#2d5a24" }
+                      : { background: "rgba(0,0,0,0.05)", color: "#748398" }),
+                  }}
+                >
+                  {sel.draftCompleted ? "✓ Draft submitted" : "Mark draft submitted"}
+                </button>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div style={{ display: "flex", gap: 8, borderTop: "1px solid rgba(0,0,0,0.05)", paddingTop: 12 }}>
+              {!sel.completed ? (
+                <button
+                  type="button"
+                  onClick={() => { void handleCompletionWithAnim(sel.id, false); setSelectedId(null); }}
+                  style={{ fontSize: 11, fontWeight: 600, padding: "6px 14px", borderRadius: 8, border: "none", cursor: "pointer", fontFamily: "inherit", background: "#d4edcc", color: "#2d5a24" }}
+                >
+                  Mark complete
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => { void handleCompletionWithAnim(sel.id, true); setSelectedId(null); }}
+                  style={{ fontSize: 11, fontWeight: 600, padding: "6px 14px", borderRadius: 8, border: "none", cursor: "pointer", fontFamily: "inherit", background: "#f0f2f5", color: "#456071" }}
+                >
+                  Undo complete
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Tooltip */}
       {tooltipInfo && (

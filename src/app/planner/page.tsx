@@ -3,20 +3,43 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
-import { auth } from "@/lib/firebase";
-import GanttWidget from "@/components/widgets/GanttWidget";
+import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
+import GanttWidget, { type UpcomingItem } from "@/components/widgets/GanttWidget";
 import PlannerForm from "@/components/PlannerForm";
 
 export default function PlannerPage() {
   const router = useRouter();
   const [authed, setAuthed] = useState(false);
+  const [upcomingItems, setUpcomingItems] = useState<UpcomingItem[]>([]);
 
   useEffect(() => {
+    let innerUnsub: (() => void) | null = null;
     const off = onAuthStateChanged(auth, (u) => {
+      if (innerUnsub) { innerUnsub(); innerUnsub = null; }
       if (!u) { router.replace("/"); return; }
       setAuthed(true);
+      const q = query(collection(db, "users", u.uid, "upcoming"), orderBy("dueDate", "asc"));
+      innerUnsub = onSnapshot(q, (snap) => {
+        const list: UpcomingItem[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          list.push({
+            id: d.id,
+            subject: String(data.subject || ""),
+            title: String(data.title || ""),
+            dueDate: String(data.dueDate || ""),
+            handoutDate: data.handoutDate ? String(data.handoutDate) : null,
+            draftDate: data.draftDate ? String(data.draftDate) : null,
+            draftCompleted: Boolean(data.draftCompleted),
+            completed: Boolean(data.completed),
+            status: data.status ? String(data.status) : null,
+          });
+        });
+        setUpcomingItems(list);
+      });
     });
-    return () => off();
+    return () => { off(); if (innerUnsub) innerUnsub(); };
   }, [router]);
 
   if (!authed) {
@@ -52,7 +75,7 @@ export default function PlannerPage() {
 
         {/* Gantt chart */}
         <div style={{ background: "white", borderRadius: 20, padding: "16px 20px", border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 1px 6px rgba(0,0,0,0.04)", marginBottom: 16, overflowX: "auto" }}>
-          <GanttWidget />
+          <GanttWidget items={upcomingItems} />
         </div>
 
         {/* Add to planner form */}

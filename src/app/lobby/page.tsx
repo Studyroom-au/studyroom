@@ -11,6 +11,8 @@ import {
   onSnapshot,
   orderBy,
   query,
+  where,
+  limit,
   Timestamp,
   DocumentData,
   QueryDocumentSnapshot,
@@ -54,6 +56,7 @@ export default function LobbyPage() {
   const router = useRouter();
 
   const [authed, setAuthed] = useState(false);
+  const [roomBlocked, setRoomBlocked] = useState(false);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -73,6 +76,19 @@ export default function LobbyPage() {
       } catch {
         // ignore token refresh failures, just continue
       }
+
+      // Check if this student's room access has been disabled by a parent
+      try {
+        const snap = await getDocs(
+          query(collection(db, "students"), where("hubUid", "==", u.uid), limit(1))
+        );
+        if (!snap.empty && snap.docs[0].data().roomAccessEnabled === false) {
+          setRoomBlocked(true);
+        }
+      } catch {
+        // If the query fails (e.g. non-student user), allow access
+      }
+
       setAuthed(true);
     });
     return () => off();
@@ -210,6 +226,21 @@ export default function LobbyPage() {
     const code = codeInput.trim();
     if (!code) return;
     router.push("/room/" + code.toLowerCase());
+  }
+
+  if (roomBlocked) {
+    return (
+      <div style={{ background: "#f0f2f5", minHeight: "100svh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <div style={{ background: "#fff", borderRadius: 18, padding: 32, border: "1px solid rgba(0,0,0,0.06)", maxWidth: 400, textAlign: "center" }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>🔒</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "#1d2428", marginBottom: 8 }}>Study rooms are locked</div>
+          <div style={{ fontSize: 13, color: "#8a96a3", lineHeight: 1.6 }}>
+            Your parent has disabled access to study rooms.
+            Ask them to re-enable it from the Parent View.
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

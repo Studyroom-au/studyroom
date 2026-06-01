@@ -1,3 +1,4 @@
+//src/app/admin/promo/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -27,11 +28,13 @@ type PromoType =
 
 type DiscountAppliesTo = "per_session" | "per_month";
 type PackageTier = "CASUAL" | "PACKAGE_5" | "PACKAGE_12";
+type PromoEligibility = "new_users_only" | "existing_users_allowed";
 
 type PromoCodeDoc = {
   id: string;
   code: string;
   type?: PromoType;
+  eligibility?: PromoEligibility | null;
   durationDays?: number | null;
   discountPercent?: number | null;
   discountCents?: number | null;
@@ -136,6 +139,7 @@ export default function AdminPromoPage() {
   const [maxRedemptions, setMaxRedemptions] = useState<number | "">("");
   const [expiryDate, setExpiryDate] = useState("");
   const [active, setActive] = useState(true);
+  const [eligibility, setEligibility] = useState<PromoEligibility>("new_users_only");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -171,6 +175,7 @@ export default function AdminPromoPage() {
     setMaxRedemptions("");
     setExpiryDate("");
     setActive(true);
+    setEligibility("new_users_only");
   }
 
   async function handleCreate() {
@@ -201,6 +206,7 @@ export default function AdminPromoPage() {
         description: description.trim(),
         maxRedemptions: maxRedemptions === "" ? null : Number(maxRedemptions),
         redemptionCount: 0,
+        eligibility,
         expiresAt,
         active,
         createdAt: serverTimestamp() as Timestamp,
@@ -427,6 +433,18 @@ export default function AdminPromoPage() {
                 <span className="text-sm text-[color:var(--muted)]">{active ? "Active" : "Inactive"}</span>
               </div>
             </Field>
+
+            <Field label="Eligibility">
+              <select
+                aria-label="Eligibility"
+                value={eligibility}
+                onChange={(e) => setEligibility(e.target.value as PromoEligibility)}
+                className={inputCls}
+              >
+                <option value="new_users_only">New users only — no existing subscription</option>
+                <option value="existing_users_allowed">Existing users allowed — anyone can redeem</option>
+              </select>
+            </Field>
           </div>
 
           <div className="mt-6 flex flex-wrap gap-3">
@@ -466,6 +484,7 @@ export default function AdminPromoPage() {
                     <th className="px-4 py-3">Code</th>
                     <th className="px-4 py-3">Type</th>
                     <th className="px-4 py-3">Details</th>
+                    <th className="px-4 py-3 whitespace-nowrap">Eligibility</th>
                     <th className="px-4 py-3 whitespace-nowrap">Max uses</th>
                     <th className="px-4 py-3">Redeemed</th>
                     <th className="px-4 py-3">Expires</th>
@@ -497,6 +516,19 @@ export default function AdminPromoPage() {
                         {/* Details */}
                         <td className="px-4 py-3 text-[color:var(--ink)]">
                           {promoDetails(c)}
+                        </td>
+
+                        {/* Eligibility */}
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {(c.eligibility ?? "new_users_only") === "new_users_only" ? (
+                            <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+                              New users only
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                              All users
+                            </span>
+                          )}
                         </td>
 
                         {/* Max uses */}

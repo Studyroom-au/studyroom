@@ -1,3 +1,4 @@
+//src/components/widget/TaskListWidget.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -22,15 +23,21 @@ type Task = {
   title: string;
   done: boolean;
   source?: string;
+  upcomingId?: string;
+  checkpointId?: string;
+  dueDate?: string | null;
 };
 
-export default function TaskListWidget() {
+type MinUpcomingItem = { id: string; completed: boolean };
+
+export default function TaskListWidget({ upcomingItems = [] }: { upcomingItems?: MinUpcomingItem[] }) {
   const [authReady, setAuthReady] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [text, setText] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [showDoneCheckpoints, setShowDoneCheckpoints] = useState(false);
 
   useEffect(() => {
     const off = onAuthStateChanged(auth, async (u) => {
@@ -69,6 +76,13 @@ export default function TaskListWidget() {
             title: String(data.title || ""),
             done: Boolean(data.done),
             source: data.source ? String(data.source) : undefined,
+            upcomingId: data.upcomingId
+              ? String(data.upcomingId)
+              : data.assessmentId
+              ? String(data.assessmentId)
+              : undefined,
+            checkpointId: data.checkpointId ? String(data.checkpointId) : undefined,
+            dueDate: data.dueDate ? String(data.dueDate) : null,
           });
         });
         setTasks(rows);
@@ -108,15 +122,46 @@ export default function TaskListWidget() {
   }
 
   async function toggleTask(t: Task) {
-    setErr(null);
     const u = auth.currentUser;
     if (!u) return;
     setBusyId(t.id);
     try {
-      await updateDoc(doc(db, "users", u.uid, "tasks", t.id), { done: !t.done });
+      const newDone = !t.done;
+
+      await updateDoc(doc(db, "users", u.uid, "tasks", t.id), { done: newDone });
+
+      if (t.upcomingId && t.checkpointId) {
+        try {
+          await updateDoc(
+            doc(db, "users", u.uid, "upcoming", t.upcomingId, "checkpoints", t.checkpointId),
+            { completed: newDone }
+          );
+        } catch {}
+      }
+
+      if (t.upcomingId) {
+        const siblings = tasks.filter((x) => x.upcomingId === t.upcomingId);
+        const allDone =
+          siblings.length > 0 &&
+          siblings.every((x) => (x.id === t.id ? newDone : x.done));
+
+        if (allDone) {
+          await updateDoc(doc(db, "users", u.uid, "upcoming", t.upcomingId), {
+            completed: true,
+            status: "Submitted",
+          });
+        } else {
+          const parentItem = upcomingItems.find((i) => i.id === t.upcomingId);
+          if (parentItem?.completed) {
+            await updateDoc(doc(db, "users", u.uid, "upcoming", t.upcomingId), {
+              completed: false,
+              status: "In progress",
+            });
+          }
+        }
+      }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setErr(msg || "Could not update task");
+      setErr(e instanceof Error ? e.message : "Could not update task");
     } finally {
       setBusyId(null);
     }
@@ -140,6 +185,71 @@ export default function TaskListWidget() {
   const done = tasks.filter((t) => t.done).length;
   const total = tasks.length;
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+
+  const regularTasks = tasks.filter(t => t.source !== "from_assessment");
+  const assessmentTasks = tasks
+    .filter(t => t.source === "from_assessment")
+    .sort((a, b) => {
+      if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+      if (a.dueDate) return -1;
+      if (b.dueDate) return 1;
+      return 0;
+    });
+  const incompleteAssessmentTasks = assessmentTasks.filter(t => !t.done);
+  const completedAssessmentTasks = assessmentTasks.filter(t => t.done);
+
+  const taskLi = (t: Task) => (
+    <li
+      key={t.id}
+      className="task-row"
+      style={{ display: "flex", alignItems: "center", gap: 9, padding: "7px 9px", borderRadius: 11, border: `1px solid ${t.done ? "#c8e6bb" : "rgba(0,0,0,0.06)"}`, background: t.done ? "#f4faf0" : "white", transition: "all 0.18s", position: "relative" }}
+    >
+      {/* Custom checkbox — 44px tap target, 17px visual */}
+      <button
+        type="button"
+        onClick={() => toggleTask(t)}
+        disabled={busyId === t.id}
+        style={{ width: 44, height: 44, borderRadius: "50%", flexShrink: 0, border: "none", background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0, margin: -13 }}
+      >
+        <span
+          className={t.done ? "task-cb-done" : ""}
+          style={{ width: 17, height: 17, borderRadius: "50%", border: `2px solid ${t.done ? "#82977e" : "rgba(0,0,0,0.14)"}`, background: t.done ? "#82977e" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.18s", flexShrink: 0 }}
+        >
+          {t.done && (
+            <svg width="8" height="6" viewBox="0 0 8 6" fill="none">
+              <path d="M1 3L3 5L7 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+        </span>
+      </button>
+
+      {/* Title */}
+      <span style={{ flex: 1, fontSize: 12, lineHeight: 1.4, color: t.done ? "var(--sr-muted)" : "var(--sr-ink)", textDecoration: t.done ? "line-through" : "none", display: "flex", alignItems: "center", flexWrap: "wrap", gap: 4 }}>
+        {t.title}
+        {t.source === "tutor_assigned" && (
+          <span style={{ fontSize: 9, fontWeight: 600, padding: "2px 7px", borderRadius: 20, background: "#d6e5e3", color: "#1a3a4a", marginLeft: 6, whiteSpace: "nowrap", flexShrink: 0 }}>
+            From tutor
+          </span>
+        )}
+        {t.source === "from_assessment" && (
+          <span style={{ fontSize: 9, fontWeight: 600, padding: "2px 7px", borderRadius: 20, background: "#edf2f6", color: "#456071", marginLeft: 6, whiteSpace: "nowrap", flexShrink: 0 }}>
+            Deadline
+          </span>
+        )}
+      </span>
+
+      {/* Delete */}
+      <button
+        type="button"
+        onClick={() => removeTask(t)}
+        disabled={busyId === t.id}
+        className="task-delete"
+        style={{ fontSize: 11, color: "var(--sr-muted)", padding: "2px 6px", borderRadius: 6, border: "none", background: "transparent", cursor: "pointer", opacity: busyId === t.id ? 0.3 : 0, transition: "all 0.15s" }}
+      >
+        ✕
+      </button>
+    </li>
+  );
 
   return (
     <section style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -183,57 +293,29 @@ export default function TaskListWidget() {
 
       {/* Task list */}
       <ul style={{ display: "flex", flexDirection: "column", gap: 8, listStyle: "none", margin: 0, padding: 0 }}>
-        {tasks.map((t) => (
-          <li
-            key={t.id}
-            className="task-row"
-            style={{ display: "flex", alignItems: "center", gap: 9, padding: "7px 9px", borderRadius: 11, border: `1px solid ${t.done ? "#c8e6bb" : "rgba(0,0,0,0.06)"}`, background: t.done ? "#f4faf0" : "white", transition: "all 0.18s", position: "relative" }}
-          >
-            {/* Custom checkbox — 44px tap target, 17px visual */}
+        {/* Regular (non-assessment) tasks */}
+        {regularTasks.map(taskLi)}
+
+        {/* Assessment/checkpoint tasks — sorted by due date, completed hidden by default */}
+        {incompleteAssessmentTasks.map(taskLi)}
+
+        {completedAssessmentTasks.length > 0 && (
+          <li style={{ listStyle: "none" }}>
             <button
               type="button"
-              onClick={() => toggleTask(t)}
-              disabled={busyId === t.id}
-              style={{ width: 44, height: 44, borderRadius: "50%", flexShrink: 0, border: "none", background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0, margin: -13 }}
+              onClick={() => setShowDoneCheckpoints(v => !v)}
+              style={{ width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#748398", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 0", fontFamily: "inherit" }}
             >
-              <span
-                className={t.done ? "task-cb-done" : ""}
-                style={{ width: 17, height: 17, borderRadius: "50%", border: `2px solid ${t.done ? "#82977e" : "rgba(0,0,0,0.14)"}`, background: t.done ? "#82977e" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.18s", flexShrink: 0 }}
-              >
-                {t.done && (
-                  <svg width="8" height="6" viewBox="0 0 8 6" fill="none">
-                    <path d="M1 3L3 5L7 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                )}
-              </span>
-            </button>
-
-            {/* Title */}
-            <span style={{ flex: 1, fontSize: 12, lineHeight: 1.4, color: t.done ? "var(--sr-muted)" : "var(--sr-ink)", textDecoration: t.done ? "line-through" : "none", display: "flex", alignItems: "center", flexWrap: "wrap", gap: 4 }}>
-              {t.title}
-              {t.source === "tutor_assigned" && (
-                <span style={{ fontSize: 9, fontWeight: 600, padding: "2px 7px", borderRadius: 20, background: "#d6e5e3", color: "#1a3a4a", marginLeft: 6, whiteSpace: "nowrap", flexShrink: 0 }}>
-                  From tutor
-                </span>
-              )}
-            </span>
-
-            {/* Delete */}
-            <button
-              type="button"
-              onClick={() => removeTask(t)}
-              disabled={busyId === t.id}
-              className="task-delete"
-              style={{ fontSize: 11, color: "var(--sr-muted)", padding: "2px 6px", borderRadius: 6, border: "none", background: "transparent", cursor: "pointer", opacity: busyId === t.id ? 0.3 : 0, transition: "all 0.15s" }}
-            >
-              ✕
+              <span>✓ {completedAssessmentTasks.length} completed</span>
+              <span style={{ fontSize: 9, opacity: 0.65, fontWeight: 600 }}>{showDoneCheckpoints ? "▼ Hide" : "▸ Show"}</span>
             </button>
           </li>
-        ))}
+        )}
+        {showDoneCheckpoints && completedAssessmentTasks.map(taskLi)}
 
         {tasks.length === 0 && (
           <li style={{ border: "1.5px dashed #e4eaef", borderRadius: 11, padding: 16, textAlign: "center", fontSize: 11, color: "var(--sr-muted)" }}>
-            No tasks yet. Add a couple of small wins for today.
+            Nothing here yet. What&apos;s one small thing you could do today?
           </li>
         )}
       </ul>

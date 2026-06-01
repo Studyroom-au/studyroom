@@ -243,9 +243,9 @@ function buildInvoiceLine(args: {
         : "Late cancellation fee";
 
   return {
-    sessionId: args.sessionId,
-    desc: `${sessionLabel} • ${args.studentName || "Student"} • ${formatModeLabel(args.mode)} • ${formatPlanLabel(args.planType)}`,
-    amountCents: args.amountCents,
+    description: `${sessionLabel} • ${args.studentName || "Student"} • ${formatModeLabel(args.mode)} • ${formatPlanLabel(args.planType)}`,
+    quantity: 1,
+    unitAmount: Number((args.amountCents / 100).toFixed(2)),
   };
 }
 
@@ -325,7 +325,7 @@ export async function applySessionAction(args: ApplySessionActionArgs) {
       billingOutcome: outcome,
       status: nextStatus,
       legacyStatus: toLegacySessionStatus(nextStatus),
-      billingStatus: outcome === "invoice" ? "INVOICED" : outcome === "consume_entitlement" ? "PREPAID" : outcome === "credit" ? "CREDITED" : "NOT_BILLED",
+      billingStatus: outcome === "invoice" ? "READY_TO_INVOICE" : outcome === "consume_entitlement" ? "PREPAID" : outcome === "credit" ? "CREDITED" : "NOT_BILLED",
       updatedAt: FieldValue.serverTimestamp(),
     };
 

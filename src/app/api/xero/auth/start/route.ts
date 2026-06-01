@@ -20,23 +20,22 @@ export async function GET(req: Request) {
     const xero = getXeroClient();
     const baseConsentUrl = await xero.buildConsentUrl();
 
-    // Force add state if not present
-    const consentUrl = baseConsentUrl.includes("state=")
-      ? baseConsentUrl
-      : `${baseConsentUrl}${baseConsentUrl.includes("?") ? "&" : "?"}state=${encodeURIComponent(
-          state
-        )}`;
+    // Use URLSearchParams to safely inject the state — avoids string concatenation.
+    const u = new URL(baseConsentUrl);
+    u.searchParams.set("state", state);
+    const consentUrl = u.toString();
 
     const res = NextResponse.json({ consentUrl });
 
-    // cookie for CSRF state validation
+    // HttpOnly cookie for CSRF state validation in the callback.
     res.headers.append(
       "Set-Cookie",
-      `xero_oauth_state=${state}; Path=/; Max-Age=600; HttpOnly; SameSite=Lax`
+      `xero_oauth_state=${encodeURIComponent(state)}; Path=/; Max-Age=600; HttpOnly; SameSite=Lax`
     );
 
     return res;
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? "Unauthorized" }, { status: 401 });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Unauthorized";
+    return NextResponse.json({ error: msg }, { status: 401 });
   }
 }

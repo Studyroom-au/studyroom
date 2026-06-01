@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import SubPageHeader from "@/components/hub/SubPageHeader";
 
 type Resource = {
   id: string;
@@ -63,37 +64,10 @@ export default function ResourcesPage() {
   }, [router]);
 
   return (
-    <div style={{ background: "#f0f2f5", minHeight: "100svh", padding: "0 0 60px" }}>
-      {/* Header */}
-      <div style={{
-        background: "#fff",
-        borderRadius: "0 0 20px 20px",
-        padding: "16px 20px 0",
-        marginBottom: 16,
-        border: "1px solid rgba(0,0,0,0.07)",
-      }}>
-        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "#748398", marginBottom: 4 }}>
-          Studyroom
-        </div>
-        <div style={{ fontSize: 22, fontWeight: 700, color: "#1d2428", letterSpacing: "-0.02em", marginBottom: 3 }}>
-          Resources
-        </div>
-        <div style={{ fontSize: 13, color: "#8a96a3", marginBottom: 14 }}>
-          Study materials assigned by your tutor.
-        </div>
-        <div style={{ height: 1, background: "rgba(0,0,0,0.06)", margin: "0 -20px" }} />
-        <div style={{ padding: "10px 0" }}>
-          <button
-            type="button"
-            onClick={() => router.push("/hub")}
-            style={{ fontSize: 12, fontWeight: 500, padding: "5px 14px", borderRadius: 20, border: "none", cursor: "pointer", background: "transparent", color: "#677a8a", fontFamily: "inherit" }}
-          >
-            ← Hub
-          </button>
-        </div>
-      </div>
+    <div style={{ background: "#f0f2f5", minHeight: "100svh", paddingBottom: 60 }}>
+      <SubPageHeader title="Resources" />
 
-      <div style={{ padding: "0 16px" }}>
+      <div style={{ padding: "0 16px", maxWidth: 900, margin: "0 auto" }}>
         {loading ? (
           <div style={{ fontSize: 13, color: "#8a96a3", padding: "40px 0", textAlign: "center" }}>
             Loading resources...

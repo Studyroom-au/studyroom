@@ -1,3 +1,4 @@
+//src/components/session/SessionLogEditor.tsx
 "use client";
 
 import { useState } from "react";

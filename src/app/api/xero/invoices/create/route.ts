@@ -1,3 +1,4 @@
+//src\app\api\xero\invoices\create\route.ts
 import { NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
 import { ensureXeroToken, ymd } from "@/lib/xero";
@@ -168,7 +169,8 @@ export async function POST(req: Request) {
 
     await sessionRef.update({
       xeroInvoiceId: invoiceId,
-      billingStatus: "INVOICED",
+      xeroInvoiceStatus: mode,
+      billingStatus: mode === "AUTHORISED" ? "APPROVED" : "DRAFT_CREATED",
       updatedAt: new Date(),
     });
 

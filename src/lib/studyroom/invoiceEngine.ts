@@ -1,7 +1,5 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
-import { ensureXeroToken, ymd } from "@/lib/xero";
-import { Invoice, LineAmountTypes } from "xero-node";
 import { classifyAndPriceSessions, type SessionForPricing, type PricedSession } from "./siblingPricing";
 import { CASUAL_INVOICE_DUE_DAYS } from "./billing";
 
@@ -147,32 +145,14 @@ export async function generateFamilyInvoice(params: {
     }
   }
 
-  // Fetch client for Xero contact
-  const clientSnap = await db.collection("clients").doc(clientId).get();
-  const client = (clientSnap.data() ?? {}) as ClientDoc;
-  const parentName = String(client.parentName || "Parent");
-  const parentEmail = String(client.parentEmail || "");
-
-  // Create the invoice doc as pending_xero
+  // Create the invoice doc as pending_xero — admin will generate the Xero draft manually
   const invoiceRef = db.collection("invoices").doc();
   const now = new Date();
   const dueAt = new Date(now.getTime() + CASUAL_INVOICE_DUE_DAYS * 86400000);
 
-  await invoiceRef.set({
-    clientId,
-    dateKey,
-    sessionIds: casualSessionIds,
-    status: "pending_xero",
-    rateSummary: pricedSessions,
-    totalCents,
-    triggeredBy: params.triggeredBy,
-    createdAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp(),
-  });
-
-  // Build Xero line items
+  // Build line item descriptions for later use when admin pushes to Xero
   const salesAccountCode = process.env.XERO_SALES_ACCOUNT_CODE || "200";
-  const xeroLineItems = pricedSessions.map((priced) => {
+  const lineItems = pricedSessions.map((priced) => {
     const raw = rawBySessionId[priced.id];
     const studentName = studentMap[String(raw?.studentId ?? "")]?.studentName ?? "Student";
     const dateLabel = brisbaneDateLabel(priced.startMs);
@@ -186,69 +166,35 @@ export async function generateFamilyInvoice(params: {
     };
   });
 
-  // Push to Xero
-  try {
-    const { xero, tenantId } = await ensureXeroToken();
+  await invoiceRef.set({
+    clientId,
+    dateKey,
+    sessionIds: casualSessionIds,
+    status: "pending_xero",
+    rateSummary: pricedSessions,
+    lineItems,
+    totalCents,
+    dueAt: Timestamp.fromDate(dueAt),
+    issuedAt: Timestamp.fromDate(now),
+    triggeredBy: params.triggeredBy,
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
 
-    let contactId: string | null = null;
-    if (parentEmail) {
-      const existing = await xero.accountingApi.getContacts(
-        tenantId,
-        undefined,
-        `EmailAddress=="${parentEmail.replace(/"/g, '\\"')}"`
-      );
-      const found = existing.body.contacts?.[0];
-      if (found?.contactID) contactId = found.contactID;
-    }
-    if (!contactId) {
-      const created = await xero.accountingApi.createContacts(tenantId, {
-        contacts: [{ name: parentName, emailAddress: parentEmail || undefined }],
-      });
-      contactId = created.body.contacts?.[0]?.contactID ?? null;
-    }
-    if (!contactId) throw new Error("Could not create/find Xero contact");
-
-    const created = await xero.accountingApi.createInvoices(tenantId, {
-      invoices: [
+  // Mark each casual session as ready for admin invoice review
+  await Promise.all(
+    casualSessionIds.map((sid) =>
+      db.collection("sessions").doc(sid).set(
         {
-          type: Invoice.TypeEnum.ACCREC,
-          contact: { contactID: contactId },
-          status: Invoice.StatusEnum.AUTHORISED,
-          date: ymd(now),
-          dueDate: ymd(dueAt),
-          lineAmountTypes: LineAmountTypes.Inclusive,
-          reference: `Studyroom · Family · ${dateKey}`,
-          lineItems: xeroLineItems,
+          invoiceId: invoiceRef.id,
+          billingStatus: "READY_TO_INVOICE",
+          billingOutcome: "invoice",
+          updatedAt: FieldValue.serverTimestamp(),
         },
-      ],
-    });
-
-    const xeroInvoiceId = created.body.invoices?.[0]?.invoiceID ?? null;
-    if (!xeroInvoiceId) throw new Error("Xero did not return invoiceID");
-
-    await invoiceRef.set(
-      { xeroInvoiceId, status: "sent", updatedAt: FieldValue.serverTimestamp() },
-      { merge: true }
-    );
-
-    // Update each casual session doc
-    await Promise.all(
-      casualSessionIds.map((sid) =>
-        db.collection("sessions").doc(sid).set(
-          {
-            invoiceId: invoiceRef.id,
-            billingStatus: "INVOICED",
-            billingOutcome: "invoice",
-            updatedAt: FieldValue.serverTimestamp(),
-          },
-          { merge: true }
-        )
+        { merge: true }
       )
-    );
-  } catch (err) {
-    console.error("[invoiceEngine] Xero push failed:", err);
-    // Leave status as pending_xero — caller can retry via invoiceDocId
-  }
+    )
+  );
 
   return { invoiceDocId: invoiceRef.id, skippedPackageSessions };
 }

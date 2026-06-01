@@ -22,7 +22,7 @@ export type StudyroomSessionStatus =
   | "cancelled_by_tutor"
   | "no_show";
 export type BillingOutcome = "consume_entitlement" | "invoice" | "no_charge" | "credit";
-export type InvoiceStatus = "pending_xero" | "sent" | "paid" | "overdue" | "void" | "credited" | "waived" | "xero_failed";
+export type InvoiceStatus = "pending_xero" | "draft_created" | "approved" | "sent" | "paid" | "overdue" | "void" | "credited" | "waived" | "xero_failed";
 
 export type StudyroomPlanRecord = {
   id?: string;

@@ -20,19 +20,23 @@ export async function POST(req: NextRequest) {
       parentName?: string;
       parentEmail?: string;
       parentPhone?: string;
+      parentPassword?: string;
       referral?: string;
       loginEmail?: string;
     };
 
     const {
       studentName, yearLevel, dob, school, subjects,
-      parentName, parentEmail, parentPhone, referral, loginEmail,
+      parentName, parentEmail, parentPhone, parentPassword, referral, loginEmail,
     } = body;
 
     if (!studentName?.trim()) return NextResponse.json({ error: "Student name is required." }, { status: 400 });
     if (!yearLevel) return NextResponse.json({ error: "Year level is required." }, { status: 400 });
 
-    const resolvedParentEmail = parentEmail?.trim() || loginEmail?.trim() || decoded.email || null;
+    // parentEmail must come exclusively from the form — never fall back to the student's auth email
+    const resolvedParentEmail = parentEmail?.trim() || null;
+    // The student's own email comes from the verified token (authoritative) or loginEmail field
+    const studentEmail = decoded.email ?? loginEmail?.trim() ?? null;
 
     const db = getAdminDb();
 
@@ -57,7 +61,7 @@ export async function POST(req: NextRequest) {
       subjects: subjects ?? [],
       clientId: clientRef.id,
       hubUid: uid,
-      hubEmail: loginEmail?.trim() || decoded.email || null,
+      hubEmail: studentEmail,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
@@ -70,6 +74,76 @@ export async function POST(req: NextRequest) {
       parentEmail: resolvedParentEmail,
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
+
+    // Ensure student has a role doc
+    await db.collection("roles").doc(uid).set({ role: "student" }, { merge: true });
+
+    // Create parent Firebase Auth account (non-fatal if it fails)
+    let parentAccountStatus: "created" | "existing" | "skipped" | "failed" = "skipped";
+    const resolvedParentPassword = (parentPassword ?? "").trim();
+    console.log("[onboarding] parentEmail provided:", Boolean(resolvedParentEmail));
+    console.log("[onboarding] parentPassword provided:", Boolean(resolvedParentPassword));
+    // Only attempt if we have a real parent email (not the student's own email) and a password
+    if (resolvedParentEmail && resolvedParentEmail.toLowerCase() !== studentEmail?.toLowerCase() && resolvedParentPassword.length >= 6) {
+      console.log("[onboarding] creating parent auth user:", resolvedParentEmail);
+      try {
+        const adminAuth = getAdminAuth();
+        let parentUid: string | null = null;
+        let accountWasNew = false;
+
+        try {
+          const newUser = await adminAuth.createUser({
+            email: resolvedParentEmail.toLowerCase(),
+            password: resolvedParentPassword,
+            displayName: parentName?.trim() || undefined,
+          });
+          parentUid = newUser.uid;
+          accountWasNew = true;
+        } catch (createErr: unknown) {
+          if ((createErr as { code?: string })?.code === "auth/email-already-exists") {
+            const existing = await adminAuth.getUserByEmail(resolvedParentEmail.toLowerCase());
+            parentUid = existing.uid;
+            accountWasNew = false;
+          } else {
+            throw createErr;
+          }
+        }
+
+        if (parentUid) {
+          if (accountWasNew) {
+            // Fresh account: write role and users doc
+            await Promise.all([
+              db.collection("roles").doc(parentUid).set({ role: "parent" }),
+              db.collection("users").doc(parentUid).set({
+                displayName: parentName?.trim() || null,
+                parentOf: uid,
+                role: "parent",
+                createdAt: FieldValue.serverTimestamp(),
+                updatedAt: FieldValue.serverTimestamp(),
+              }),
+            ]);
+          } else {
+            // Existing account: only set role if no role doc exists yet
+            const existingRole = await db.collection("roles").doc(parentUid).get();
+            if (!existingRole.exists) {
+              await db.collection("roles").doc(parentUid).set({ role: "parent" });
+            }
+            // Always record parentOf so the link is established
+            await db.collection("users").doc(parentUid).set({
+              parentOf: uid,
+              updatedAt: FieldValue.serverTimestamp(),
+            }, { merge: true });
+          }
+
+          await clientRef.update({ parentUid });
+        }
+
+        parentAccountStatus = accountWasNew ? "created" : "existing";
+      } catch (parentErr) {
+        console.warn("[onboarding] Parent account creation failed:", parentErr);
+        parentAccountStatus = "failed";
+      }
+    }
 
     // Send parent welcome email (non-fatal)
     try {
@@ -161,7 +235,7 @@ export async function POST(req: NextRequest) {
       console.warn("[onboarding] Stripe update failed:", stripeErr);
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, parentAccountStatus });
   } catch (err) {
     console.error("[onboarding/submit]", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
