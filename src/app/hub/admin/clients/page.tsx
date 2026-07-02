@@ -50,7 +50,7 @@ function tutorDisplay(t?: UserDoc, fallbackEmail?: string | null, fallbackId?: s
   const name = t?.name || t?.displayName;
   if (name) return name;
   if (fallbackEmail) return fallbackEmail;
-  if (fallbackId) return fallbackId;
+  if (fallbackId) return "Tutor assigned, name not found";
   return "Unassigned";
 }
 

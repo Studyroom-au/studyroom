@@ -470,6 +470,12 @@ export default function HubPage() {
   const [taskCount, setTaskCount] = useState<number | null>(null);
   const [dataReady, setDataReady] = useState(false);
   const [roomAccessEnabled, setRoomAccessEnabled] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<{
+    title: string; subject: string; type: string;
+    dueDate: string; handoutDate: string; draftDate: string;
+  }>({ title: "", subject: "", type: "assessment", dueDate: "", handoutDate: "", draftDate: "" });
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   async function saveListStatus(id: string, newStatus: string) {
     const u = auth.currentUser;
@@ -521,10 +527,12 @@ export default function HubPage() {
     return () => unsubs.forEach(unsub => unsub());
   }, [uid, upcomingItems]);
 
-  // Reset checkpoint form inputs whenever the selected assessment changes.
+  // Reset checkpoint form inputs and edit/delete state whenever the selected assessment changes.
   useEffect(() => {
     setCheckpointText("");
     setCheckpointDate("");
+    setEditingId(null);
+    setDeleteConfirmId(null);
   }, [ganttSelectedId]);
 
   async function addCheckpoint() {
@@ -607,6 +615,57 @@ export default function HubPage() {
         await deleteDoc(doc(db, "users", u.uid, "tasks", cp.linkedTaskId));
       } catch {}
     }
+  }
+
+  function handleStartEdit(item: UpcomingListItem) {
+    setEditForm({
+      title: item.title,
+      subject: item.subject,
+      type: item.type || "assessment",
+      dueDate: item.dueDate,
+      handoutDate: item.handoutDate ?? "",
+      draftDate: item.draftDate ?? "",
+    });
+    setEditingId(item.id);
+    setDeleteConfirmId(null);
+  }
+
+  async function handleSaveEdit() {
+    const u = auth.currentUser;
+    if (!u || !editingId) return;
+    const { title, subject, type, dueDate, handoutDate, draftDate } = editForm;
+    if (!title.trim() || !dueDate) return;
+    const idToSave = editingId;
+    setUpcomingItems(prev => prev.map(i =>
+      i.id === idToSave
+        ? { ...i, title: title.trim(), subject: subject.trim(), type, dueDate, handoutDate: handoutDate || null, draftDate: draftDate || null }
+        : i
+    ));
+    setEditingId(null);
+    await updateDoc(doc(db, "users", u.uid, "upcoming", idToSave), {
+      title: title.trim(),
+      subject: subject.trim(),
+      type,
+      dueDate,
+      handoutDate: handoutDate || null,
+      draftDate: draftDate || null,
+    });
+  }
+
+  async function handleDeleteAssessment(id: string) {
+    const u = auth.currentUser;
+    if (!u) return;
+    setUpcomingItems(prev => prev.filter(i => i.id !== id));
+    setGanttSelectedId(null);
+    setDeleteConfirmId(null);
+    const cps = allCheckpoints[id] ?? [];
+    await Promise.all(cps.map(async (cp) => {
+      await deleteDoc(doc(db, "users", u.uid, "upcoming", id, "checkpoints", cp.id));
+      if (cp.linkedTaskId) {
+        try { await deleteDoc(doc(db, "users", u.uid, "tasks", cp.linkedTaskId)); } catch {}
+      }
+    }));
+    await deleteDoc(doc(db, "users", u.uid, "upcoming", id));
   }
 
   useEffect(() => setMounted(true), []);
@@ -1140,7 +1199,11 @@ export default function HubPage() {
             icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#748398" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
             onClick={() => setActiveSheet("gantt")}
           >
-            <UpcomingPreview />
+            <UpcomingPreview onItemClick={(id) => {
+              setActiveSheet("gantt");
+              setGanttView("list");
+              setGanttSelectedId(id);
+            }} />
           </WidgetCard>
 
           <WidgetCard
@@ -1368,6 +1431,71 @@ export default function HubPage() {
             const diff = listGetDiffFromToday(sel.dueDate);
             const accent = diff < 0 || diff <= 4 ? "#c97777" : diff <= 14 ? "#c4954a" : "#748398";
             const timing = diff < 0 ? "Needs attention" : diff === 0 ? "Due today" : diff === 1 ? "Due tomorrow" : `Due in ${diff} days`;
+            const isEditing = editingId === sel.id;
+            const isConfirmingDelete = deleteConfirmId === sel.id;
+            const editFieldStyle: React.CSSProperties = {
+              border: "1.5px solid #e4eaef", borderRadius: 9, padding: "6px 10px",
+              fontSize: 12, color: "#1d2428", background: "white", outline: "none",
+              fontFamily: "inherit", width: "100%", boxSizing: "border-box",
+            };
+            const editLabelStyle: React.CSSProperties = {
+              fontSize: 9, fontWeight: 700, textTransform: "uppercase",
+              letterSpacing: "0.06em", color: "#8a96a3", marginBottom: 4,
+            };
+            if (isEditing) {
+              return (
+                <div style={{ background: "white", borderRadius: 14, borderTop: "1px solid rgba(0,0,0,0.08)", borderRight: "1px solid rgba(0,0,0,0.08)", borderBottom: "1px solid rgba(0,0,0,0.08)", borderLeft: "3px solid #456071", padding: "14px 16px" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#1d2428" }}>Edit</div>
+                    <button type="button" onClick={() => setEditingId(null)} style={{ fontSize: 14, color: "#8a96a3", background: "none", border: "none", cursor: "pointer", padding: "2px 4px", lineHeight: 1, fontFamily: "inherit" }}>✕</button>
+                  </div>
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={editLabelStyle}>Title</div>
+                    <input aria-label="Title" type="text" value={editForm.title} onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))} style={editFieldStyle} />
+                  </div>
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={editLabelStyle}>Subject</div>
+                    <input aria-label="Subject" type="text" value={editForm.subject} onChange={e => setEditForm(f => ({ ...f, subject: e.target.value }))} style={editFieldStyle} />
+                  </div>
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={editLabelStyle}>Type</div>
+                    <select aria-label="Type" value={editForm.type} onChange={e => setEditForm(f => ({ ...f, type: e.target.value }))} style={editFieldStyle}>
+                      <option value="assessment">Assessment</option>
+                      <option value="exam">Exam</option>
+                    </select>
+                  </div>
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={editLabelStyle}>Due date</div>
+                    <input aria-label="Due date" type="date" value={editForm.dueDate} onChange={e => setEditForm(f => ({ ...f, dueDate: e.target.value }))} style={editFieldStyle} />
+                  </div>
+                  {editForm.type === "assessment" && (
+                    <div style={{ marginBottom: 8 }}>
+                      <div style={editLabelStyle}>Handout date <span style={{ fontSize: 9, color: "#b0bec5", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>optional</span></div>
+                      <input aria-label="Handout date" type="date" value={editForm.handoutDate} onChange={e => setEditForm(f => ({ ...f, handoutDate: e.target.value }))} style={editFieldStyle} />
+                    </div>
+                  )}
+                  {editForm.type === "assessment" && (
+                    <div style={{ marginBottom: 8 }}>
+                      <div style={editLabelStyle}>Draft due date <span style={{ fontSize: 9, color: "#b0bec5", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>optional</span></div>
+                      <input aria-label="Draft due date" type="date" value={editForm.draftDate} onChange={e => setEditForm(f => ({ ...f, draftDate: e.target.value }))} style={editFieldStyle} />
+                    </div>
+                  )}
+                  <div style={{ display: "flex", gap: 8, paddingTop: 12, borderTop: "1px solid rgba(0,0,0,0.05)" }}>
+                    <button
+                      type="button"
+                      onClick={() => void handleSaveEdit()}
+                      disabled={!editForm.title.trim() || !editForm.dueDate}
+                      style={{ fontSize: 11, fontWeight: 600, padding: "6px 14px", borderRadius: 8, border: "none", cursor: "pointer", fontFamily: "inherit", background: "#456071", color: "white", opacity: (!editForm.title.trim() || !editForm.dueDate) ? 0.45 : 1 }}
+                    >
+                      Save changes
+                    </button>
+                    <button type="button" onClick={() => setEditingId(null)} style={{ fontSize: 11, fontWeight: 600, padding: "6px 14px", borderRadius: 8, border: "1.5px solid rgba(0,0,0,0.1)", cursor: "pointer", fontFamily: "inherit", background: "transparent", color: "#748398" }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              );
+            }
             return (
               <div style={{ background: "white", borderRadius: 14, borderTop: "1px solid rgba(0,0,0,0.08)", borderRight: "1px solid rgba(0,0,0,0.08)", borderBottom: "1px solid rgba(0,0,0,0.08)", borderLeft: `3px solid ${accent}`, padding: "14px 16px" }}>
                 {/* Header */}
@@ -1501,15 +1629,37 @@ export default function HubPage() {
                   )}
                 </div>
                 {/* Actions */}
-                <div style={{ display: "flex", gap: 8, borderTop: "1px solid rgba(0,0,0,0.05)", paddingTop: 12 }}>
-                  {!sel.completed ? (
-                    <button type="button" onClick={() => void handleListCompletion(sel.id, false)} style={{ fontSize: 11, fontWeight: 600, padding: "6px 14px", borderRadius: 8, border: "none", cursor: "pointer", fontFamily: "inherit", background: "#d4edcc", color: "#2d5a24" }}>
-                      Mark complete
-                    </button>
+                <div style={{ display: "flex", gap: 8, borderTop: "1px solid rgba(0,0,0,0.05)", paddingTop: 12, flexWrap: "wrap", alignItems: "center" }}>
+                  {isConfirmingDelete ? (
+                    <>
+                      <div style={{ flex: "1 1 100%", fontSize: 12, color: "#748398", marginBottom: 4 }}>
+                        Delete this assessment? This cannot be undone.
+                      </div>
+                      <button type="button" onClick={() => void handleDeleteAssessment(sel.id)} style={{ fontSize: 11, fontWeight: 600, padding: "6px 14px", borderRadius: 8, border: "none", cursor: "pointer", fontFamily: "inherit", background: "#fef0f0", color: "#c97777" }}>
+                        Delete
+                      </button>
+                      <button type="button" onClick={() => setDeleteConfirmId(null)} style={{ fontSize: 11, fontWeight: 600, padding: "6px 14px", borderRadius: 8, border: "1.5px solid rgba(0,0,0,0.1)", cursor: "pointer", fontFamily: "inherit", background: "transparent", color: "#748398" }}>
+                        Cancel
+                      </button>
+                    </>
                   ) : (
-                    <button type="button" onClick={() => void handleListCompletion(sel.id, true)} style={{ fontSize: 11, fontWeight: 600, padding: "6px 14px", borderRadius: 8, border: "none", cursor: "pointer", fontFamily: "inherit", background: "#f0f2f5", color: "#456071" }}>
-                      Undo complete
-                    </button>
+                    <>
+                      {!sel.completed ? (
+                        <button type="button" onClick={() => void handleListCompletion(sel.id, false)} style={{ fontSize: 11, fontWeight: 600, padding: "6px 14px", borderRadius: 8, border: "none", cursor: "pointer", fontFamily: "inherit", background: "#d4edcc", color: "#2d5a24" }}>
+                          Mark complete
+                        </button>
+                      ) : (
+                        <button type="button" onClick={() => void handleListCompletion(sel.id, true)} style={{ fontSize: 11, fontWeight: 600, padding: "6px 14px", borderRadius: 8, border: "none", cursor: "pointer", fontFamily: "inherit", background: "#f0f2f5", color: "#456071" }}>
+                          Undo complete
+                        </button>
+                      )}
+                      <button type="button" onClick={() => handleStartEdit(sel)} style={{ fontSize: 11, fontWeight: 600, padding: "6px 14px", borderRadius: 8, border: "1.5px solid rgba(0,0,0,0.1)", cursor: "pointer", fontFamily: "inherit", background: "transparent", color: "#456071" }}>
+                        Edit
+                      </button>
+                      <button type="button" onClick={() => setDeleteConfirmId(sel.id)} style={{ fontSize: 11, fontWeight: 600, padding: "6px 14px", borderRadius: 8, border: "1.5px solid rgba(0,0,0,0.1)", cursor: "pointer", fontFamily: "inherit", background: "transparent", color: "#748398" }}>
+                        Delete
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -1727,7 +1877,7 @@ function RoomCard({ room, onClick }: { room: typeof ROOMS[0]; onClick: () => voi
   );
 }
 
-function UpcomingPreview() {
+function UpcomingPreview({ onItemClick }: { onItemClick?: (id: string) => void }) {
   const [authReady, setAuthReady] = useState(false);
   const [items, setItems] = useState<Array<{
     id: string; subject: string; title: string; dueDate: string; completed: boolean; type?: string;
@@ -1795,7 +1945,18 @@ function UpcomingPreview() {
         }
         // 15+ days: stays blue (default above)
         return (
-          <div key={item.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "7px 10px", borderRadius: 11, borderLeft: `3px solid ${borderColor}`, background: bg }}>
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onItemClick?.(item.id)}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "7px 10px", borderRadius: 11,
+              border: "none", borderLeft: `3px solid ${borderColor}`,
+              background: bg, width: "100%", fontFamily: "inherit", textAlign: "left",
+              cursor: onItemClick ? "pointer" : "default",
+            }}
+          >
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: "#1d2428" }}>{item.subject}</span>
@@ -1810,7 +1971,7 @@ function UpcomingPreview() {
             <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 20, background: badgeBg, color: badgeColor, whiteSpace: "nowrap" }}>
               {label}
             </span>
-          </div>
+          </button>
         );
       })}
     </div>

@@ -29,6 +29,7 @@ type LeadDoc = {
   claimedTutorId?: unknown;
   claimedTutorName?: unknown;
   claimedTutorEmail?: unknown;
+  tutorRequestIds?: unknown;
   createdAt?: unknown;
   updatedAt?: unknown;
 };
@@ -106,6 +107,7 @@ export default function TutorLeadDetailPage() {
     claimedTutorId: string | null;
     claimedTutorName: string | null;
     claimedTutorEmail: string | null;
+    tutorRequestIds: string[];
     createdAt?: Timestamp;
     updatedAt?: Timestamp;
   }>(null);
@@ -147,6 +149,7 @@ export default function TutorLeadDetailPage() {
         claimedTutorId: asNullableString(d.claimedTutorId),
         claimedTutorName: asNullableString(d.claimedTutorName),
         claimedTutorEmail: asNullableString(d.claimedTutorEmail),
+        tutorRequestIds: asStringArray(d.tutorRequestIds),
         createdAt: asTimestamp(d.createdAt),
         updatedAt: asTimestamp(d.updatedAt),
       });
@@ -164,24 +167,24 @@ export default function TutorLeadDetailPage() {
     return () => off();
   }, [leadId, load]);
 
-  const canClaim = useMemo(() => {
-    if (!lead) return false;
-    if (lead.status !== "new") return false;
-    if (lead.claimedTutorId) return false;
-    return true;
-  }, [lead]);
-
-  const isMine = useMemo(() => {
-    if (!lead) return false;
-    return !!lead.claimedTutorId && lead.claimedTutorId === uid;
+  const hasRequested = useMemo(() => {
+    if (!lead || !uid) return false;
+    return lead.tutorRequestIds.includes(uid);
   }, [lead, uid]);
 
-  async function claim() {
-    if (!canClaim) return;
+  const canRequest = useMemo(() => {
+    if (!lead) return false;
+    if (lead.status !== "new") return false;
+    if (hasRequested) return false;
+    return true;
+  }, [lead, hasRequested]);
+
+  async function sendRequest() {
+    if (!canRequest) return;
     setSaving(true);
     try {
       const token = await getIdTokenOrThrow();
-      const res = await fetch(`/api/leads/${leadId}/claim`, {
+      const res = await fetch(`/api/leads/${leadId}/request`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -190,20 +193,20 @@ export default function TutorLeadDetailPage() {
       });
 
       const data = (await res.json().catch(() => null)) as
-        | { ok: true; studentId: string }
+        | { ok: true }
         | { ok: false; error: string }
         | null;
 
       if (!res.ok || !data || data.ok !== true) {
-        const msg = data && "error" in data ? data.error : "Claim failed.";
+        const msg = data && "error" in data ? data.error : "Request failed.";
         alert(msg);
         return;
       }
 
-      window.location.href = `/hub/tutor/students/${data.studentId}`;
+      await load();
     } catch (error) {
       console.error(error);
-      alert("Claim failed. Check console.");
+      alert("Request failed. Check console.");
     } finally {
       setSaving(false);
     }
@@ -234,7 +237,6 @@ export default function TutorLeadDetailPage() {
     );
   }
 
-  const claimLabel = canClaim ? (saving ? "Claiming..." : "Claim this lead") : isMine ? "Claimed by you" : lead.claimedTutorId ? "Already claimed" : "Not claimable";
 
   return (
     <div className="space-y-6">
@@ -246,7 +248,7 @@ export default function TutorLeadDetailPage() {
               {lead.studentName}{lead.yearLevel ? ` · ${lead.yearLevel}` : ""}
             </h1>
             <p className="mt-3 text-sm leading-6 text-[color:var(--muted)]">
-              Created {formatDate(lead.createdAt)}. Review fit, context, and family details before claiming.
+              Created {formatDate(lead.createdAt)}. Review fit, context, and family details before requesting.
             </p>
           </div>
 
@@ -263,17 +265,22 @@ export default function TutorLeadDetailPage() {
             >
               My Students
             </Link>
-            {canClaim ? (
+            {canRequest ? (
               <button
                 type="button"
-                onClick={claim}
+                onClick={sendRequest}
                 disabled={saving}
                 className="rounded-full bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-[color:var(--brand-contrast)] shadow-sm transition hover:bg-[color:var(--brand-600)] disabled:opacity-60"
               >
-                {claimLabel}
+                {saving ? "Sending…" : "Request this student"}
               </button>
+            ) : hasRequested ? (
+              <div className="flex flex-col items-end gap-1">
+                <span className="chip text-sm font-semibold">Request sent</span>
+                <span className="text-xs text-[color:var(--muted)]">Awaiting admin review</span>
+              </div>
             ) : (
-              <span className="chip text-sm font-semibold">{claimLabel}</span>
+              <span className="chip text-sm font-semibold">Not available</span>
             )}
           </div>
         </div>
@@ -363,14 +370,16 @@ export default function TutorLeadDetailPage() {
           </div>
 
           <div className="surface-card rounded-[28px] p-5">
-            <h2 className="text-lg font-semibold text-[color:var(--ink)]">Claim status</h2>
+            <h2 className="text-lg font-semibold text-[color:var(--ink)]">Request status</h2>
             <div className="mt-4 rounded-[24px] bg-white/70 p-4 ring-1 ring-[color:var(--ring)]/75">
               <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">Current state</div>
               <div className="mt-1 text-sm font-semibold text-[color:var(--ink)]">{lead.status}</div>
               <p className="mt-3 text-sm leading-6 text-[color:var(--muted)]">
-                {lead.claimedTutorId
-                  ? `Claimed by ${lead.claimedTutorName || lead.claimedTutorEmail || lead.claimedTutorId}.`
-                  : "This lead is still unclaimed and available to a suitable tutor."}
+                {hasRequested
+                  ? "Your request is pending admin review. Admin will assign a tutor when ready."
+                  : lead.status === "new"
+                  ? "This student is available. Click Request to express interest in tutoring them."
+                  : "This student is no longer available for requests."}
               </p>
               {lead.updatedAt && <p className="mt-3 text-xs text-[color:var(--muted)]">Last updated {formatDate(lead.updatedAt)}</p>}
             </div>

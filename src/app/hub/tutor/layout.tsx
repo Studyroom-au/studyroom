@@ -345,6 +345,7 @@ export default function TutorLayout({ children }: { children: React.ReactNode })
           navItems={[
             { label: "Hub", href: "/hub" },
             { label: "Tutor Home", href: "/hub/tutor", active: isTutorHome },
+            { label: "Profile", href: "/hub/tutor/profile", active: pathname.startsWith("/hub/tutor/profile") },
             { label: "Marketplace", href: "/hub/tutor/leads", active: pathname.startsWith("/hub/tutor/leads") },
             { label: "Students", href: "/hub/tutor/students", active: pathname.startsWith("/hub/tutor/students") },
             { label: "Sessions", href: "/hub/tutor/sessions", active: pathname.startsWith("/hub/tutor/sessions") },

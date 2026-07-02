@@ -19,6 +19,7 @@ type LeadRow = {
   claimedTutorId?: string | null;
   claimedTutorName?: string | null;
   claimedTutorEmail?: string | null;
+  tutorRequestIds: string[];
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 };
@@ -33,6 +34,7 @@ type LeadDoc = {
   claimedTutorId?: unknown;
   claimedTutorName?: unknown;
   claimedTutorEmail?: unknown;
+  tutorRequestIds?: unknown;
   createdAt?: unknown;
   updatedAt?: unknown;
 };
@@ -75,16 +77,16 @@ export default function TutorMarketplacePage() {
   const [loading, setLoading] = useState(true);
   const [uid, setUid] = useState("");
   const [rows, setRows] = useState<LeadRow[]>([]);
-  const [filter, setFilter] = useState<"open" | "mine">("open");
+  const [filter, setFilter] = useState<"open" | "requests">("open");
 
-  async function loadLeads(tutorUid: string, activeFilter: "open" | "mine") {
+  async function loadLeads(tutorUid: string, activeFilter: "open" | "requests") {
     setLoading(true);
     try {
       const col = collection(db, "leads");
       const snap =
         activeFilter === "open"
           ? await getDocs(query(col, where("status", "==", "new"), where("claimedTutorId", "==", null)))
-          : await getDocs(query(col, where("claimedTutorId", "==", tutorUid)));
+          : await getDocs(query(col, where("status", "==", "new"), where("claimedTutorId", "==", null), where("tutorRequestIds", "array-contains", tutorUid)));
 
       const list: LeadRow[] = snap.docs.map((d) => {
         const data = d.data() as LeadDoc;
@@ -99,6 +101,7 @@ export default function TutorMarketplacePage() {
           claimedTutorId: asNullableString(data.claimedTutorId),
           claimedTutorName: asNullableString(data.claimedTutorName),
           claimedTutorEmail: asNullableString(data.claimedTutorEmail),
+          tutorRequestIds: asStringArray(data.tutorRequestIds),
           createdAt: asTimestamp(data.createdAt),
           updatedAt: asTimestamp(data.updatedAt),
         };
@@ -160,10 +163,10 @@ export default function TutorMarketplacePage() {
         </button>
         <button
           type="button"
-          onClick={() => setFilter("mine")}
-          style={{ background: filter === "mine" ? "#456071" : "white", color: filter === "mine" ? "white" : "#456071", border: filter === "mine" ? "none" : "1.5px solid rgba(69,96,113,0.2)", borderRadius: 20, padding: "6px 16px", fontSize: 12, fontWeight: filter === "mine" ? 600 : 500, cursor: "pointer", fontFamily: "inherit" }}
+          onClick={() => setFilter("requests")}
+          style={{ background: filter === "requests" ? "#456071" : "white", color: filter === "requests" ? "white" : "#456071", border: filter === "requests" ? "none" : "1.5px solid rgba(69,96,113,0.2)", borderRadius: 20, padding: "6px 16px", fontSize: 12, fontWeight: filter === "requests" ? 600 : 500, cursor: "pointer", fontFamily: "inherit" }}
         >
-          My claimed ({filter === "mine" ? count : "…"})
+          My requests ({filter === "requests" ? count : "…"})
         </button>
         <button
           type="button"
@@ -192,7 +195,7 @@ export default function TutorMarketplacePage() {
         </div>
       ) : rows.length === 0 ? (
         <div style={{ border: "1.5px dashed #e4eaef", borderRadius: 16, padding: 40, textAlign: "center", fontSize: 13, color: "#8a96a3" }}>
-          {filter === "open" ? "No open leads right now." : "You haven’t claimed any leads yet."}
+          {filter === "open" ? "No open leads right now." : "You haven’t requested any students yet."}
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12 }}>
@@ -220,9 +223,13 @@ export default function TutorMarketplacePage() {
               <div style={{ fontSize: 11, color: "#8a96a3", marginBottom: 4 }}>
                 <span style={{ fontWeight: 600, color: "#748398" }}>Suburb: </span>{lead.suburb || "Flexible"}
               </div>
-              <div style={{ fontSize: 11, color: "#8a96a3", marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: "#8a96a3", marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ fontWeight: 600, color: "#748398" }}>Status: </span>
-                {lead.claimedTutorId ? lead.claimedTutorName || lead.claimedTutorEmail || "Claimed" : "Available"}
+                {lead.tutorRequestIds.includes(uid) ? (
+                  <span style={{ background: "#f0fdf4", color: "#166534", border: "1px solid #86efac", borderRadius: 20, padding: "1px 8px", fontSize: 10, fontWeight: 700 }}>
+                    Requested
+                  </span>
+                ) : "Available"}
               </div>
 
               <div style={{ marginTop: "auto" }}>

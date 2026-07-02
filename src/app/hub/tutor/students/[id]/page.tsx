@@ -22,6 +22,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { SESSION_DURATION_MINS, normalizeMode } from "@/lib/studyroom/billing";
+import StudentSessionHistoryPanel from "@/components/students/StudentSessionHistoryPanel";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -43,6 +44,9 @@ type StudentDoc = {
   assignedTutorEmail?: string | null;
   activePlanId?: string | null;
   message?: string | null;
+  hubUid?: string | null;
+  hubEmail?: string | null;
+  linkedAt?: Timestamp | null;
 };
 
 type ClientDoc = {
@@ -112,17 +116,6 @@ type Worksheet = {
   updatedAt?: Timestamp;
 };
 
-type NoteRow = {
-  id: string;
-  notes: string;
-  status: string;
-  durationMinutes: number;
-  date: string;
-  startAt: Date | undefined;
-  unitPlanWeek: number | null;
-  worksheetId: string | null;
-};
-
 type TabKey = "overview" | "notes" | "plan" | "worksheets";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -168,13 +161,6 @@ export default function TutorStudentDetailPage() {
   // ── Tabs ──
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
 
-  // ── Session notes ──
-  const [sessionNotes, setSessionNotes] = useState<NoteRow[]>([]);
-
-  // ── Session note linking ──
-  const [linkingSessionId, setLinkingSessionId] = useState<string | null>(null);
-  const [linkWeek, setLinkWeek] = useState<number | "">("");
-  const [linkWorksheetId, setLinkWorksheetId] = useState("");
 
   // ── Unit plan ──
   const [activePlan, setActivePlan] = useState<UnitPlan | null>(null);
@@ -199,6 +185,13 @@ export default function TutorStudentDetailPage() {
 
   // ── Shared error ──
   const [error, setError] = useState<string | null>(null);
+
+  // ── Hub account linking ──
+  const [linkEmail, setLinkEmail] = useState("");
+  const [linking, setLinking] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [linkSuccess, setLinkSuccess] = useState<string | null>(null);
+  const [showLinkForm, setShowLinkForm] = useState(false);
 
   // ─── Reload sessions list ──────────────────────────────────────────────────
 
@@ -284,52 +277,6 @@ export default function TutorStudentDetailPage() {
 
     return () => off();
   }, [studentId, reloadSessions]);
-
-  // ─── Session notes (real-time) ────────────────────────────────────────────
-
-  useEffect(() => {
-    if (!studentId) return;
-    const u = auth.currentUser;
-    if (!u) return;
-
-    const q = query(
-      collection(db, "sessions"),
-      where("studentId", "==", studentId),
-      where("tutorId", "==", u.uid),
-      orderBy("startAt", "desc"),
-      limit(50),
-    );
-
-    const unsub = onSnapshot(q, (snap) => {
-      const withNotes = snap.docs
-        .map((d) => {
-          const data = d.data();
-          const startAt = data.startAt?.toDate?.() as Date | undefined;
-          return {
-            id: d.id,
-            notes: String(data.notes ?? "").trim(),
-            status: String(data.status ?? ""),
-            durationMinutes: Number(data.durationMinutes ?? data.durationMins ?? 60),
-            date: startAt
-              ? startAt.toLocaleDateString("en-AU", {
-                  weekday: "short",
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                })
-              : "Unknown date",
-            startAt,
-            unitPlanWeek: (data.unitPlanWeek as number | null) ?? null,
-            worksheetId: (data.worksheetId as string | null) ?? null,
-          };
-        })
-        .filter((s) => s.notes.length > 0);
-
-      setSessionNotes(withNotes);
-    });
-
-    return () => unsub();
-  }, [studentId]);
 
   // ─── Unit plan (real-time) ────────────────────────────────────────────────
 
@@ -563,17 +510,56 @@ export default function TutorStudentDetailPage() {
     }
   }
 
-  async function handleSaveSessionLink(sessionId: string) {
+  // ─── Hub account linking ─────────────────────────────────────────────────
+
+  async function handleLink() {
+    const email = linkEmail.trim().toLowerCase();
+    if (!email) { setLinkError("Enter the student's Studyroom email."); return; }
+    const u = auth.currentUser;
+    if (!u) return;
+
+    setLinking(true);
+    setLinkError(null);
+    setLinkSuccess(null);
+
     try {
-      await updateDoc(doc(db, "sessions", sessionId), {
-        unitPlanWeek: linkWeek !== "" ? Number(linkWeek) : null,
-        worksheetId: linkWorksheetId || null,
-        updatedAt: serverTimestamp(),
-      });
-      setLinkingSessionId(null);
-    } catch (err) {
-      console.error("[save-session-link]", err);
-      setError("Failed to save link.");
+      const idToken = await u.getIdToken();
+
+      const post = (force: boolean) =>
+        fetch("/api/tutor/link-student", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+          body: JSON.stringify({ studentId, hubEmail: email, force }),
+        });
+
+      let res = await post(false);
+      let json = await res.json() as { ok?: boolean; noChange?: boolean; error?: string; currentHubEmail?: string };
+
+      if (res.status === 409) {
+        const yes = window.confirm(
+          `This student is currently linked to ${json.currentHubEmail}.\n\nReplace with ${email}?`
+        );
+        if (!yes) return;
+        res = await post(true);
+        json = await res.json() as { ok?: boolean; noChange?: boolean; error?: string; currentHubEmail?: string };
+      }
+
+      if (!res.ok) {
+        setLinkError(json.error ?? "Failed to link account.");
+        return;
+      }
+
+      setLinkSuccess(json.noChange ? "Already linked to this account." : "Account linked successfully.");
+      setShowLinkForm(false);
+      setLinkEmail("");
+
+      // Refresh student doc so the linked email/uid appear immediately
+      const sSnap = await getDoc(doc(db, "students", studentId));
+      if (sSnap.exists()) setStudent(sSnap.data() as StudentDoc);
+    } catch {
+      setLinkError("Failed to link. Please try again.");
+    } finally {
+      setLinking(false);
     }
   }
 
@@ -650,11 +636,6 @@ export default function TutorStudentDetailPage() {
             boxShadow: activeTab === t.key ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
           }}>
             {t.label}
-            {t.key === "notes" && sessionNotes.length > 0 && (
-              <span style={{ marginLeft: 5, fontSize: 9, fontWeight: 700, background: "#456071", color: "#fff", borderRadius: 20, padding: "1px 5px" }}>
-                {sessionNotes.length}
-              </span>
-            )}
           </button>
         ))}
       </div>
@@ -704,6 +685,121 @@ export default function TutorStudentDetailPage() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Studyroom Account */}
+        <div style={cardStyle}>
+          <div style={sectionLabel}>Studyroom Account</div>
+
+          {/* Linked status */}
+          {student?.hubUid ? (
+            <div style={{ marginBottom: showLinkForm ? 12 : 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                <span style={{
+                  fontSize: 10, fontWeight: 700, padding: "2px 9px", borderRadius: 20,
+                  background: "#d4edcc", color: "#2d5a24",
+                }}>Linked</span>
+                <span style={{ fontSize: 13, color: "#1d2428", fontWeight: 600 }}>
+                  {student.hubEmail ?? "—"}
+                </span>
+              </div>
+              <div style={{ fontSize: 10, color: "#8a96a3", marginBottom: 8 }}>
+                uid: {student.hubUid}
+              </div>
+              {!showLinkForm && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowLinkForm(true);
+                    setLinkEmail(student.hubEmail ?? "");
+                    setLinkError(null);
+                    setLinkSuccess(null);
+                  }}
+                  style={{
+                    fontSize: 11, color: "#748398", background: "none", border: "none",
+                    cursor: "pointer", fontFamily: "inherit", textDecoration: "underline", padding: 0,
+                  }}
+                >
+                  Update linked account
+                </button>
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: "#8a96a3", marginBottom: 12 }}>
+              Not linked to a Studyroom student account.
+            </div>
+          )}
+
+          {/* Link / update form */}
+          {(showLinkForm || !student?.hubUid) && (
+            <div style={{
+              borderTop: student?.hubUid ? "1px solid rgba(0,0,0,0.06)" : "none",
+              paddingTop: student?.hubUid ? 12 : 0,
+            }}>
+              <div style={{ marginBottom: 8 }}>
+                <div style={fieldLabel}>Student&apos;s Studyroom login email</div>
+                <input
+                  type="email"
+                  value={linkEmail}
+                  onChange={(e) => setLinkEmail(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleLink(); }}
+                  placeholder="student@example.com"
+                  style={inputSt}
+                />
+              </div>
+
+              {linkError && (
+                <div style={{
+                  fontSize: 12, color: "#c0445e", background: "#fce8ee",
+                  borderRadius: 9, padding: "6px 10px", marginBottom: 8,
+                }}>
+                  {linkError}
+                </div>
+              )}
+              {linkSuccess && (
+                <div style={{
+                  fontSize: 12, color: "#2d5a24", background: "#d4edcc",
+                  borderRadius: 9, padding: "6px 10px", marginBottom: 8,
+                }}>
+                  {linkSuccess}
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={handleLink}
+                  disabled={linking}
+                  style={{
+                    background: "#456071", color: "#fff", border: "none",
+                    borderRadius: 10, padding: "7px 16px", fontSize: 12,
+                    fontWeight: 600, cursor: linking ? "not-allowed" : "pointer",
+                    fontFamily: "inherit", opacity: linking ? 0.6 : 1,
+                  }}
+                >
+                  {linking ? "Linking…" : (student?.hubUid ? "Update" : "Link account")}
+                </button>
+                {showLinkForm && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowLinkForm(false);
+                      setLinkEmail("");
+                      setLinkError(null);
+                      setLinkSuccess(null);
+                    }}
+                    style={{
+                      background: "none", color: "#677a8a", border: "none",
+                      borderRadius: 10, padding: "7px 12px", fontSize: 12,
+                      fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+                    }}
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Add Session */}
@@ -775,137 +871,7 @@ export default function TutorStudentDetailPage() {
       {/* ── SESSION NOTES TAB ────────────────────────────────────────────────── */}
       {activeTab === "notes" && (
         <div style={{ marginTop: 4 }}>
-          <div style={{
-            fontSize: 10, fontWeight: 700, letterSpacing: "0.18em",
-            textTransform: "uppercase", color: "#748398", marginBottom: 12,
-            display: "flex", alignItems: "center", gap: 10,
-          }}>
-            <span>Session notes</span>
-            <div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.07)" }} />
-          </div>
-
-          {error && (
-            <div style={{ fontSize: 12, color: "#c0445e", background: "#fce8ee", borderRadius: 9, padding: "7px 12px", marginBottom: 12 }}>
-              {error}
-            </div>
-          )}
-
-          {sessionNotes.length === 0 ? (
-            <div style={{
-              background: "#f4f7f9", borderRadius: 12, padding: "16px 18px",
-              fontSize: 12, color: "#8a96a3", fontStyle: "italic",
-            }}>
-              No session notes yet.
-            </div>
-          ) : (
-            sessionNotes.map(note => (
-              <div key={note.id} style={{
-                background: "#fff", borderRadius: 14, padding: "12px 16px",
-                border: "1px solid rgba(0,0,0,0.06)", marginBottom: 8,
-              }}>
-                {/* Date + status */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "#1d2428" }}>
-                    {note.date}
-                    {note.durationMinutes ? ` · ${note.durationMinutes} min` : ""}
-                  </div>
-                  <span style={{
-                    fontSize: 10, fontWeight: 600, padding: "2px 9px", borderRadius: 20,
-                    background: note.status === "completed" ? "#d4edcc" : "#edf2f6",
-                    color: note.status === "completed" ? "#2d5a24" : "#456071",
-                  }}>
-                    {note.status || "completed"}
-                  </span>
-                </div>
-
-                {/* Note text */}
-                <div style={{
-                  fontSize: 13, color: "#456071", lineHeight: 1.6,
-                  padding: "8px 12px", background: "rgba(69,96,113,0.04)",
-                  borderRadius: 8, borderLeft: "2px solid rgba(69,96,113,0.2)",
-                  fontStyle: "italic", whiteSpace: "pre-wrap",
-                }}>
-                  {note.notes}
-                </div>
-
-                {/* Link badges + toggle */}
-                <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                  {note.unitPlanWeek ? (
-                    <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 9px", borderRadius: 20, background: "#edf2f6", color: "#456071" }}>
-                      Unit plan · Week {note.unitPlanWeek}
-                    </span>
-                  ) : null}
-                  {note.worksheetId ? (
-                    <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 9px", borderRadius: 20, background: "#f4f7f9", color: "#748398" }}>
-                      📎 {worksheets.find(w => w.id === note.worksheetId)?.title ?? "Worksheet"}
-                    </span>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLinkingSessionId(note.id);
-                      setLinkWeek(note.unitPlanWeek ?? "");
-                      setLinkWorksheetId(note.worksheetId ?? "");
-                      setError(null);
-                    }}
-                    style={{ fontSize: 10, color: "#8a96a3", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", textDecoration: "underline", padding: 0 }}
-                  >
-                    {note.unitPlanWeek || note.worksheetId ? "Edit link" : "Link to plan / worksheet"}
-                  </button>
-                </div>
-
-                {/* Inline link editor */}
-                {linkingSessionId === note.id && (
-                  <div style={{ marginTop: 10, background: "#f4f7f9", borderRadius: 10, padding: "10px 12px", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
-                    <div>
-                      <label style={{ ...lbl, marginBottom: 3, display: "block" }}>Unit plan week</label>
-                      <select
-                        aria-label="Unit plan week"
-                        value={linkWeek}
-                        onChange={e => setLinkWeek(e.target.value === "" ? "" : Number(e.target.value))}
-                        style={{ ...inp, fontSize: 12, padding: "6px 10px", width: "auto", minWidth: 130 }}
-                      >
-                        <option value="">No week</option>
-                        {Array.from({ length: 10 }, (_, i) => (
-                          <option key={i + 1} value={i + 1}>Week {i + 1}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label style={{ ...lbl, marginBottom: 3, display: "block" }}>Worksheet</label>
-                      <select
-                        aria-label="Worksheet"
-                        value={linkWorksheetId}
-                        onChange={e => setLinkWorksheetId(e.target.value)}
-                        style={{ ...inp, fontSize: 12, padding: "6px 10px", width: "auto", minWidth: 160 }}
-                      >
-                        <option value="">None</option>
-                        {worksheets.map(w => (
-                          <option key={w.id} value={w.id}>{w.title}{w.weekNumber ? ` (Wk ${w.weekNumber})` : ""}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button type="button" onClick={() => handleSaveSessionLink(note.id)} style={{
-                        background: "#456071", color: "#fff", border: "none",
-                        borderRadius: 8, padding: "6px 14px", fontSize: 11,
-                        fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
-                      }}>
-                        Save
-                      </button>
-                      <button type="button" onClick={() => setLinkingSessionId(null)} style={{
-                        background: "#fff", color: "#677a8a", border: "none",
-                        borderRadius: 8, padding: "6px 12px", fontSize: 11,
-                        fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
-                      }}>
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))
-          )}
+          <StudentSessionHistoryPanel sessions={sessions} />
         </div>
       )}
 

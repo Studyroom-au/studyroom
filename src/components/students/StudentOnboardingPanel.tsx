@@ -125,6 +125,7 @@ export default function StudentOnboardingPanel({
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [showCompleted, setShowCompleted] = useState(false);
 
   useEffect(() => {
     if (selectedClientId && selectedClientId !== clientId) {
@@ -132,9 +133,23 @@ export default function StudentOnboardingPanel({
     }
   }, [selectedClientId, clientId]);
 
-  const incompleteClients = useMemo(
-    () => clients.filter((c) => (c.data.onboardingStatus ?? "INCOMPLETE") !== "COMPLETE"),
+  // A client is considered "done" (hidden by default) if:
+  //   1. onboardingStatus === "COMPLETE" (explicitly marked via this panel), OR
+  //   2. assignedTutorId is set (enrolled via the lead flow — tutor assigned but
+  //      onboardingStatus was never written to "COMPLETE" by that path)
+  const doneCount = useMemo(
+    () => clients.filter((c) => c.data.onboardingStatus === "COMPLETE" || !!c.data.assignedTutorId).length,
     [clients]
+  );
+
+  const incompleteClients = useMemo(
+    () =>
+      showCompleted
+        ? clients
+        : clients.filter(
+            (c) => c.data.onboardingStatus !== "COMPLETE" && !c.data.assignedTutorId
+          ),
+    [clients, showCompleted]
   );
 
   const client = useMemo(() => clients.find((c) => c.id === clientId) ?? null, [clients, clientId]);
@@ -326,6 +341,17 @@ export default function StudentOnboardingPanel({
           <p className="mt-1 text-xs text-[color:var(--muted)]">
             Complete onboarding for existing tutor/my-student records and sync profile fields.
           </p>
+          {doneCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowCompleted((v) => !v)}
+              className="mt-1 text-xs font-semibold text-[color:var(--brand)] hover:underline"
+            >
+              {showCompleted
+                ? "Hide enrolled/complete"
+                : `Show enrolled/complete (${doneCount})`}
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Link

@@ -114,6 +114,12 @@ export default function ClientDetailPage() {
   const [savingNotes, setSavingNotes] = useState(false);
   const [notesSaved, setNotesSaved] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [editingParent, setEditingParent] = useState(false);
+  const [parentForm, setParentForm] = useState({
+    parentName: "", parentEmail: "", parentPhone: "",
+    addressLine1: "", suburb: "", postcode: "",
+  });
+  const [savingParent, setSavingParent] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -171,6 +177,38 @@ export default function ClientDetailPage() {
     }
     load();
   }, [clientId]);
+
+  async function saveParentInfo() {
+    setSavingParent(true);
+    try {
+      // Only updates this client document — no auth users, no student records, no syncing.
+      await updateDoc(doc(db, "clients", clientId), {
+        parentName: parentForm.parentName.trim() || null,
+        parentEmail: parentForm.parentEmail.trim() || null,
+        parentPhone: parentForm.parentPhone.trim() || null,
+        addressLine1: parentForm.addressLine1.trim() || null,
+        suburb: parentForm.suburb.trim() || null,
+        postcode: parentForm.postcode.trim() || null,
+        updatedAt: serverTimestamp(),
+      });
+      setClient((prev) =>
+        prev
+          ? {
+              ...prev,
+              parentName: parentForm.parentName.trim() || undefined,
+              parentEmail: parentForm.parentEmail.trim() || undefined,
+              parentPhone: parentForm.parentPhone.trim() || null,
+              addressLine1: parentForm.addressLine1.trim() || null,
+              suburb: parentForm.suburb.trim() || null,
+              postcode: parentForm.postcode.trim() || null,
+            }
+          : prev
+      );
+      setEditingParent(false);
+    } finally {
+      setSavingParent(false);
+    }
+  }
 
   async function saveAdminNotes() {
     setSavingNotes(true);
@@ -275,23 +313,91 @@ export default function ClientDetailPage() {
 
         {/* Parent info */}
         <section className="rounded-3xl border border-[color:var(--ring)] bg-[color:var(--card)] p-6 shadow-sm">
-          <h2 className="mb-4 text-base font-semibold text-[color:var(--ink)]">Parent</h2>
-          <InfoRow label="Name" value={client.parentName} />
-          <InfoRow label="Email" value={client.parentEmail} />
-          <InfoRow label="Phone" value={client.parentPhone} />
-          <InfoRow
-            label="Address"
-            value={[client.addressLine1, client.suburb, client.postcode].filter(Boolean).join(", ")}
-          />
-          <InfoRow
-            label="Onboarding"
-            value={
-              client.onboardingStatus === "COMPLETE"
-                ? `Complete${client.onboardingCompletedAt ? ` · ${formatDate(client.onboardingCompletedAt)}` : ""}`
-                : "Incomplete"
-            }
-          />
-          <InfoRow label="Assigned tutor" value={tutorName} />
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-base font-semibold text-[color:var(--ink)]">Parent</h2>
+            {!editingParent && (
+              <button
+                type="button"
+                onClick={() => {
+                  setParentForm({
+                    parentName: client.parentName ?? "",
+                    parentEmail: client.parentEmail ?? "",
+                    parentPhone: client.parentPhone ?? "",
+                    addressLine1: client.addressLine1 ?? "",
+                    suburb: client.suburb ?? "",
+                    postcode: client.postcode ?? "",
+                  });
+                  setEditingParent(true);
+                }}
+                className="text-xs font-semibold text-[color:var(--brand)] hover:underline"
+              >
+                Edit
+              </button>
+            )}
+          </div>
+
+          {editingParent ? (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {(
+                  [
+                    ["parentName", "Name", "text"],
+                    ["parentEmail", "Email", "email"],
+                    ["parentPhone", "Phone", "tel"],
+                    ["addressLine1", "Address line 1", "text"],
+                    ["suburb", "Suburb", "text"],
+                    ["postcode", "Postcode", "text"],
+                  ] as const
+                ).map(([f, label, type]) => (
+                  <label key={f} className="block space-y-0.5">
+                    <span className="text-xs text-[color:var(--muted)]">{label}</span>
+                    <input
+                      type={type}
+                      className="w-full rounded-xl border border-[color:var(--ring)] bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[color:var(--brand)]/30"
+                      value={parentForm[f]}
+                      onChange={(e) => setParentForm((p) => ({ ...p, [f]: e.target.value }))}
+                    />
+                  </label>
+                ))}
+              </div>
+              <div className="mt-4 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={saveParentInfo}
+                  disabled={savingParent}
+                  className="rounded-xl border border-[color:var(--ring)] bg-[color:var(--brand)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+                >
+                  {savingParent ? "Saving…" : "Save"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingParent(false)}
+                  className="rounded-xl border border-[color:var(--ring)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--muted)] transition hover:bg-[#d6e5e3]/40"
+                >
+                  Cancel
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <InfoRow label="Name" value={client.parentName} />
+              <InfoRow label="Email" value={client.parentEmail} />
+              <InfoRow label="Phone" value={client.parentPhone} />
+              <InfoRow
+                label="Address"
+                value={[client.addressLine1, client.suburb, client.postcode].filter(Boolean).join(", ")}
+              />
+              <InfoRow
+                label="Onboarding"
+                value={
+                  client.onboardingStatus === "COMPLETE"
+                    ? `Complete${client.onboardingCompletedAt ? ` · ${formatDate(client.onboardingCompletedAt)}` : ""}`
+                    : "Incomplete"
+                }
+              />
+              <InfoRow label="Assigned tutor" value={tutorName} />
+            </>
+          )}
         </section>
 
         {/* Students */}

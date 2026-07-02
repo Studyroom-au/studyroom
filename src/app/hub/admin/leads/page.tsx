@@ -19,6 +19,7 @@ type LeadDoc = {
   subjects?: string[];
   mode?: "online" | "in-home";
   suburb?: string | null;
+  postcode?: string | null;
   status: LeadStatus;
   source?: "direct-enrol" | "contact" | "manual";
   assignedTutorId?: string | null;
@@ -27,6 +28,7 @@ type LeadDoc = {
   claimedTutorId?: string | null;
   claimedTutorName?: string | null;
   claimedTutorEmail?: string | null;
+  tutorRequestIds?: string[];
   createdAt?: Timestamp;
 };
 
@@ -39,6 +41,7 @@ type LeadData = {
   subjects?: unknown;
   mode?: unknown;
   suburb?: unknown;
+  postcode?: unknown;
   status?: unknown;
   source?: unknown;
   assignedTutorId?: unknown;
@@ -47,6 +50,7 @@ type LeadData = {
   claimedTutorId?: unknown;
   claimedTutorName?: unknown;
   claimedTutorEmail?: unknown;
+  tutorRequestIds?: unknown;
   createdAt?: unknown;
 };
 
@@ -107,16 +111,6 @@ function StatusPill({ status }: { status: LeadStatus }) {
   );
 }
 
-function SourceBadge({ source }: { source?: string | null }) {
-  if (source === "contact") {
-    return <span className="inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-800 ring-1 ring-sky-200">Inquiry</span>;
-  }
-  if (source === "manual") {
-    return <span className="inline-flex items-center rounded-full bg-gray-50 px-2 py-0.5 text-xs font-semibold text-gray-700 ring-1 ring-gray-200">Manual</span>;
-  }
-  return <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800 ring-1 ring-emerald-200">Enrolment</span>;
-}
-
 export default function AdminLeadsPage() {
   const [loading, setLoading] = useState(true);
   const [leads, setLeads] = useState<LeadDoc[]>([]);
@@ -151,6 +145,7 @@ export default function AdminLeadsPage() {
             subjects: isStringArray(data.subjects) ? data.subjects : [],
             mode,
             suburb: asNullableString(data.suburb),
+            postcode: asNullableString(data.postcode),
             status,
             source,
             assignedTutorId: asNullableString(data.assignedTutorId),
@@ -159,6 +154,7 @@ export default function AdminLeadsPage() {
             claimedTutorId: asNullableString(data.claimedTutorId),
             claimedTutorName: asNullableString(data.claimedTutorName),
             claimedTutorEmail: asNullableString(data.claimedTutorEmail),
+            tutorRequestIds: isStringArray(data.tutorRequestIds) ? data.tutorRequestIds : [],
             createdAt: asTimestamp(data.createdAt),
           };
         });
@@ -214,7 +210,7 @@ export default function AdminLeadsPage() {
 
   return (
     <div className="app-bg min-h-[100svh]">
-      <div className="mx-auto max-w-6xl px-4 py-8">
+      <div className="mx-auto max-w-[90rem] px-4 py-8">
         {/* Page header */}
         <header className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="space-y-1">
@@ -223,7 +219,7 @@ export default function AdminLeadsPage() {
             </p>
             <h1 className="text-3xl font-semibold text-[color:var(--ink)]">Leads</h1>
             <p className="text-sm text-[color:var(--muted)]">
-              Enrolments from <span className="font-semibold">/enrol</span> and contact inquiries.
+              CRM and waiting list for enrolments, enquiries, and tutor matching.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -266,18 +262,18 @@ export default function AdminLeadsPage() {
             <div className="p-6 text-sm text-[color:var(--muted)]">No leads found for this filter.</div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full border-separate border-spacing-0 text-sm">
+              <table className="w-full table-fixed border-separate border-spacing-0 text-sm">
                 <thead>
                   <tr className="text-left text-xs font-semibold text-[color:var(--muted)]">
-                    <th className="px-3 py-3 whitespace-nowrap">Date</th>
+                    <th className="w-[100px] px-3 py-3">Date</th>
                     <th className="px-3 py-3">Student / Parent</th>
-                    <th className="px-3 py-3 whitespace-nowrap">Year</th>
-                    <th className="px-3 py-3">Subjects</th>
-                    <th className="px-3 py-3 whitespace-nowrap">Mode</th>
-                    <th className="px-3 py-3">Source</th>
-                    <th className="px-3 py-3">Status</th>
-                    <th className="px-3 py-3">Assigned</th>
-                    <th className="px-3 py-3">Actions</th>
+                    <th className="w-[54px] px-3 py-3">Year</th>
+                    <th className="w-[140px] px-3 py-3">Subjects</th>
+                    <th className="w-[76px] px-3 py-3">Mode</th>
+                    <th className="w-[120px] px-3 py-3">Location</th>
+                    <th className="w-[114px] px-3 py-3">Status</th>
+                    <th className="w-[170px] px-3 py-3">Assigned</th>
+                    <th className="w-[138px] px-3 py-3">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -289,9 +285,9 @@ export default function AdminLeadsPage() {
                       </td>
 
                       {/* Student + parent (merged) */}
-                      <td className="px-3 py-3">
-                        <div className="font-semibold text-[color:var(--ink)]">{l.studentName || "—"}</div>
-                        <div className="text-xs text-[color:var(--muted)]">
+                      <td className="min-w-0 px-3 py-3">
+                        <div className="truncate font-semibold text-[color:var(--ink)]">{l.studentName || "—"}</div>
+                        <div className="truncate text-xs text-[color:var(--muted)]">
                           {l.parentName || ""}
                           {l.parentEmail ? <> · <span className="text-[color:var(--brand)]">{l.parentEmail}</span></> : null}
                         </div>
@@ -301,18 +297,18 @@ export default function AdminLeadsPage() {
                       <td className="px-3 py-3 text-[color:var(--muted)]">{l.yearLevel || "—"}</td>
 
                       {/* Subjects */}
-                      <td className="px-3 py-3 text-[color:var(--muted)] max-w-[140px]">
+                      <td className="px-3 py-3 text-[color:var(--muted)]">
                         <span className="line-clamp-2">{l.subjects?.length ? l.subjects.join(", ") : "—"}</span>
                       </td>
 
                       {/* Mode */}
-                      <td className="px-3 py-3 text-[color:var(--muted)] whitespace-nowrap">
+                      <td className="px-3 py-3 text-[color:var(--muted)]">
                         {l.mode === "in-home" ? "In-home" : l.mode === "online" ? "Online" : "—"}
                       </td>
 
-                      {/* Source */}
-                      <td className="px-3 py-3">
-                        <SourceBadge source={l.source} />
+                      {/* Location */}
+                      <td className="px-3 py-3 text-[color:var(--muted)]">
+                        {[l.suburb, l.postcode].filter(Boolean).join(" ") || "—"}
                       </td>
 
                       {/* Status */}
@@ -320,11 +316,19 @@ export default function AdminLeadsPage() {
                         <StatusPill status={l.status} />
                       </td>
 
-                      {/* Assigned tutor */}
-                      <td className="px-3 py-3 text-[color:var(--muted)]">
-                        {l.assignedTutorName || l.claimedTutorName || l.assignedTutorEmail || l.claimedTutorEmail
-                          ? <span className="font-semibold text-[color:var(--ink)]">{l.assignedTutorName || l.claimedTutorName || l.assignedTutorEmail || l.claimedTutorEmail}</span>
-                          : "—"}
+                      {/* Assigned tutor / request count */}
+                      <td className="px-3 py-3">
+                        {l.assignedTutorName || l.claimedTutorName || l.assignedTutorEmail || l.claimedTutorEmail ? (
+                          <span className="block truncate font-semibold text-[color:var(--ink)]">
+                            {l.assignedTutorName || l.claimedTutorName || l.assignedTutorEmail || l.claimedTutorEmail}
+                          </span>
+                        ) : l.tutorRequestIds?.length ? (
+                          <span className="inline-flex items-center rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-700 ring-1 ring-teal-200">
+                            {l.tutorRequestIds.length} {l.tutorRequestIds.length === 1 ? "tutor request" : "tutor requests"}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-[color:var(--muted)]">No requests</span>
+                        )}
                       </td>
 
                       {/* Actions */}
@@ -332,7 +336,7 @@ export default function AdminLeadsPage() {
                         <div className="flex items-center gap-2">
                           <Link
                             href={`/hub/admin/leads/${l.id}`}
-                            className="inline-flex items-center justify-center rounded-xl border border-[color:var(--ring)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--brand)] transition hover:bg-[#d6e5e3]/40"
+                            className="inline-flex items-center justify-center rounded-xl border border-[color:var(--ring)] bg-white px-2.5 py-1.5 text-xs font-semibold text-[color:var(--brand)] transition hover:bg-[#d6e5e3]/40"
                           >
                             Open →
                           </Link>
@@ -340,7 +344,7 @@ export default function AdminLeadsPage() {
                             type="button"
                             onClick={() => handleDelete(l.id)}
                             disabled={deletingId === l.id}
-                            className="inline-flex items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-60"
+                            className="inline-flex items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-2 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-60"
                           >
                             {deletingId === l.id ? "…" : "Delete"}
                           </button>

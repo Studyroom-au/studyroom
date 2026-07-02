@@ -56,6 +56,9 @@ type TutorRow = {
   bio: string;
   subjects: string[];
   studentCount: number;
+  maxActiveStudents: number | null;
+  profileStatus: string | null;   // null = no tutors/{uid} doc
+  profileData: Record<string, unknown> | null;
 };
 
 type PendingTutorRow = {
@@ -88,6 +91,89 @@ type TutorRequestRow = {
 
 function rawDisplayName(user?: UserDoc) {
   return user?.name || user?.displayName || "";
+}
+
+// ─── Profile checklist helpers ────────────────────────────────────────────────
+// Matches the same logic as the Tutor Home completion card.
+
+type ChecklistItem = { label: string; done: boolean };
+
+function buildProfileChecklist(p: Record<string, unknown> | null): ChecklistItem[] {
+  const s = (v: unknown) => typeof v === "string" && v.trim().length > 0;
+  const a = (v: unknown) => Array.isArray(v) && v.length > 0;
+  return [
+    { label: "Details",           done: p != null && s(p.phone) },
+    { label: "Teaching setup",    done: p != null && a(p.modes) },
+    { label: "Location & travel", done: p != null && (s(p.suburb) || s(p.postcode)) },
+    { label: "Availability",      done: p != null && (a(p.availabilitySlots) || a(p.availabilityDays)) },
+    { label: "Subjects",          done: p != null && a(p.capabilities) },
+    { label: "Learning support",  done: p != null && a(p.supportCapabilities) },
+    { label: "Compliance",        done: p != null && s(p.abn) && s(p.wwccNumber) },
+  ];
+}
+
+const PROFILE_STATUS_LABEL: Record<string, string> = {
+  draft: "Draft",
+  pending_review: "Pending review",
+  active: "Active",
+  paused: "Paused",
+};
+const PROFILE_STATUS_COLOR: Record<string, string> = {
+  draft: "#748398",
+  pending_review: "#456071",
+  active: "#82977e",
+  paused: "#8b7d6b",
+};
+
+function ProfileCell({
+  profileStatus,
+  profileData,
+}: {
+  profileStatus: string | null;
+  profileData: Record<string, unknown> | null;
+}) {
+  const checklist = buildProfileChecklist(profileData);
+  const doneCount = checklist.filter((c) => c.done).length;
+  const total = checklist.length;
+  const missing = checklist.filter((c) => !c.done).map((c) => c.label);
+
+  const missingLabel =
+    missing.length === 0
+      ? ""
+      : missing.length <= 2
+      ? `Missing: ${missing.join(", ")}`
+      : `Missing: ${missing[0]}, ${missing[1]} +${missing.length - 2} more`;
+
+  if (profileStatus === null) {
+    return (
+      <div className="space-y-0.5 text-sm">
+        <div className="font-semibold" style={{ color: "#8b7d6b" }}>No profile</div>
+        <div className="text-xs text-[color:var(--muted)]">0 / {total} complete</div>
+      </div>
+    );
+  }
+
+  const label = PROFILE_STATUS_LABEL[profileStatus] ?? profileStatus;
+  const color = PROFILE_STATUS_COLOR[profileStatus] ?? "#748398";
+  const showMissing = (profileStatus === "draft") && missingLabel;
+  const showPendingNote = profileStatus === "pending_review";
+  const showPausedNote = profileStatus === "paused";
+
+  return (
+    <div className="space-y-0.5 text-sm">
+      <div className="font-semibold" style={{ color }}>{label}</div>
+      <div className="text-xs text-[color:var(--muted)]">{doneCount} / {total} complete</div>
+      {showMissing && (
+        <div className="text-xs" style={{ color: "#8b7d6b" }}>{missingLabel}</div>
+      )}
+      {showPendingNote && (
+        <div className="text-xs font-medium" style={{ color: "#456071" }}>Needs admin review</div>
+      )}
+      {showPausedNote && (
+        <div className="text-xs text-[color:var(--muted)]">Profile paused</div>
+      )}
+    </div>
+  );
 }
 
 // ─── Inline edit panel ────────────────────────────────────────────────────────
@@ -294,9 +380,19 @@ export default function AdminTutorsPage() {
 
       const loaded = await Promise.all(
         tutorUids.map(async (uid) => {
-          const userSnap = await getDoc(doc(db, "users", uid));
+          const [userSnap, profileSnap] = await Promise.all([
+            getDoc(doc(db, "users", uid)),
+            getDoc(doc(db, "tutors", uid)),
+          ]);
           const user = (userSnap.exists() ? userSnap.data() : {}) as UserDoc;
+          const profile = profileSnap.exists()
+            ? (profileSnap.data() as Record<string, unknown>)
+            : null;
           const raw = rawDisplayName(user);
+          const maxActiveStudents =
+            profile && typeof profile.maxActiveStudents === "number"
+              ? profile.maxActiveStudents
+              : null;
           return {
             uid,
             name: raw || "No name set",
@@ -306,6 +402,14 @@ export default function AdminTutorsPage() {
             bio: user.bio || "",
             subjects: Array.isArray(user.subjects) ? user.subjects : [],
             studentCount: countByTutorId[uid] || 0,
+            maxActiveStudents,
+            profileStatus:
+              profile && typeof profile.profileStatus === "string"
+                ? profile.profileStatus
+                : profile
+                ? "draft"
+                : null,
+            profileData: profile,
           } satisfies TutorRow;
         })
       );
@@ -517,8 +621,17 @@ export default function AdminTutorsPage() {
     [tutorRequests]
   );
 
-  // Column count for the tutor table colspan
-  const tutorColCount = 5;
+  // Column count for the tutor table colspan (Tutor | Email | Students | Profile | Open | Actions)
+  const tutorColCount = 6;
+
+  const profileSummary = useMemo(() => {
+    const noProfile = sortedRows.filter((r) => r.profileStatus === null).length;
+    const draft = sortedRows.filter((r) => r.profileStatus === "draft").length;
+    const pending = sortedRows.filter((r) => r.profileStatus === "pending_review").length;
+    const active = sortedRows.filter((r) => r.profileStatus === "active").length;
+    const paused = sortedRows.filter((r) => r.profileStatus === "paused").length;
+    return { noProfile, draft, pending, active, paused, needsFinishing: noProfile + draft };
+  }, [sortedRows]);
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
@@ -692,6 +805,45 @@ export default function AdminTutorsPage() {
         )}
       </div>
 
+      {/* ── Tutor Profile Follow-up ───────────────────────────────────────── */}
+      {!loading && sortedRows.length > 0 && (
+        <div className="rounded-3xl border border-[color:var(--ring)] bg-[color:var(--card)] px-5 py-4 shadow-sm">
+          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-[color:var(--muted)]">
+            Tutor Profile Follow-up
+          </p>
+          <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm">
+            {profileSummary.needsFinishing > 0 && (
+              <span style={{ color: "#748398" }}>
+                <span className="font-semibold">{profileSummary.needsFinishing}</span>{" "}
+                {profileSummary.needsFinishing === 1 ? "tutor needs" : "tutors need"} to finish{" "}
+                {profileSummary.needsFinishing === 1 ? "their profile" : "their profiles"}
+              </span>
+            )}
+            {profileSummary.pending > 0 && (
+              <span style={{ color: "#456071" }}>
+                <span className="font-semibold">{profileSummary.pending}</span>{" "}
+                {profileSummary.pending === 1 ? "profile" : "profiles"} waiting for admin review
+              </span>
+            )}
+            {profileSummary.active > 0 && (
+              <span style={{ color: "#82977e" }}>
+                <span className="font-semibold">{profileSummary.active}</span>{" "}
+                active {profileSummary.active === 1 ? "profile" : "profiles"}
+              </span>
+            )}
+            {profileSummary.paused > 0 && (
+              <span style={{ color: "#8b7d6b" }}>
+                <span className="font-semibold">{profileSummary.paused}</span>{" "}
+                paused {profileSummary.paused === 1 ? "profile" : "profiles"}
+              </span>
+            )}
+            {profileSummary.needsFinishing === 0 && profileSummary.pending === 0 && (
+              <span className="text-[color:var(--muted)]">All profiles up to date.</span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Tutor directory ────────────────────────────────────────────────── */}
       {loading ? (
         <div className="rounded-3xl border border-[color:var(--ring)] bg-[color:var(--card)] p-6 text-sm text-[color:var(--muted)]">
@@ -703,12 +855,13 @@ export default function AdminTutorsPage() {
         </div>
       ) : (
         <div className="overflow-x-auto rounded-3xl border border-[color:var(--ring)] bg-[color:var(--card)] shadow-sm">
-          <table className="min-w-[700px] w-full border-separate border-spacing-0">
+          <table className="min-w-[960px] w-full border-separate border-spacing-0">
             <thead>
               <tr className="text-left text-xs font-semibold text-[color:var(--muted)]">
                 <th className="px-4 py-3">Tutor</th>
                 <th className="px-4 py-3">Email</th>
                 <th className="px-4 py-3">Students</th>
+                <th className="px-4 py-3">Profile</th>
                 <th className="px-4 py-3">Open</th>
                 <th className="px-4 py-3">Actions</th>
               </tr>
@@ -726,7 +879,36 @@ export default function AdminTutorsPage() {
                       )}
                     </td>
                     <td className="px-4 py-4 text-sm text-[color:var(--muted)]">{t.email || "—"}</td>
-                    <td className="px-4 py-4 text-sm text-[color:var(--muted)]">{t.studentCount}</td>
+                    <td className="px-4 py-4 text-sm">
+                      {t.maxActiveStudents == null ? (
+                        <span className="text-[color:var(--muted)]">
+                          {t.studentCount} assigned · <span className="text-slate-400">Capacity not set</span>
+                        </span>
+                      ) : (() => {
+                        const remaining = t.maxActiveStudents - t.studentCount;
+                        return (
+                          <span>
+                            <span className="text-[color:var(--ink)]">
+                              {t.studentCount} / {t.maxActiveStudents} assigned
+                            </span>
+                            {" · "}
+                            {remaining > 0 ? (
+                              <span className="font-semibold text-teal-700">{remaining} spaces</span>
+                            ) : remaining === 0 ? (
+                              <span className="font-semibold text-amber-700">At capacity</span>
+                            ) : (
+                              <span className="font-semibold text-rose-700">Over capacity</span>
+                            )}
+                          </span>
+                        );
+                      })()}
+                    </td>
+                    <td className="px-4 py-4">
+                      <ProfileCell
+                        profileStatus={t.profileStatus}
+                        profileData={t.profileData}
+                      />
+                    </td>
                     <td className="px-4 py-4">
                       <Link
                         href={`/hub/admin/tutors/${t.uid}`}

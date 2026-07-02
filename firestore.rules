@@ -11,7 +11,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isAuthed() && request.auth.token.email == "lily.studyroom@gmail.com";
+      return isAuthed() && request.auth.token.email in ["lily.studyroom@gmail.com", "contact.studyroomaustralia@gmail.com"];
     }
 
     function roleDoc() {
@@ -269,6 +269,11 @@ service cloud.firestore {
       allow read, write: if isAdmin();
       allow read: if isTutor() && sessionTutorMatch(resource.data);
 
+      // Student can read their own sessions
+      allow read: if isAuthed()
+        && resource.data.studentId != null
+        && get(/databases/$(database)/documents/students/$(resource.data.studentId)).data.hubUid == request.auth.uid;
+
       // Parent can read sessions for their student
       allow read: if isAuthed()
         && resource.data.clientId != null
@@ -304,6 +309,20 @@ service cloud.firestore {
 
         allow read, create, update: if isTutor()
           && get(/databases/$(database)/documents/sessions/$(sessionId)).data.tutorId == request.auth.uid;
+
+        // Student can read logs on their own sessions
+        allow read: if isAuthed()
+          && get(/databases/$(database)/documents/sessions/$(sessionId)).data.studentId != null
+          && get(/databases/$(database)/documents/students/$(
+            get(/databases/$(database)/documents/sessions/$(sessionId)).data.studentId
+          )).data.hubUid == request.auth.uid;
+
+        // Parent can read logs for their client's sessions
+        allow read: if isAuthed()
+          && get(/databases/$(database)/documents/sessions/$(sessionId)).data.clientId != null
+          && get(/databases/$(database)/documents/clients/$(
+            get(/databases/$(database)/documents/sessions/$(sessionId)).data.clientId
+          )).data.parentEmail == authedEmail();
 
         allow delete: if false;
       }
@@ -359,10 +378,35 @@ service cloud.firestore {
       allow read, write: if isTutorOrAdmin();
     }
 
-    // ---------------- TUTOR PRIVATE DATA ----------------
-    // Wildcard covers tutors/{uid}/studentPlans and tutors/{uid}/worksheets
-    match /tutors/{uid}/{document=**} {
+    // ---------------- TUTOR PROFILE + PRIVATE DATA ----------------
+    // Tutor Profile V2.
+    // Tutors may read their own top-level profile document.
+    // Tutors must update the profile through a validated server API route
+    // using the Admin SDK; they cannot write the top-level profile directly.
+    match /tutors/{uid} {
+      allow read: if isSelf(uid) || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // Existing tutor-owned subcollections.
+    // These explicit rules preserve the previous wildcard behaviour for the
+    // known active subcollections while allowing internal/admin to stay private.
+    match /tutors/{uid}/studentPlans/{docId} {
       allow read, write: if isSelf(uid) || isAdmin();
+    }
+
+    match /tutors/{uid}/worksheets/{docId} {
+      allow read, write: if isSelf(uid) || isAdmin();
+    }
+
+    match /tutors/{uid}/sessionNotes/{docId} {
+      allow read, write: if isSelf(uid) || isAdmin();
+    }
+
+    // Admin-only internal tutor record.
+    // Tutors cannot read or write this document.
+    match /tutors/{uid}/internal/{docId} {
+      allow read, write: if isAdmin();
     }
 
     // ---------------- TUTOR ACCESS CODES ----------------
