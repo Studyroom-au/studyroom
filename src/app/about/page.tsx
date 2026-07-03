@@ -26,13 +26,15 @@ export default function AboutPage() {
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-6xl grid gap-6 lg:grid-cols-[1.4fr,1fr] lg:items-center">
           <div className="space-y-4 rounded-3xl bg-[color:var(--card)] p-8 shadow-sm ring-1 ring-[color:var(--ring)]">
-            <h2 className="text-2xl font-semibold text-[color:var(--ink)]">Our Purpose</h2>
+            <h2 className="text-2xl font-semibold text-[color:var(--ink)]">
+              Our Purpose
+            </h2>
 
             <p className="text-sm text-[color:var(--muted)]">
               So many students aren&apos;t struggling because they &quot;can&apos;t do it.&quot; They&apos;re
               struggling because they don&apos;t feel confident, they&apos;re unsure where to start, they feel
-              overwhelmed by fast-paced classrooms, or they&apos;ve never been taught how to organise
-              themselves.
+              overwhelmed by the pace of school, or they haven&apos;t yet found a way to organise
+              themselves that feels manageable.
             </p>
 
             <p className="text-sm text-[color:var(--muted)]">
@@ -59,9 +61,13 @@ export default function AboutPage() {
       {/* WHAT WE BELIEVE */}
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-6xl space-y-5 rounded-3xl bg-[color:var(--card)] p-8 shadow-sm ring-1 ring-[color:var(--ring)]">
-          <h2 className="text-2xl font-semibold text-[color:var(--ink)]">What We Believe</h2>
+          <h2 className="text-2xl font-semibold text-[color:var(--ink)]">
+            What We Believe
+          </h2>
 
-          <p className="text-sm text-[color:var(--muted)]">At Studyroom, we believe:</p>
+          <p className="text-sm text-[color:var(--muted)]">
+            At Studyroom, we believe:
+          </p>
 
           <ul className="space-y-2 text-sm text-[color:var(--muted)]">
             <li>• Confidence comes before achievement</li>
@@ -73,26 +79,23 @@ export default function AboutPage() {
           </ul>
 
           <p className="text-sm text-[color:var(--muted)]">
-            We don&apos;t force students into a system – we build the system around them.
+            We don&apos;t force students into one rigid approach. We build support around the way
+            they learn.
           </p>
-          
         </div>
-        
       </section>
 
       {/* WHO WE SUPPORT */}
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-6xl grid gap-10 md:grid-cols-2 md:items-start">
           <div className="space-y-3">
-            <h2 className="text-2xl font-semibold text-[color:var(--ink)]">Who We Support</h2>
+            <h2 className="text-2xl font-semibold text-[color:var(--ink)]">
+              Who We Support
+            </h2>
             <p className="text-sm text-[color:var(--muted)]">
               Studyroom is for students who want to feel confident, organised, and capable –
               without pressure or fear of making mistakes.
             </p>
-           
-                      
-              
-                      
           </div>
 
           <div className="grid gap-3">
@@ -103,7 +106,7 @@ export default function AboutPage() {
               "Teens who are catching up or want to aim higher",
               "Students who feel stuck, unsure, or overwhelmed",
               "Neurodivergent learners (including ASD & ADHD)",
-              "Students who can’t always attend school",
+              "Students who need extra structure after time away from school",
               "Teens who need personalised explanations and real support",
             ].map((item) => (
               <div
@@ -113,7 +116,9 @@ export default function AboutPage() {
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[color:var(--brand)]/10 text-[color:var(--brand)]">
                   <span className="text-lg">✨</span>
                 </div>
-                <div className="text-sm font-semibold text-[color:var(--ink)]">{item}</div>
+                <div className="text-sm font-semibold text-[color:var(--ink)]">
+                  {item}
+                </div>
               </div>
             ))}
           </div>
@@ -191,14 +196,20 @@ export default function AboutPage() {
             </p>
 
             <p className="text-sm text-[color:var(--muted)]">
+              I know what it feels like to look capable from the outside while still feeling stuck,
+              unsure where to start, or afraid to ask for help.
+            </p>
+
+            <p className="text-sm text-[color:var(--muted)]">
               I often struggled with confidence, organisation, and feeling behind even when I
               wasn&apos;t. Once I learned how to break tasks down and study properly, everything
               changed – and I wanted to help other students feel the same.
             </p>
 
             <p className="text-sm text-[color:var(--muted)]">
-              I&apos;m now studying a Bachelor of Education (Primary & Secondary – Mathematics) and
-              have worked with hundreds of students across Logan and Brisbane.
+              I&apos;m now studying a Bachelor of Education, specialising in Primary and Secondary
+              Mathematics, and have supported students across Logan and Brisbane through tutoring,
+              classroom support and personalised learning programs.
             </p>
 
             <p className="text-sm text-[color:var(--muted)]">
@@ -234,7 +245,9 @@ export default function AboutPage() {
       {/* FINAL CTA */}
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-6xl space-y-4 rounded-3xl bg-[color:var(--brand)] px-8 py-10 text-white shadow-lg">
-          <h2 className="text-3xl font-semibold">We hear you, and we want to help.</h2>
+          <h2 className="text-3xl font-semibold">
+            We hear you, and we want to help.
+          </h2>
 
           <p className="text-sm text-white/90 md:max-w-2xl">
             If your child needs clarity, calmness, confidence, or a fresh start – we&apos;re here.

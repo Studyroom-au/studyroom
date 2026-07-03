@@ -12,12 +12,12 @@ const TERM2_SALE_LABEL = `Term 2 Early Enrolment Offer ends ${TERM2_SALE_ENDS}`;
 const services = [
   {
     title: "In-home tutoring",
-    desc: "1:1 tutoring delivered in-home across Logan and Brisbane Southside.",
+    desc: "1:1 tutoring delivered in-home across Logan and Brisbane Southside when a suitable local tutor match is available.",
     tag: "In person support",
   },
   {
     title: "Online tutoring",
-    desc: "Live 1:1 sessions delivered online via the Studyroom WebApp.",
+    desc: "Live 1:1 sessions delivered online via the Studyroom WebApp, matched to subject, year level and tutor availability.",
     tag: "Online support",
   },
   {
@@ -71,7 +71,7 @@ const differentiators = [
   },
   {
     others: "Most agencies assign whoever's free.",
-    us: "We match based on your child's needs, year level, and how they actually learn.",
+    us: "We review each enquiry and match carefully based on your child's needs, year level, learning style, location and tutor availability.",
   },
 ];
 
@@ -128,7 +128,7 @@ const tutors = [
 const trustPoints = [
   "Local, Blue Card approved tutors",
   "1:1 support in-home or online",
-  "Aligned with Australian Curriculum and QCE",
+  "Careful tutor matching process",
   "Neurodiversity aware approach",
 ];
 
@@ -162,7 +162,7 @@ const testimonials = [
   },
   {
     quote:
-      " You've helped my daughter come so far! From failing maths to receiving a maths awards (and enjoying maths now, with confidence) Thank you Lily!",
+      "You've helped my daughter come so far! From failing maths to receiving a maths award and enjoying maths now, with confidence. Thank you Lily!",
     name: "Parent of Year 11 student",
   },
 ];
@@ -173,11 +173,15 @@ const testimonials = [
 const homeFaqs = [
   {
     q: "We've tried tutoring before and it didn't work. Why would this be different?",
-    a: "Most tutoring fails anxious or neurodivergent kids because the approach is wrong for their brain — not because they can't learn. We focus on how a child feels in the session first. Confidence comes before content.",
+    a: "Tutoring often does not work for anxious or neurodivergent students when it moves too quickly, feels too pressured, or skips over the gaps underneath. We focus on helping students feel safe enough to try, then build the skills and confidence from there.",
   },
   {
     q: "Will Lily be my child's tutor?",
-    a: "Depending on availability, sessions may be delivered by one of our tutors — all personally vetted and trained by Lily. Lily is always your main point of contact and stays involved in your child's progress.",
+    a: "Depending on availability, sessions may be delivered by one of our Studyroom tutors. Tutors are personally reviewed by Lily, and Lily stays involved in the overall support and direction of your child’s learning where needed.",
+  },
+  {
+    q: "Do new students start straight away?",
+    a: "Not always. New enquiries are reviewed first and placed on our matching waitlist while we look for the right tutor fit. We consider your child’s needs, subject, year level, location, preferred mode and tutor availability.",
   },
   {
     q: "My child has ADHD or ASD — do you understand what that means for learning?",
@@ -185,7 +189,7 @@ const homeFaqs = [
   },
   {
     q: "What if it's not a good fit?",
-    a: "We'd rather help you find the right support than force something that isn't working. If a tutor match isn't right, we find a new one. If we're not the right service for your child, we'll tell you that honestly.",
+    a: "We'd rather help you find the right support than force something that isn't working. If a tutor match isn't right, we review the match. If we're not the right service for your child, we'll tell you that honestly.",
   },
 ];
 
@@ -206,7 +210,7 @@ const afterEnquiry = [
   {
     step: "3",
     title: "A clear plan forward",
-    desc: "If we're a fit, we recommend a package and match you with a tutor. If we're not, we'll tell you that too.",
+    desc: "If we’re a fit, we recommend the best next step and begin looking for the right tutor match based on your child’s needs, location, availability and learning style.",
   },
 ];
 
@@ -223,19 +227,19 @@ export default function HomePage() {
             </p>
 
             <p className="inline-flex items-center rounded-full bg-[#d6e5e3] px-3 py-1 text-xs font-semibold text-[color:var(--brand)]">
-              Personalised tutoring
+              Personalised 1:1 tutoring
             </p>
 
             <h1 className="text-3xl font-semibold leading-snug text-[color:var(--ink)] md:text-4xl">
-              For the learners who try harder than anyone realises.
+              Tutoring for capable students who have lost confidence.
             </h1>
 
             <p className="text-base text-[color:var(--muted)] md:text-lg">
-              At Studyroom, we provide 1:1 tutoring across Logan and Brisbane Southside that helps students feel capable, organised, and proud of their progress. 
+              At Studyroom, we provide 1 on 1 tutoring across Logan and Brisbane Southside that helps students feel capable, organised, and proud of their progress.
             </p>
 
             <p className="text-sm text-[color:var(--muted)]">
-              We support Prep to Year 12 students with routines built around how their brain actually works. Whether your child is an anxious or neurodivergent learner needing a confidence boost, or a motivated student aiming for extension, we provide the clear skills and steady progress they need to thrive.
+              We meet students where they are, help fill the gaps that are holding them back, and give them clear direction so school feels more manageable. New enquiries are reviewed personally and added to our matching waitlist while we find the right tutor fit for your child’s needs, subject, location and availability.
             </p>
 
             <div className="flex flex-wrap gap-3">
@@ -252,7 +256,7 @@ export default function HomePage() {
                 "Logan based tutors",
                 "Prep to Year 12",
                 "In-home and online",
-                "Curriculum aligned support",
+                "Careful tutor matching",
               ].map((chip) => (
                 <span
                   key={chip}
@@ -289,7 +293,7 @@ export default function HomePage() {
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-4xl text-center">
           <p className="text-lg font-medium italic leading-relaxed text-[color:var(--ink)] md:text-xl">
-            The students who seem behind are often the ones who've given up trying. That's the first thing we fix.
+            When learning has felt hard for long enough, confidence is usually the first thing to go. We help students rebuild the skills, structure and belief they need to try again.
           </p>
         </div>
       </section>
@@ -303,7 +307,7 @@ export default function HomePage() {
                 For the parent who's tried everything
               </p>
               <h2 className="text-2xl font-semibold leading-tight md:text-3xl">
-                 Your child isn't the problem. The approach has been.
+               Your child isn't the problem. They may just need support that meets them where they are.
               </h2>
               <p className="text-sm text-white/85 md:text-base">
                 Most tutoring is built around content. Ours is built around your child.
@@ -370,7 +374,9 @@ export default function HomePage() {
             </h2>
             <p className="text-sm text-[color:var(--muted)] md:text-base">
               Studyroom primarily runs on prepaid packages to secure weekly time
-              slots and support consistent progress. All sessions are 60 minutes.
+              slots and support consistent progress. Packages are confirmed once
+              we have reviewed your enquiry and found a suitable tutor match.
+              All sessions are 60 minutes.
             </p>
           </div>
 
@@ -614,12 +620,12 @@ export default function HomePage() {
                   desc: "Share year level, goals and what support would help most.",
                 },
                 {
-                  step: "2. Tutor match",
-                  desc: "We match based on needs, level and preferred mode.",
+                  step: "2. Review and match",
+                  desc: "We review needs, availability and tutor fit before confirming next steps.",
                 },
                 {
                   step: "3. Weekly sessions",
-                  desc: "60-minute sessions with a clear plan and steady progress.",
+                  desc: "Once a suitable match is confirmed, sessions begin with a clear plan.",
                 },
               ].map((item) => (
                 <div
@@ -681,13 +687,13 @@ export default function HomePage() {
               </h2>
               <div className="mt-5 space-y-4 text-base text-[color:var(--muted)]">
                 <p>
-                  When a student seems 'behind,' it’s usually because they’ve learned that not trying is less painful than failing. I know this because I lived it—I was the quiet kid who gave up asking for help to avoid the embarrassment of not 'getting it' like everyone else.
+                  When a student seems “behind,” it is often because they have missed key steps, lost confidence, or learned that it feels safer not to try than to get it wrong. I know this because I lived it. I was the quiet kid who stopped asking for help because I was embarrassed that I didn’t “get it” like everyone else.
                 </p>
                 <p>
-                  At Studyroom, we don't fix kids; we fix the way they are taught. I’ve built our 1:1 sessions around how a child’s brain actually works, not how a classroom expects it to.
+                  At Studyroom, we start by meeting students where they are. We look for the gaps that are making learning feel harder than it needs to, then build the skills, confidence and structure they need to move forward.
                 </p>
                 <p className="font-semibold text-[color:var(--ink)]">
-                  We focus on restoring their confidence first and proving that they aren't 'behind,' they just haven't been given the right map to navigate their learning.
+                 The goal is not just better marks. It is helping students understand the work, rebuild confidence, and feel capable of trying again.
                 </p>
               </div>
               <div className="mt-6 flex flex-wrap items-center gap-4">
@@ -698,7 +704,7 @@ export default function HomePage() {
                   href="/about"
                   className="text-sm font-semibold text-[color:var(--brand)] hover:text-[color:var(--brand-600)]"
                 >
-                  Read more about Lily →
+                  Read more →
                 </Link>
               </div>
             </div>
@@ -809,7 +815,7 @@ export default function HomePage() {
                 Meet your tutors
               </h2>
               <p className="mt-1 text-xs text-[color:var(--muted)]">
-                 Our small team is hand-picked for their empathy and experience with neurodivergent learners. You’ll always know exactly who is sitting at the table with your child.
+                Our small team is hand-picked for empathy, reliability and experience with learners who need clear support. Tutor matches depend on availability, location, subject fit and your child’s needs.
               </p>
             </div>
             <Link
@@ -887,7 +893,7 @@ export default function HomePage() {
               After you enquire.
             </h2>
             <p className="text-sm text-[color:var(--muted)] md:max-w-2xl">
-              No pressure. No automated funnels. Just a real conversation about your child and a clear path forward.
+              No pressure. Just a real conversation about your child and what they need next.
             </p>
           </div>
 
@@ -924,7 +930,7 @@ export default function HomePage() {
                 You don't have to figure this out alone.
               </h2>
               <p className="text-sm text-white/85 md:max-w-2xl">
-                Tell us about your child. We'll reply within 1–3 business days with a clear plan for how we can help.
+                Tell us about your child. We'll reply within 1–3 business days with the clearest next step and current tutor matching options.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">

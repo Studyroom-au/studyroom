@@ -1,7 +1,14 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { getAllPosts } from "../../lib/posts";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Blog — Studyroom Australia",
+  description:
+    "Calm study tips, literacy help, and support for confident learners. Short, practical articles for parents and students.",
+};
 
 export default async function BlogPage() {
   const posts = await getAllPosts();

@@ -8,8 +8,9 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Studyroom",
-  description: "Kid-friendly study rooms",
+  title: "Studyroom Australia | Tutoring in Logan & Online",
+  description:
+    "Personalised 1:1 tutoring for Prep to Year 12 students across Logan, Brisbane Southside and online. Calm support for confidence, skills and study routines.",
 };
 
 export default function RootLayout({
