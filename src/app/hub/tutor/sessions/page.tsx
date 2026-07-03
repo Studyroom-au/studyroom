@@ -121,6 +121,23 @@ function minutesBetween(a: Date, b: Date) {
   return Math.round((b.getTime() - a.getTime()) / 60000);
 }
 
+function dateToYMD(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function dateToHHMM(d: Date): string {
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function upcomingDayLabel(date: Date): string {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  if (d.getTime() === today.getTime()) return "Today";
+  if (d.getTime() === tomorrow.getTime()) return "Tomorrow";
+  return date.toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" });
+}
+
 export default function TutorSessionsPage() {
   const [loading, setLoading] = useState(true);
   const [sessions, setSessions] = useState<Array<{ id: string; data: SessionDoc }>>([]);
@@ -135,7 +152,8 @@ export default function TutorSessionsPage() {
   // Add Session Drawer
   const [addOpen, setAddOpen] = useState(false);
   const [addStudentId, setAddStudentId] = useState("");
-  const [addWhenLocal, setAddWhenLocal] = useState(""); // yyyy-mm-ddThh:mm
+  const [addDate, setAddDate] = useState(""); // yyyy-mm-dd
+  const [addTime, setAddTime] = useState("15:00"); // HH:MM 24h
   const [addDuration, setAddDuration] = useState(SESSION_DURATION_MINS);
   const [addModality, setAddModality] = useState<AddModality>("IN_HOME");
   const [addNotes, setAddNotes] = useState("");
@@ -155,9 +173,20 @@ export default function TutorSessionsPage() {
   const [xeroPushing, setXeroPushing] = useState(false);
   const [xeroMsg, setXeroMsg] = useState<string | null>(null);
   const [logExpanded, setLogExpanded] = useState(false);
-  const [workflowOpen, setWorkflowOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [mobileViewDate, setMobileViewDate] = useState(new Date());
+  const [billingExpanded, setBillingExpanded] = useState(false);
+  const [addressMsg, setAddressMsg] = useState<string | null>(null);
+  const [drawerMsg, setDrawerMsg] = useState<string | null>(null);
+  // Edit inline form
+  const [editOpen, setEditOpen] = useState(false);
+  const [editDate, setEditDate] = useState("");
+  const [editTime, setEditTime] = useState("15:00");
+  const [editMode, setEditMode] = useState<"IN_HOME" | "ONLINE">("IN_HOME");
+  const [editBusy, setEditBusy] = useState(false);
+  const [editMsg, setEditMsg] = useState<string | null>(null);
+  // Delete
+  const [deleting, setDeleting] = useState(false);
 
   const pushInvoiceToXero = useCallback(async (invoiceId: string) => {
     const user = auth.currentUser;
@@ -224,6 +253,49 @@ export default function TutorSessionsPage() {
     }
     return warnings.sort((a, b) => a.remaining - b.remaining);
   }, [entitlements, students]);
+
+  const upcomingSessions = useMemo(() => {
+    const now = new Date();
+    const cutoff = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+    return sessions
+      .filter(s => {
+        const start = s.data.startAt?.toDate?.();
+        const status = normalizeSessionStatus(s.data.status);
+        return start && start >= now && start <= cutoff && !status.includes("cancel");
+      })
+      .sort((a, b) => a.data.startAt.toDate().getTime() - b.data.startAt.toDate().getTime())
+      .slice(0, 20);
+  }, [sessions]);
+
+  const sessionStats = useMemo(() => {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+    const dayOfWeek = (now.getDay() + 6) % 7;
+    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek);
+    const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+    let todayCount = 0;
+    let weekCount = 0;
+    let nextSession: { start: Date; studentName: string } | null = null;
+    for (const s of sessions) {
+      const start = s.data.startAt?.toDate?.();
+      if (!start) continue;
+      const status = normalizeSessionStatus(s.data.status);
+      if (status.includes("cancel")) continue;
+      if (start >= todayStart && start < todayEnd) todayCount++;
+      if (start >= weekStart && start < weekEnd) weekCount++;
+      if (start >= now && (!nextSession || start < nextSession.start)) {
+        nextSession = { start, studentName: students[s.data.studentId]?.studentName ?? "Session" };
+      }
+    }
+    return { todayCount, weekCount, nextSession };
+  }, [sessions, students]);
+
+  useEffect(() => {
+    setBillingExpanded(!!openSession?.data.billingOutcome);
+    setEditOpen(false);
+    setEditMsg(null);
+  }, [openSession]);
 
   useEffect(() => {
     if (!openStudent) return;
@@ -373,6 +445,7 @@ export default function TutorSessionsPage() {
         title: studentLabel(s.data.studentId),
         start,
         end,
+        allDay: false,
         classNames,
         extendedProps: {
           billingStatus: s.data.billingStatus,
@@ -473,6 +546,7 @@ export default function TutorSessionsPage() {
   async function saveStudentAddress() {
     if (!openSession) return;
     setSavingAddress(true);
+    setAddressMsg(null);
     try {
       await updateDoc(doc(db, "students", openSession.data.studentId), {
         addressLine1: addressDraft.addressLine1.trim() || null,
@@ -481,28 +555,122 @@ export default function TutorSessionsPage() {
         updatedAt: serverTimestamp(),
       });
       await refresh(auth.currentUser?.uid || "", auth.currentUser?.email ?? null);
-      alert("Student address saved.");
+      setAddressMsg("Address saved.");
+      setTimeout(() => setAddressMsg(null), 3000);
     } catch (e: unknown) {
-      alert(getErrorMessage(e));
+      setAddressMsg(getErrorMessage(e));
     } finally {
       setSavingAddress(false);
     }
   }
 
+  async function saveEdit() {
+    if (!openSession) return;
+    const user = auth.currentUser;
+    if (!user) return;
+    setEditBusy(true);
+    setEditMsg(null);
+    try {
+      const idToken = await user.getIdToken();
+      const currentStart = openSession.data.startAt.toDate();
+      const currentEnd = openSession.data.endAt.toDate();
+      const durationMin = Math.round((currentEnd.getTime() - currentStart.getTime()) / 60000);
+
+      const newStart = new Date(`${editDate}T${editTime}`);
+      if (Number.isNaN(newStart.getTime())) { setEditMsg("Invalid date/time."); return; }
+      const newEnd = new Date(newStart.getTime() + durationMin * 60000);
+
+      const timeChanged = newStart.getTime() !== currentStart.getTime();
+      const currentModeNorm = normalizeMode(openSession.data.mode ?? openSession.data.modality ?? "in_home");
+      const newModeNorm = editMode === "IN_HOME" ? "in_home" : "online";
+      const modeChanged = currentModeNorm !== newModeNorm;
+
+      const tasks: Promise<void>[] = [];
+
+      if (timeChanged) {
+        tasks.push(
+          fetch("/api/sessions/reschedule", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+            body: JSON.stringify({ sessionId: openSession.id, startISO: newStart.toISOString(), endISO: newEnd.toISOString() }),
+          }).then(async (res) => {
+            if (!res.ok) {
+              const j = await res.json().catch(() => ({}));
+              throw new Error((j as { error?: string }).error || "Reschedule failed.");
+            }
+          })
+        );
+      }
+
+      if (modeChanged) {
+        tasks.push(
+          fetch("/api/sessions/update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+            body: JSON.stringify({ sessionId: openSession.id, mode: editMode }),
+          }).then(async (res) => {
+            if (!res.ok) {
+              const j = await res.json().catch(() => ({}));
+              throw new Error((j as { error?: string }).error || "Mode update failed.");
+            }
+          })
+        );
+      }
+
+      await Promise.all(tasks);
+      setEditOpen(false);
+      await refresh(user.uid, user.email ?? null);
+    } catch (e: unknown) {
+      setEditMsg(getErrorMessage(e));
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
+  async function deleteSession() {
+    if (!openSession) return;
+    const yes = confirm("Delete this session? This cannot be undone.");
+    if (!yes) return;
+    const user = auth.currentUser;
+    if (!user) return;
+    setDeleting(true);
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch("/api/sessions/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ sessionId: openSession.id }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        alert((j as { error?: string }).error || "Delete failed.");
+        return;
+      }
+      setOpenId(null);
+      await refresh(user.uid, user.email ?? null);
+    } catch (e: unknown) {
+      alert(getErrorMessage(e));
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   async function createSessionFromDrawer() {
     const user = auth.currentUser;
-    if (!user) return alert("Please sign in.");
+    if (!user) { setDrawerMsg("Please sign in."); return; }
 
     const student = students[addStudentId];
-    if (!student) return alert("Please select a student.");
-    if (!addWhenLocal) return alert("Please choose a date/time.");
+    if (!student) { setDrawerMsg("Please select a student."); return; }
+    if (!addDate) { setDrawerMsg("Please choose a date."); return; }
+    if (!addTime) { setDrawerMsg("Please choose a time."); return; }
 
-    const start = new Date(addWhenLocal);
-    if (Number.isNaN(start.getTime())) return alert("Invalid date/time.");
+    const start = new Date(`${addDate}T${addTime}`);
+    if (Number.isNaN(start.getTime())) { setDrawerMsg("Invalid date/time."); return; }
 
     const end = new Date(start.getTime() + addDuration * 60000);
 
     setAddBusy(true);
+    setDrawerMsg(null);
     try {
       await addDoc(collection(db, "sessions"), {
         tutorId: user.uid,
@@ -526,10 +694,9 @@ export default function TutorSessionsPage() {
       setAddNotes("");
       setAddOpen(false);
       await refresh(user.uid, user.email ?? null);
-      alert("Session created.");
     } catch (e: unknown) {
       console.error(e);
-      alert(getErrorMessage(e));
+      setDrawerMsg(getErrorMessage(e));
     } finally {
       setAddBusy(false);
     }
@@ -601,13 +768,35 @@ export default function TutorSessionsPage() {
           <div style={{ fontSize: 20, fontWeight: 700, color: "#1d2428", letterSpacing: "-0.02em" }}>Sessions Calendar</div>
           <button
             type="button"
-            onClick={() => setAddOpen(true)}
+            onClick={() => {
+              const now = new Date();
+              const yyyy = now.getFullYear();
+              const mo = String(now.getMonth() + 1).padStart(2, "0");
+              const dd = String(now.getDate()).padStart(2, "0");
+              setAddDate(`${yyyy}-${mo}-${dd}`);
+              const mins = now.getMinutes() < 30 ? 30 : 0;
+              const hrs = mins === 0 ? now.getHours() + 1 : now.getHours();
+              setAddTime((hrs >= 6 && hrs < 20) ? `${String(hrs).padStart(2, "0")}:${String(mins).padStart(2, "0")}` : "15:00");
+              setAddOpen(true);
+              setDrawerMsg(null);
+            }}
             style={{ background: "#456071", color: "white", border: "none", borderRadius: 20, padding: "7px 18px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
           >
             Add session
           </button>
         </div>
         <div style={{ fontSize: 12, color: "#8a96a3", marginTop: 3 }}>Click a session for details. Drag to reschedule.</div>
+        {!loading && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 20px", fontSize: 12, color: "#8a96a3", marginTop: 6 }}>
+            <span><span style={{ fontWeight: 700, color: "#1d2428" }}>{sessionStats.todayCount}</span> today</span>
+            <span><span style={{ fontWeight: 700, color: "#1d2428" }}>{sessionStats.weekCount}</span> this week</span>
+            {sessionStats.nextSession ? (
+              <span>Next: <span style={{ fontWeight: 600, color: "#456071" }}>{fmtTime(sessionStats.nextSession.start)}</span> · {sessionStats.nextSession.studentName}</span>
+            ) : (
+              <span>No upcoming sessions</span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Package session warnings */}
@@ -715,7 +904,18 @@ export default function TutorSessionsPage() {
 
                 <button
                   type="button"
-                  onClick={() => setAddOpen(true)}
+                  onClick={() => {
+                    const now = new Date();
+                    const yyyy = now.getFullYear();
+                    const mo = String(now.getMonth() + 1).padStart(2, "0");
+                    const dd = String(now.getDate()).padStart(2, "0");
+                    setAddDate(`${yyyy}-${mo}-${dd}`);
+                    const mins = now.getMinutes() < 30 ? 30 : 0;
+                    const hrs = mins === 0 ? now.getHours() + 1 : now.getHours();
+                    setAddTime((hrs >= 6 && hrs < 20) ? `${String(hrs).padStart(2, "0")}:${String(mins).padStart(2, "0")}` : "15:00");
+                    setAddOpen(true);
+                    setDrawerMsg(null);
+                  }}
                   style={{ width: "100%", marginTop: 8, background: "#456071", color: "#fff", border: "none", borderRadius: 12, padding: "12px 0", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
                 >
                   + Add session
@@ -745,7 +945,7 @@ export default function TutorSessionsPage() {
               nowIndicator
               firstDay={1}
               slotMinTime="06:00:00"
-              slotMaxTime="21:00:00"
+              slotMaxTime="21:30:00"
               slotDuration="00:30:00"
               editable
               eventStartEditable
@@ -836,7 +1036,7 @@ export default function TutorSessionsPage() {
                     flexDirection: "column",
                     justifyContent: "flex-start",
                     gap: 2,
-                    opacity: isCancelled ? 0.75 : 1,
+                    opacity: isCancelled ? 0.75 : isCompleted ? 0.65 : 1,
                     cursor: "pointer",
                   }}>
                     <div style={{
@@ -940,41 +1140,62 @@ export default function TutorSessionsPage() {
               </div>
             </div>
 
-            {/* Billing */}
-            <div style={{ padding: "12px 18px", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#748398", marginBottom: 8 }}>Billing</div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#1d2428" }}>
-                    {(() => {
-                      const outcome = openSession.data.billingOutcome;
-                      if (outcome === "no_charge") return "No charge";
-                      if (outcome === "credit") return "Credit issued";
-                      if (outcome === "invoice") return "Invoice";
-                      return "Pending";
-                    })()}
-                  </div>
-                  {openInvoice && (
-                    <div style={{ fontSize: 11, color: "#8a96a3", marginTop: 2 }}>
-                      Status: {openInvoice.status ?? "—"}
-                      {openInvoice.xeroInvoiceId && (
-                        <span style={{ marginLeft: 6, color: "#82977e" }}>· In Xero</span>
-                      )}
-                    </div>
+            {/* Billing — collapsed unless an outcome exists */}
+            <div style={{ padding: "10px 18px", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+              <button
+                type="button"
+                onClick={() => setBillingExpanded(v => !v)}
+                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: "inherit" }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#748398" }}>Billing</div>
+                  {!billingExpanded && openSession.data.billingOutcome && (
+                    <span style={{ fontSize: 10, color: "#748398" }}>
+                      {openSession.data.billingOutcome === "no_charge" ? "No charge"
+                        : openSession.data.billingOutcome === "credit" ? "Credit"
+                        : openSession.data.billingOutcome === "invoice" ? "Invoice"
+                        : ""}
+                    </span>
                   )}
                 </div>
-                {(openInvoice?.status === "pending_xero" || openInvoice?.status === "xero_failed") && openSession.data.invoiceId && (
-                  <button
-                    type="button"
-                    onClick={() => pushInvoiceToXero(openSession.data.invoiceId!)}
-                    disabled={xeroPushing}
-                    style={{ background: "#2d5a24", color: "#fff", border: "none", borderRadius: 9, padding: "6px 13px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
-                  >
-                    {xeroPushing ? "Pushing..." : "Push to Xero"}
-                  </button>
-                )}
-              </div>
-              {xeroMsg && <p style={{ fontSize: 11, color: "#8a96a3", marginTop: 4, margin: 0 }}>{xeroMsg}</p>}
+                <span style={{ fontSize: 10, color: "#b8cad6" }}>{billingExpanded ? "▲" : "▼"}</span>
+              </button>
+              {billingExpanded && (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "#1d2428" }}>
+                        {(() => {
+                          const outcome = openSession.data.billingOutcome;
+                          if (outcome === "no_charge") return "No charge";
+                          if (outcome === "credit") return "Credit issued";
+                          if (outcome === "invoice") return "Invoice";
+                          return "Pending";
+                        })()}
+                      </div>
+                      {openInvoice && (
+                        <div style={{ fontSize: 11, color: "#8a96a3", marginTop: 2 }}>
+                          Status: {openInvoice.status ?? "—"}
+                          {openInvoice.xeroInvoiceId && (
+                            <span style={{ marginLeft: 6, color: "#82977e" }}>· In Xero</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {(openInvoice?.status === "pending_xero" || openInvoice?.status === "xero_failed") && openSession.data.invoiceId && (
+                      <button
+                        type="button"
+                        onClick={() => pushInvoiceToXero(openSession.data.invoiceId!)}
+                        disabled={xeroPushing}
+                        style={{ background: "#2d5a24", color: "#fff", border: "none", borderRadius: 9, padding: "6px 13px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+                      >
+                        {xeroPushing ? "Pushing..." : "Push to Xero"}
+                      </button>
+                    )}
+                  </div>
+                  {xeroMsg && <p style={{ fontSize: 11, color: "#8a96a3", marginTop: 4, margin: 0 }}>{xeroMsg}</p>}
+                </div>
+              )}
             </div>
 
             {/* Parent */}
@@ -987,49 +1208,55 @@ export default function TutorSessionsPage() {
               </div>
             </div>
 
-            {/* Address */}
-            <div style={{ padding: "12px 18px", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#748398", marginBottom: 8 }}>Address</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <input
-                  aria-label="Address line 1"
-                  value={addressDraft.addressLine1}
-                  onChange={e => setAddressDraft(p => ({ ...p, addressLine1: e.target.value }))}
-                  placeholder="Address line 1"
-                  style={{ border: "1.5px solid rgba(0,0,0,0.09)", borderRadius: 9, padding: "7px 11px", fontSize: 12, fontFamily: "inherit", color: "#1d2428", outline: "none" }}
-                />
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+            {/* Address — only shown for in-home sessions */}
+            {normalizeMode(openSession.data.mode ?? openSession.data.modality ?? "in_home") !== "online" && (
+              <div style={{ padding: "12px 18px", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#748398", marginBottom: 8 }}>Address</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   <input
-                    aria-label="Suburb"
-                    value={addressDraft.suburb}
-                    onChange={e => setAddressDraft(p => ({ ...p, suburb: e.target.value }))}
-                    placeholder="Suburb"
+                    aria-label="Address line 1"
+                    value={addressDraft.addressLine1}
+                    onChange={e => setAddressDraft(p => ({ ...p, addressLine1: e.target.value }))}
+                    placeholder="Address line 1"
                     style={{ border: "1.5px solid rgba(0,0,0,0.09)", borderRadius: 9, padding: "7px 11px", fontSize: 12, fontFamily: "inherit", color: "#1d2428", outline: "none" }}
                   />
-                  <input
-                    aria-label="Postcode"
-                    value={addressDraft.postcode}
-                    onChange={e => setAddressDraft(p => ({ ...p, postcode: e.target.value }))}
-                    placeholder="Postcode"
-                    style={{ border: "1.5px solid rgba(0,0,0,0.09)", borderRadius: 9, padding: "7px 11px", fontSize: 12, fontFamily: "inherit", color: "#1d2428", outline: "none" }}
-                  />
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                    <input
+                      aria-label="Suburb"
+                      value={addressDraft.suburb}
+                      onChange={e => setAddressDraft(p => ({ ...p, suburb: e.target.value }))}
+                      placeholder="Suburb"
+                      style={{ border: "1.5px solid rgba(0,0,0,0.09)", borderRadius: 9, padding: "7px 11px", fontSize: 12, fontFamily: "inherit", color: "#1d2428", outline: "none" }}
+                    />
+                    <input
+                      aria-label="Postcode"
+                      value={addressDraft.postcode}
+                      onChange={e => setAddressDraft(p => ({ ...p, postcode: e.target.value }))}
+                      placeholder="Postcode"
+                      style={{ border: "1.5px solid rgba(0,0,0,0.09)", borderRadius: 9, padding: "7px 11px", fontSize: 12, fontFamily: "inherit", color: "#1d2428", outline: "none" }}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={saveStudentAddress}
+                    disabled={savingAddress}
+                    style={{ background: savingAddress ? "#b8cad6" : "#456071", color: "#fff", border: "none", borderRadius: 9, padding: "7px 0", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+                  >
+                    {savingAddress ? "Saving..." : "Save address"}
+                  </button>
+                  {addressMsg && (
+                    <p style={{ fontSize: 11, margin: 0, color: addressMsg.startsWith("Address saved") ? "#2d5a24" : "#c0445e" }}>{addressMsg}</p>
+                  )}
                 </div>
-                <button
-                  type="button"
-                  onClick={saveStudentAddress}
-                  disabled={savingAddress}
-                  style={{ background: savingAddress ? "#b8cad6" : "#456071", color: "#fff", border: "none", borderRadius: 9, padding: "7px 0", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
-                >
-                  {savingAddress ? "Saving..." : "Save address"}
-                </button>
               </div>
-            </div>
+            )}
 
             {/* Actions */}
             <div style={{ padding: "12px 18px", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
               <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#748398", marginBottom: 8 }}>Actions</div>
+              {/* Primary actions */}
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {normalizeSessionStatus(openSession.data.status) !== "completed" && (
+                {normalizeSessionStatus(openSession.data.status) === "scheduled" && (
                   <button
                     type="button"
                     onClick={() => updateSessionStatus(openSession.id, "complete")}
@@ -1038,27 +1265,135 @@ export default function TutorSessionsPage() {
                     Mark completed
                   </button>
                 )}
+                {normalizeSessionStatus(openSession.data.status) === "scheduled" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const s = openSession.data.startAt.toDate();
+                      setEditDate(dateToYMD(s));
+                      setEditTime(dateToHHMM(s));
+                      setEditMode(normalizeMode(openSession.data.mode ?? openSession.data.modality ?? "in_home") === "online" ? "ONLINE" : "IN_HOME");
+                      setEditMsg(null);
+                      setEditOpen(v => !v);
+                    }}
+                    style={{ background: editOpen ? "#e8f0fa" : "#f4f7f9", color: "#456071", border: "none", borderRadius: 9, padding: "7px 13px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+                  >
+                    {editOpen ? "Cancel edit" : "Edit session"}
+                  </button>
+                )}
                 <RescheduleSession
                   sessionId={openSession.id}
                   currentStart={openSession.data.startAt.toDate()}
                   currentEnd={openSession.data.endAt.toDate()}
                   onDone={() => refresh(auth.currentUser?.uid || "", auth.currentUser?.email ?? null)}
                 />
-                <button
-                  type="button"
-                  onClick={() => cancelSession(openSession.id, "PARENT")}
-                  style={{ background: "#fce8ee", color: "#c0445e", border: "none", borderRadius: 9, padding: "7px 13px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
-                >
-                  Cancel (parent)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => cancelSession(openSession.id, "STUDYROOM")}
-                  style={{ background: "#f4f7f9", color: "#677a8a", border: "none", borderRadius: 9, padding: "7px 13px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
-                >
-                  Cancel (tutor)
-                </button>
               </div>
+
+              {/* Edit inline form */}
+              {editOpen && normalizeSessionStatus(openSession.data.status) === "scheduled" && (
+                <div style={{ marginTop: 10, padding: "12px", background: "#f8f9fa", borderRadius: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: "#748398", marginBottom: 4 }}>Date</div>
+                      <input
+                        type="date"
+                        value={editDate}
+                        onChange={e => setEditDate(e.target.value)}
+                        style={{ width: "100%", border: "1.5px solid rgba(0,0,0,0.09)", borderRadius: 8, padding: "6px 9px", fontSize: 12, fontFamily: "inherit", color: "#1d2428", outline: "none", boxSizing: "border-box" }}
+                      />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: "#748398", marginBottom: 4 }}>Start time</div>
+                      <select
+                        value={editTime}
+                        onChange={e => setEditTime(e.target.value)}
+                        style={{ width: "100%", border: "1.5px solid rgba(0,0,0,0.09)", borderRadius: 8, padding: "6px 9px", fontSize: 12, fontFamily: "inherit", color: "#1d2428", outline: "none", boxSizing: "border-box" }}
+                      >
+                        {(() => {
+                          const opts = [];
+                          for (let h = 6; h <= 21; h++) {
+                            for (const m of [0, 30]) {
+                              if (h === 21 && m === 30) break;
+                              const hh = String(h).padStart(2, "0");
+                              const mm = String(m).padStart(2, "0");
+                              const h12 = h % 12 === 0 ? 12 : h % 12;
+                              const ampm = h < 12 ? "AM" : "PM";
+                              opts.push(<option key={`${hh}:${mm}`} value={`${hh}:${mm}`}>{h12}:{mm} {ampm}</option>);
+                            }
+                          }
+                          return opts;
+                        })()}
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: "#748398", marginBottom: 4 }}>Mode</div>
+                    <select
+                      value={editMode}
+                      onChange={e => setEditMode(e.target.value as "IN_HOME" | "ONLINE")}
+                      style={{ width: "100%", border: "1.5px solid rgba(0,0,0,0.09)", borderRadius: 8, padding: "6px 9px", fontSize: 12, fontFamily: "inherit", color: "#1d2428", outline: "none", boxSizing: "border-box" }}
+                    >
+                      <option value="IN_HOME">In-home</option>
+                      <option value="ONLINE">Online</option>
+                    </select>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <button
+                      type="button"
+                      onClick={saveEdit}
+                      disabled={editBusy}
+                      style={{ background: "#456071", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+                    >
+                      {editBusy ? "Saving…" : "Save changes"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditOpen(false)}
+                      style={{ background: "none", color: "#748398", border: "none", fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  {editMsg && <p style={{ fontSize: 11, margin: 0, color: "#c0445e" }}>{editMsg}</p>}
+                </div>
+              )}
+
+              {/* Destructive actions — visually separated */}
+              {normalizeSessionStatus(openSession.data.status) === "scheduled" && (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(0,0,0,0.05)" }}>
+                  <button
+                    type="button"
+                    onClick={() => cancelSession(openSession.id, "PARENT")}
+                    style={{ background: "#fce8ee", color: "#c0445e", border: "none", borderRadius: 9, padding: "6px 11px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+                  >
+                    Cancel (parent)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { const yes = confirm("Mark this session as a no-show?"); if (yes) updateSessionStatus(openSession.id, "no_show"); }}
+                    style={{ background: "#fff8e6", color: "#a06000", border: "none", borderRadius: 9, padding: "6px 11px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+                  >
+                    No show
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => cancelSession(openSession.id, "STUDYROOM")}
+                    style={{ background: "#f4f7f9", color: "#677a8a", border: "none", borderRadius: 9, padding: "6px 11px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+                  >
+                    Cancel (tutor)
+                  </button>
+                  {!openSession.data.invoiceId && !openSession.data.billingOutcome && (
+                    <button
+                      type="button"
+                      onClick={deleteSession}
+                      disabled={deleting}
+                      style={{ background: "#fce8ee", color: "#c0445e", border: "1px solid #fca5a5", borderRadius: 9, padding: "6px 11px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+                    >
+                      {deleting ? "Deleting…" : "Delete session"}
+                    </button>
+                  )}
+                </div>
+              )}
               {/* Recurring — inline */}
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(0,0,0,0.04)" }}>
                 <span style={{ fontSize: 11, color: "#8a96a3" }}>Repeat:</span>
@@ -1084,24 +1419,11 @@ export default function TutorSessionsPage() {
               </div>
             </div>
 
-            {/* How this works — collapsed */}
+            {/* Session workflow guidance */}
             <div style={{ padding: "10px 18px", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
-              <button
-                type="button"
-                onClick={() => setWorkflowOpen(v => !v)}
-                style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", padding: 0, fontSize: 11, color: "#8a96a3", fontWeight: 600, display: "flex", alignItems: "center", gap: 5 }}
-              >
-                <span style={{ fontSize: 10 }}>{workflowOpen ? "▲" : "▼"}</span>
-                How this works
-              </button>
-              {workflowOpen && (
-                <div style={{ marginTop: 8, fontSize: 11, color: "#8a96a3", lineHeight: 1.7, background: "#f8f9fa", borderRadius: 9, padding: "10px 12px" }}>
-                  <div>1. Reschedule if the time changes.</div>
-                  <div>2. Mark completed after the lesson finishes.</div>
-                  <div>3. Use parent cancel only when the family cancels. Use Studyroom cancel only when you or admin cancel.</div>
-                  <div>4. Add notes after the session so admin sees the same record.</div>
-                </div>
-              )}
+              <div style={{ fontSize: 11, color: "#8a96a3", lineHeight: 1.65 }}>
+                Reschedule if time changes · Mark completed after the lesson · Use parent cancel only when the family cancels · Add notes so admin sees the same record
+              </div>
             </div>
 
             {/* Session log — collapsed by default */}
@@ -1125,10 +1447,66 @@ export default function TutorSessionsPage() {
 
           </div>
         ) : !isMobile ? (
-          <div style={{ width: 380, flexShrink: 0, background: "white", borderRadius: 20, border: "1.5px dashed #e4eaef", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 24px", minHeight: 200 }}>
-            <div style={{ fontSize: 28, marginBottom: 8 }}>📅</div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#1d2428", marginBottom: 4 }}>No session selected</div>
-            <div style={{ fontSize: 11, color: "#8a96a3" }}>Click a session on the calendar to view details.</div>
+          <div style={{ width: 380, flexShrink: 0, background: "white", borderRadius: 20, border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 1px 6px rgba(0,0,0,0.04)", overflowY: "auto", maxHeight: "80vh", display: "flex", flexDirection: "column" }}>
+            <div style={{ padding: "14px 18px 10px", borderBottom: "1px solid rgba(0,0,0,0.07)", flexShrink: 0 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#748398" }}>Upcoming</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#1d2428", marginTop: 2 }}>Next 14 days</div>
+            </div>
+            {upcomingSessions.length === 0 ? (
+              <div style={{ padding: "32px 18px", textAlign: "center", fontSize: 12, color: "#8a96a3" }}>
+                No upcoming sessions in the next 14 days.<br />
+                <span style={{ color: "#b8cad6" }}>Click a session on the calendar to view details.</span>
+              </div>
+            ) : (() => {
+              const groups: { label: string; items: typeof upcomingSessions }[] = [];
+              for (const s of upcomingSessions) {
+                const label = upcomingDayLabel(s.data.startAt.toDate());
+                const last = groups[groups.length - 1];
+                if (last && last.label === label) { last.items.push(s); }
+                else { groups.push({ label, items: [s] }); }
+              }
+              return (
+                <div>
+                  {groups.map(({ label, items }) => (
+                    <div key={label}>
+                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#748398", padding: "10px 18px 4px" }}>
+                        {label}
+                      </div>
+                      {items.map(s => {
+                        const start = s.data.startAt.toDate();
+                        const end = s.data.endAt.toDate();
+                        const sName = students[s.data.studentId]?.studentName ?? "Session";
+                        const yr = students[s.data.studentId]?.yearLevel;
+                        const isCompleted = normalizeSessionStatus(s.data.status) === "completed";
+                        const accentColor = isCompleted ? "#82977e" : "#456071";
+                        return (
+                          <div
+                            key={s.id}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => handleSessionClick(s.id)}
+                            onKeyDown={e => e.key === "Enter" && handleSessionClick(s.id)}
+                            style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "8px 18px 8px 15px", borderBottom: "1px solid rgba(0,0,0,0.04)", cursor: "pointer", borderLeft: `3px solid ${accentColor}` }}
+                          >
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: "#1d2428", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {sName}{yr ? ` · ${yr}` : ""}
+                              </div>
+                              <div style={{ fontSize: 11, color: "#8a96a3", marginTop: 1 }}>
+                                {niceRange(start, end)}
+                              </div>
+                            </div>
+                            <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: isCompleted ? "#d4edcc" : "#edf2f6", color: isCompleted ? "#2d5a24" : "#456071", flexShrink: 0 }}>
+                              {isCompleted ? "Done" : "Scheduled"}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
         ) : null}
       </div>
@@ -1161,17 +1539,49 @@ export default function TutorSessionsPage() {
             </select>
           </div>
 
-          <div className="space-y-2">
-            <label htmlFor={idWhen} className="text-xs font-semibold text-[color:var(--muted)]">
-              Date & time
-            </label>
-            <input
-              id={idWhen}
-              type="datetime-local"
-              value={addWhenLocal}
-              onChange={(e) => setAddWhenLocal(e.target.value)}
-              className="w-full rounded-xl border border-[color:var(--ring)] bg-white px-3 py-2 text-sm"
-            />
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-2">
+              <label htmlFor={idWhen} className="text-xs font-semibold text-[color:var(--muted)]">
+                Date
+              </label>
+              <input
+                id={idWhen}
+                type="date"
+                value={addDate}
+                onChange={(e) => setAddDate(e.target.value)}
+                className="w-full rounded-xl border border-[color:var(--ring)] bg-white px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="add-session-time" className="text-xs font-semibold text-[color:var(--muted)]">
+                Start time
+              </label>
+              <select
+                id="add-session-time"
+                value={addTime}
+                onChange={(e) => setAddTime(e.target.value)}
+                className="w-full rounded-xl border border-[color:var(--ring)] bg-white px-3 py-2 text-sm"
+              >
+                {(() => {
+                  const opts = [];
+                  for (let h = 6; h <= 21; h++) {
+                    for (const m of [0, 30]) {
+                      if (h === 21 && m === 30) break;
+                      const hh = String(h).padStart(2, "0");
+                      const mm = String(m).padStart(2, "0");
+                      const h12 = h % 12 === 0 ? 12 : h % 12;
+                      const ampm = h < 12 ? "AM" : "PM";
+                      opts.push(
+                        <option key={`${hh}:${mm}`} value={`${hh}:${mm}`}>
+                          {h12}:{mm} {ampm}
+                        </option>
+                      );
+                    }
+                  }
+                  return opts;
+                })()}
+              </select>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
@@ -1185,7 +1595,9 @@ export default function TutorSessionsPage() {
                 onChange={(e) => setAddDuration(Number(e.target.value))}
                 className="w-full rounded-xl border border-[color:var(--ring)] bg-white px-3 py-2 text-sm"
               >
+                <option value={45}>45 min</option>
                 <option value={60}>60 min</option>
+                <option value={90}>90 min</option>
               </select>
             </div>
 
@@ -1230,6 +1642,9 @@ export default function TutorSessionsPage() {
           >
             {addBusy ? "Creating…" : "Create session"}
           </button>
+          {drawerMsg && (
+            <p className="text-xs text-rose-600 text-center">{drawerMsg}</p>
+          )}
         </div>
       </Drawer>
 
@@ -1245,41 +1660,24 @@ export default function TutorSessionsPage() {
         /* ── Column headers (day names + dates) ── */
         .fc .fc-col-header-cell {
           background: #fff !important;
-          padding: 8px 0 10px !important;
+          padding: 6px 0 8px !important;
           border-bottom: 1px solid rgba(0,0,0,0.07) !important;
         }
         .fc .fc-col-header-cell-cushion {
-          display: flex !important;
-          flex-direction: column !important;
-          align-items: center !important;
-          gap: 3px !important;
-          padding: 0 !important;
+          display: inline-block !important;
+          padding: 3px 10px !important;
           text-decoration: none !important;
-          color: inherit !important;
+          font-size: 12px !important;
+          font-weight: 500 !important;
+          color: #8a96a3 !important;
+          white-space: nowrap !important;
+          border-radius: 6px !important;
+          line-height: 1.4 !important;
         }
-        .fc .fc-col-header-cell-cushion::before {
-          content: attr(data-day-abbr);
-          font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
-          color: #748398;
-        }
-        .fc .fc-col-header-cell a {
-          font-size: 18px;
-          font-weight: 700;
-          color: #1d2428;
-          text-decoration: none;
-          width: 32px;
-          height: 32px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: 50%;
-        }
-        .fc .fc-day-today .fc-col-header-cell-cushion,
-        .fc .fc-col-header-cell.fc-day-today a {
-          color: #456071 !important;
+        .fc .fc-col-header-cell.fc-day-today .fc-col-header-cell-cushion {
+          background: #456071 !important;
+          color: #fff !important;
+          font-weight: 600 !important;
         }
 
         /* ── Today column ── */
@@ -1450,8 +1848,8 @@ export default function TutorSessionsPage() {
           background: #456071 !important;
           color: #fff !important;
           border-radius: 50% !important;
-          width: 26px !important;
-          height: 26px !important;
+          width: 22px !important;
+          height: 22px !important;
           display: flex !important;
           align-items: center !important;
           justify-content: center !important;
