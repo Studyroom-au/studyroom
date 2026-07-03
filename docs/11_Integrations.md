@@ -233,7 +233,7 @@ Sends transactional emails from the platform:
 |---------|-------|
 | Host | `smtp.gmail.com` |
 | Port | `587` (STARTTLS) |
-| User | `contactstudyroomaustralia@gmail.com` |
+| User | `contact.studyroomaustralia@gmail.com` |
 
 **Environment variables required:**
 - `SMTP_HOST`

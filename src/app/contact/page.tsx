@@ -173,10 +173,10 @@ export default function ContactPage() {
             <p className="mt-4 text-xs text-slate-500">
               If you don’t hear back within 3 business days, please check your spam folder or email{" "}
               <a
-                href="mailto:contactstudyroomaustralia@gmail.com"
+                href="mailto:contact.studyroomaustralia@gmail.com"
                 className="font-semibold text-[color:var(--brand)]"
               >
-                contactstudyroomaustralia@gmail.com
+                contact.studyroomaustralia@gmail.com
               </a>
               .
             </p>
@@ -323,12 +323,12 @@ export default function ContactPage() {
             <p className="text-xs text-slate-500">
               Prefer email? You can also reach us at{" "}
               <a
-                href="mailto:contactstudyroomaustralia@gmail.com"
+                href="mailto:contact.studyroomaustralia@gmail.com"
                 className="font-semibold text-[color:var(--brand)]"
               >
-                contactstudyroomaustralia@gmail.com
+                contact.studyroomaustralia@gmail.com
               </a>
-              .
+              
             </p>
           </>
         )}

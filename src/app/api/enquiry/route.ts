@@ -118,7 +118,7 @@ async function sendInternalEnquiryAlert(opts: { name: string; email: string; mes
   const mailTo =
     process.env.ENQUIRY_ALERT_TO ||
     process.env.MAIL_TO ||
-    "contactstudyroomaustralia@gmail.com";
+    "contact.studyroomaustralia@gmail.com";
 
   const subject = "New enquiry from Studyroom website";
   const text = `New Studyroom enquiry
@@ -237,7 +237,7 @@ export async function POST(req: Request) {
         {
           ok: false,
           error:
-            "Your message was received, but email delivery failed. Please email contactstudyroomaustralia@gmail.com directly.",
+            "Your message was received, but email delivery failed. Please email contact.studyroomaustralia@gmail.com directly.",
         },
         { status: 502 }
       );

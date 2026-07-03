@@ -100,7 +100,7 @@ async function sendEnrolmentAlert(opts: {
   const mailTo =
     process.env.ENROL_ALERT_TO ||
     process.env.MAIL_TO ||
-    "contactstudyroomaustralia@gmail.com";
+    "contact.studyroomaustralia@gmail.com";
 
   const textBody = `
 New Studyroom enrolment
@@ -352,7 +352,7 @@ export async function POST(req: Request) {
         {
           ok: false,
           error:
-            "Your enrolment was received, but email delivery failed. Please email contactstudyroomaustralia@gmail.com directly.",
+            "Your enrolment was received, but email delivery failed. Please email contact.studyroomaustralia@gmail.com directly.",
         },
         { status: 502 }
       );

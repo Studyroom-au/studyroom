@@ -36,7 +36,7 @@ export async function POST(request: Request) {
       },
     });
 
-    const mailTo = process.env.MAIL_TO || "contactstudyroomaustralia@gmail.com";
+    const mailTo = process.env.MAIL_TO || "contact.studyroomaustralia@gmail.com";
 
     const textBody = `
 New Studyroom enquiry
