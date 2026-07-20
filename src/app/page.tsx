@@ -117,12 +117,6 @@ const tutors = [
     blurb:
       "Primary specialist focused on literacy, reading fluency and foundational skills. Scarlett strengthens decoding, comprehension and written expression through explicit instruction and consistent practice, supporting independence and resilience alongside core skill growth.",
   },
-  {
-    name: "Casey (He/Him)",
-    role: "Tutor",
-    blurb:
-      "Maths tutor supporting all year levels, with additional expertise in senior assessment and assignment support across subjects. Casey uses clear explanations, structured strategies and a calm approach to make complex tasks feel manageable so students feel prepared, capable and confident.",
-  },
 ];
 
 const trustPoints = [
@@ -177,7 +171,7 @@ const homeFaqs = [
   },
   {
     q: "Will Lily be my child's tutor?",
-    a: "Depending on availability, sessions may be delivered by one of our Studyroom tutors. Tutors are personally reviewed by Lily, and Lily stays involved in the overall support and direction of your child’s learning where needed.",
+    a: "Lily has limited tutoring availability and now focuses primarily on tutor quality, matching and the educational direction of Studyroom. Your child may be matched with another carefully reviewed Studyroom tutor, with Lily remaining involved in the broader support process.",
   },
   {
     q: "Do new students start straight away?",
@@ -200,7 +194,7 @@ const afterEnquiry = [
   {
     step: "1",
     title: "We reply personally",
-    desc: "Within 1–3 business days. A real response from Lily — not an automated reply.",
+    desc: "Within 1–3 business days. You'll receive a personal response from Lily or Tiara.",
   },
   {
     step: "2",
@@ -235,11 +229,17 @@ export default function HomePage() {
             </h1>
 
             <p className="text-base text-[color:var(--muted)] md:text-lg">
-              At Studyroom, we provide 1 on 1 tutoring across Logan and Brisbane Southside that helps students feel capable, organised, and proud of their progress.
+              At Studyroom, we provide 1 on 1 tutoring across Logan and Brisbane
+              Southside that helps students feel capable, organised, and proud
+              of their progress.
             </p>
 
             <p className="text-sm text-[color:var(--muted)]">
-              We meet students where they are, help fill the gaps that are holding them back, and give them clear direction so school feels more manageable. New enquiries are reviewed personally and added to our matching waitlist while we find the right tutor fit for your child’s needs, subject, location and availability.
+              We meet students where they are, help fill the gaps that are
+              holding them back, and give them clear direction so school feels
+              more manageable. New enquiries are reviewed personally and added
+              to our matching waitlist while we find the right tutor fit for
+              your child’s needs, subject, location and availability.
             </p>
 
             <div className="flex flex-wrap gap-3">
@@ -247,7 +247,7 @@ export default function HomePage() {
                 href="/contact"
                 className="brand-cta inline-flex items-center justify-center rounded-lg px-5 py-3 text-sm font-semibold shadow-sm"
               >
-                Get in touch
+                Book a Free Consultation
               </Link>
             </div>
 
@@ -293,7 +293,9 @@ export default function HomePage() {
       <section className="px-4 md:px-6">
         <div className="mx-auto max-w-4xl text-center">
           <p className="text-lg font-medium italic leading-relaxed text-[color:var(--ink)] md:text-xl">
-            When learning has felt hard for long enough, confidence is usually the first thing to go. We help students rebuild the skills, structure and belief they need to try again.
+            When learning has felt hard for long enough, confidence is usually
+            the first thing to go. We help students rebuild the skills,
+            structure and belief they need to try again.
           </p>
         </div>
       </section>
@@ -307,10 +309,12 @@ export default function HomePage() {
                 For the parent who's tried everything
               </p>
               <h2 className="text-2xl font-semibold leading-tight md:text-3xl">
-               Your child isn't the problem. They may just need support that meets them where they are.
+                Your child isn't the problem. They may just need support that
+                meets them where they are.
               </h2>
               <p className="text-sm text-white/85 md:text-base">
-                Most tutoring is built around content. Ours is built around your child.
+                Most tutoring is built around content. Ours is built around your
+                child.
               </p>
             </div>
             <div className="space-y-3">
@@ -339,7 +343,8 @@ export default function HomePage() {
               Not just another tutoring service.
             </h2>
             <p className="text-sm text-[color:var(--muted)] md:max-w-3xl md:text-base">
-              If you've tried tutoring before, here's exactly where we do things differently.
+              If you've tried tutoring before, here's exactly where we do things
+              differently.
             </p>
           </div>
 
@@ -385,14 +390,15 @@ export default function HomePage() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-base font-semibold text-[color:var(--ink)]">
-                    5-Week Package
+                    5-Session Package
                   </p>
                   <p className="mt-1 text-xs font-medium text-[color:var(--muted)]">
-                    A focused block to strengthen core skills and build momentum
+                    Perfect for families wanting a structured block of support
+                    without committing to a full term.
                   </p>
                 </div>
                 <span className="shrink-0 rounded-full bg-[#d6e5e3] px-3 py-1 text-xs font-semibold text-[color:var(--brand)]">
-                  From $300
+                  Starting from $350
                 </span>
               </div>
 
@@ -403,9 +409,9 @@ export default function HomePage() {
               <div className="mt-4 space-y-2 text-sm text-[color:var(--muted)]">
                 {[
                   "5 x 60-minute sessions",
-                  "Clear weekly focus",
-                  "Session notes + next steps",
-                  "Light home practice where helpful",
+                  "Clear weekly learning focus",
+                  "Session notes after each lesson",
+                  "Parent progress updates",
                 ].map((item) => (
                   <div key={item} className="flex items-start gap-3">
                     <span className="mt-1 h-5 w-5 rounded-full bg-[color:var(--brand-soft)] text-center text-xs leading-5 text-[color:var(--brand)]">
@@ -417,39 +423,50 @@ export default function HomePage() {
               </div>
             </div>
 
-            <div className="rounded-xl bg-[color:var(--card)] p-5 shadow-sm ring-1 ring-[color:var(--ring)]">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-base font-semibold text-[color:var(--ink)]">
-                    Term Package (10 + 2 bonus)
-                  </p>
-                  <p className="mt-1 text-xs font-medium text-[color:var(--muted)]">
-                    Term structure with two extra sessions for assessment support
-                  </p>
+            <div className="relative md:-translate-y-2">
+              <div className="absolute left-1/2 top-0 z-10 -translate-x-1/2 -translate-y-1/2">
+                <div className="rounded-md bg-[color:var(--brand)] px-6 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-sm">
+                  Most Popular
                 </div>
-                <span className="shrink-0 rounded-full bg-[#d6e5e3] px-3 py-1 text-xs font-semibold text-[color:var(--brand)]">
-                  From $720
-                </span>
               </div>
 
-              <p className="mt-3 text-xs font-semibold text-[color:var(--muted)]">
-                {TERM2_SALE_ACTIVE ? TERM2_SALE_LABEL : "Prepaid package"}
-              </p>
+              <div className="h-full min-h-[310px] rounded-xl bg-[color:var(--card)] p-5 pt-8 shadow-md ring-2 ring-[color:var(--brand)]">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-base font-semibold text-[color:var(--ink)]">
+                      10-Session Package
+                    </p>
 
-              <div className="mt-4 space-y-2 text-sm text-[color:var(--muted)]">
-                {[
-                  "10 weekly term sessions",
-                  "+ 2 bonus sessions (same term)",
-                  "Supports steady skill growth",
-                  "Useful for exam and IA periods",
-                ].map((item) => (
-                  <div key={item} className="flex items-start gap-3">
-                    <span className="mt-1 h-5 w-5 rounded-full bg-[color:var(--brand-soft)] text-center text-xs leading-5 text-[color:var(--brand)]">
-                      ✓
-                    </span>
-                    <p className="text-sm text-[color:var(--ink)]">{item}</p>
+                    <p className="mt-1 text-xs font-medium text-[color:var(--muted)]">
+                      Designed for consistent progress across the school term.
+                    </p>
                   </div>
-                ))}
+
+                  <span className="shrink-0 rounded-full bg-[#d6e5e3] px-3 py-1 text-xs font-semibold text-[color:var(--brand)]">
+                    Starting from $650
+                  </span>
+                </div>
+
+                <p className="mt-3 text-xs font-semibold text-[color:var(--muted)]">
+                  {TERM2_SALE_ACTIVE ? TERM2_SALE_LABEL : "Prepaid package"}
+                </p>
+
+                <div className="mt-4 space-y-2 text-sm text-[color:var(--muted)]">
+                  {[
+                    "10 x 60-minute tutoring sessions",
+                    "Reserved weekly tutoring time",
+                    "Supports steady skill growth",
+                    "Best value for ongoing tutoring",
+                  ].map((item) => (
+                    <div key={item} className="flex items-start gap-3">
+                      <span className="mt-1 h-5 w-5 rounded-full bg-[color:var(--brand-soft)] text-center text-xs leading-5 text-[color:var(--brand)]">
+                        ✓
+                      </span>
+
+                      <p className="text-sm text-[color:var(--ink)]">{item}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -460,19 +477,21 @@ export default function HomePage() {
                     Casual sessions (limited)
                   </p>
                   <p className="mt-1 text-xs font-medium text-[color:var(--muted)]">
-                    One-off sessions when availability allows
+                    One-off sessions when availability allows.
                   </p>
                 </div>
                 <span className="shrink-0 rounded-full bg-white px-3 py-1 text-xs font-semibold text-[color:var(--brand)] ring-1 ring-[color:var(--ring)]">
-                  From $60
+                  Starting from $75
                 </span>
               </div>
 
               <div className="mt-4 space-y-2 text-sm text-[color:var(--muted)]">
                 {[
                   "60-minute session",
-                  "Best for short-term support",
-                  "Limited weekly availability",
+                  "Assessment preparation",
+                  "Exam revision",
+                  "One-off academic support",
+                  "Subject to tutor availability",
                 ].map((item) => (
                   <div key={item} className="flex items-start gap-3">
                     <span className="mt-1 h-5 w-5 rounded-full bg-[color:var(--brand-soft)] text-center text-xs leading-5 text-[color:var(--brand)]">
@@ -490,13 +509,13 @@ export default function HomePage() {
               href="/contact"
               className="inline-flex items-center justify-center rounded-lg bg-[color:var(--brand)] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:shadow-md"
             >
-              Get in touch
+              Book a Free Consultation
             </Link>
             <Link
-              href="/tutoring"
+              href="/tutoring#pricing"
               className="inline-flex items-center justify-center rounded-lg border border-[color:var(--ring)] bg-white px-5 py-3 text-sm font-semibold text-[color:var(--brand)] transition hover:bg-[#d6e5e3]/60"
             >
-              View tutoring options →
+              View packages and policies →
             </Link>
           </div>
         </div>
@@ -687,13 +706,23 @@ export default function HomePage() {
               </h2>
               <div className="mt-5 space-y-4 text-base text-[color:var(--muted)]">
                 <p>
-                  When a student seems “behind,” it is often because they have missed key steps, lost confidence, or learned that it feels safer not to try than to get it wrong. I know this because I lived it. I was the quiet kid who stopped asking for help because I was embarrassed that I didn’t “get it” like everyone else.
+                  When a student seems “behind,” it is often because they have
+                  missed key steps, lost confidence, or learned that it feels
+                  safer not to try than to get it wrong. I know this because I
+                  lived it. I was the quiet kid who stopped asking for help
+                  because I was embarrassed that I didn’t “get it” like everyone
+                  else.
                 </p>
                 <p>
-                  At Studyroom, we start by meeting students where they are. We look for the gaps that are making learning feel harder than it needs to, then build the skills, confidence and structure they need to move forward.
+                  At Studyroom, we start by meeting students where they are. We
+                  look for the gaps that are making learning feel harder than it
+                  needs to, then build the skills, confidence and structure they
+                  need to move forward.
                 </p>
                 <p className="font-semibold text-[color:var(--ink)]">
-                 The goal is not just better marks. It is helping students understand the work, rebuild confidence, and feel capable of trying again.
+                  The goal is not just better marks. It is helping students
+                  understand the work, rebuild confidence, and feel capable of
+                  trying again.
                 </p>
               </div>
               <div className="mt-6 flex flex-wrap items-center gap-4">
@@ -815,7 +844,10 @@ export default function HomePage() {
                 Meet your tutors
               </h2>
               <p className="mt-1 text-xs text-[color:var(--muted)]">
-                Our small team is hand-picked for empathy, reliability and experience with learners who need clear support. Tutor matches depend on availability, location, subject fit and your child’s needs.
+                Our small team is hand-picked for empathy, reliability and
+                experience with learners who need clear support. Tutor matches
+                depend on availability, location, subject fit and your child’s
+                needs.
               </p>
             </div>
             <Link
@@ -893,7 +925,8 @@ export default function HomePage() {
               After you enquire.
             </h2>
             <p className="text-sm text-[color:var(--muted)] md:max-w-2xl">
-              No pressure. Just a real conversation about your child and what they need next.
+              No pressure. Just a real conversation about your child and what
+              they need next.
             </p>
           </div>
 
@@ -930,7 +963,8 @@ export default function HomePage() {
                 You don't have to figure this out alone.
               </h2>
               <p className="text-sm text-white/85 md:max-w-2xl">
-                Tell us about your child. We'll reply within 1–3 business days with the clearest next step and current tutor matching options.
+                Tell us about your child. We'll reply within 1–3 business days
+                with the clearest next step and current tutor matching options.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">

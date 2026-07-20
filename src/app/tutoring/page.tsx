@@ -53,42 +53,48 @@ const howItWorks = [
  */
 const packages = [
   {
-    title: "5-Week Package (mid-term block)",
-    priceInHome: "$375",
-    priceOnline: "$300",
-    desc: "A structured 5-week block to strengthen core skills and build momentum.",
+    title: "5-Session Package",
+    priceInHome: "$400",
+    priceOnline: "$350",
+    desc: "A structured block of tutoring designed to strengthen core skills, build confidence and establish positive study habits.",
     points: [
       "5 x 60-minute sessions",
-      "Clear weekly focus and skills tracking",
+      "Clear weekly focus",
       "Session notes + next steps",
-      "Light home practice where helpful",
+      "Resources where appropriate",
     ],
-    tag: TERM2_SALE_ACTIVE ? TERM2_SALE_LABEL : "Most popular for a focused reset",
+    tag: TERM2_SALE_ACTIVE
+      ? TERM2_SALE_LABEL
+      : "Best for students needing extra support before assessment or wanting a focused academic reset.",
   },
   {
-    title: "12-Session Term Package (10 + 2 bonus)",
-    priceInHome: "$900",
-    priceOnline: "$720",
-    desc: "A term-based structure for consistent progress and assessment support.",
+    title: "10-Session Package",
+    priceInHome: "$750",
+    priceOnline: "$650",
+    desc: "Designed for families wanting consistent progress across the school term.",
     points: [
-      "10 weekly term sessions",
-      "+ 2 bonus sessions to use within the same term package period",
-      "Bonus sessions can be used during the term or related holiday break, subject to tutor availability",
+      "10 x 60-minute sessions",
+      "Reserved weekly tutoring time",
+      "Parent progress updates",
       "Clear planning across the term",
+      "Resources where appropriate",
     ],
-    tag: TERM2_SALE_ACTIVE ? TERM2_SALE_LABEL : "Best for term consistency",
+    tag: TERM2_SALE_ACTIVE
+      ? TERM2_SALE_LABEL
+      : "Best for students wanting consistent improvement across the term.",
   },
   {
     title: "Casual sessions (limited)",
-    priceInHome: "$75",
-    priceOnline: "$60",
-    desc: "One-off sessions when availability allows.",
+    priceInHome: "$90",
+    priceOnline: "$75",
+    desc: "Flexible one-off sessions designed for immediate academic support.",
     points: [
-      "60-minute session (in-home or online)",
-      "Best for short-term or urgent support",
-      "Limited weekly availability",
+      "60-minute session",
+      "Assessment preparation",
+      "One-off academic support",
+      "Session notes",
     ],
-    tag: "Limited availability",
+    tag: "Casual sessions are subject to tutor availability and do not reserve an ongoing weekly time.",
   },
 ];
 
@@ -104,57 +110,78 @@ const locations = [
  */
 const pricingAndPolicies = [
   {
-    label: "Session length",
-    detail: "All standard sessions are 60 minutes.",
+    group: "Pricing and payment",
+    items: [
+      {
+        label: "Session length",
+        detail: "All standard sessions are 60 minutes.",
+      },
+      {
+        label: "Package pricing",
+        detail:
+          "5 sessions: $400 in-home or $350 online. 10 sessions: $750 in-home or $650 online.",
+      },
+      {
+        label: "Package payment",
+        detail:
+          "Packages are prepaid and secure your weekly time slot once a tutor match and schedule have been confirmed. Payment is required upfront to confirm enrolment.",
+      },
+      {
+        label: "Casual pricing and payment",
+        detail:
+          "Casual sessions are $90 in-home or $75 online. They are invoiced after the completed session is logged and payment is due under the invoice terms.",
+      },
+      {
+        label: "Late payment",
+        detail:
+          "If an invoice is 7 days overdue, a $5 late fee may apply. Services may be paused for unpaid invoices until the account is brought up to date.",
+      },
+    ],
   },
   {
-    label: "Standard pricing",
-    detail: "In-home: $75 · Online: $60 · Group (same time): $45 per child",
+    group: "Booking and matching",
+    items: [
+      {
+        label: "Waitlist and matching",
+        detail:
+          "New enquiries are reviewed first and may be added to our matching waitlist while we find a suitable tutor. We match carefully rather than assigning whoever is free.",
+      },
+      {
+        label: "Cancellations and rescheduling",
+        detail:
+          "We require at least 24 hours notice to reschedule. Sessions cancelled with less than 24 hours notice are forfeited because the tutor's time has been reserved.",
+      },
+      {
+        label: "School holidays",
+        detail:
+          "Weekly sessions continue year-round by default. Families may pause during school holidays by giving notice in advance.",
+      },
+      {
+        label: "Tutor cancellations",
+        detail:
+          "If a tutor cancels, we will offer a reschedule. If a suitable replacement time cannot be arranged, the session remains available as package credit or is not charged for casual bookings.",
+      },
+    ],
   },
   {
-    label: "Packages (primary model)",
-    detail:
-      "Packages are prepaid and secure your weekly time slot once a tutor match and schedule have been confirmed. Payment is required upfront to confirm enrolment.",
-  },
-  {
-    label: "Waitlist and matching",
-    detail:
-      "New enquiries are reviewed first and added to our matching waitlist while we find a suitable tutor match. We match carefully rather than assigning whoever is free.",
-  },
-  {
-    label: "Casual sessions (invoice after session)",
-    detail:
-      "Casual sessions are invoiced after session completion is logged. Payment is due under invoice terms.",
-  },
-  {
-    label: "Late payment",
-    detail:
-      "If an invoice is 7 days overdue, a $5 late fee applies. Services may be suspended or withdrawn for unpaid invoices.",
-  },
-  {
-    label: "Cancellations and rescheduling",
-    detail:
-      "We require 24 hours notice to reschedule. Sessions cancelled with less than 24 hours notice are forfeited due to reserved time and limited availability.",
-  },
-  {
-    label: "School holidays",
-    detail:
-      "Weekly sessions continue year-round by default. Families may pause during school holidays with notice and will not be penalised for pausing during holidays.",
-  },
-  {
-    label: "Tutor cancellations",
-    detail:
-      "If a tutor cancels, we offer a reschedule. If we can’t find a suitable time, the session value is held as credit.",
-  },
-  {
-    label: "Withdrawals and refunds",
-    detail:
-      "No refunds if a student withdraws mid-block. Term package bonus sessions must be used within the same term and are not transferable to the next term.",
-  },
-  {
-    label: "Siblings and group sessions",
-    detail:
-      "No sibling discounts. If siblings are tutored at the same time, it is priced as a group session at $45 per child.",
+    group: "Packages and changes",
+    items: [
+      {
+        label: "Pausing a package",
+        detail:
+          "School holidays and reasonable unforeseen circumstances can be accommodated with notice. Any pause is arranged with Studyroom so the tutor and weekly time can be managed fairly.",
+      },
+      {
+        label: "Withdrawals and refunds",
+        detail:
+          "Package purchases reserve tutor time and are generally non-refundable once sessions have begun. Any exceptional circumstances will be reviewed individually in line with Australian Consumer Law.",
+      },
+      {
+        label: "Siblings and group sessions",
+        detail:
+          "Sibling sessions are priced individually unless students are taught together at the same time. Group-session pricing is confirmed before enrolment based on the number of students and session format.",
+      },
+    ],
   },
 ];
 
@@ -173,11 +200,6 @@ const tutors = [
     name: "Scarlett",
     focus:
       "Primary specialist focused on literacy, reading fluency and foundational skills. Scarlett supports decoding, comprehension and written expression through explicit instruction and consistent practice, helping students build independence and resilience alongside core skill growth.",
-  },
-  {
-    name: "Casey (He/Him)",
-    focus:
-      "Maths tutor supporting all year levels, with additional expertise in senior assessment and assignment support across subjects. Casey uses clear explanations, structured strategies and a calm approach to make complex tasks feel manageable. Students build genuine understanding and lasting confidence so they feel prepared, capable and proud of their progress.",
   },
 ];
 
@@ -246,24 +268,48 @@ const faqs = [
     a: "Not always. New enquiries are reviewed first and may be added to our matching waitlist while we find the right tutor fit. We consider your child’s needs, subject, year level, location, preferred mode and tutor availability.",
   },
   {
-    q: "Do you support anxious and neurodivergent learners?",
-    a: "Yes. Many Studyroom students are anxious, autistic, ADHD or benefit from predictable routines and clear teaching.",
+    q: "What happens in the first session?",
+    a: "The first session is used to build rapport, understand your child’s current strengths and gaps, and set a clear direction for future sessions. The tutor may also review current schoolwork or an upcoming assessment.",
   },
   {
-    q: "How long are sessions?",
-    a: "All standard sessions are 60 minutes.",
+    q: "Will my child have the same tutor each week?",
+    a: "Yes, wherever possible. Consistency helps students build trust and gives the tutor time to understand how your child learns. If a different tutor would be a better fit, we will discuss the change with you.",
+  },
+  {
+    q: "Do you support anxious and neurodivergent learners?",
+    a: "Yes. Many Studyroom students are anxious, autistic, have ADHD or simply benefit from predictable routines, clear teaching and a calm pace.",
+  },
+  {
+    q: "How will I know what was completed?",
+    a: "Tutors record session notes outlining what was covered, how the student responded and the recommended next steps. These records also help Studyroom monitor consistency and progress over time.",
+  },
+  {
+    q: "Are sessions online or in-home?",
+    a: "Both options are available depending on your location, learning needs and tutor availability.",
   },
   {
     q: "What does a package include?",
-    a: "A structured block of sessions with a clear weekly focus, session notes and practical next steps tailored to your child’s goals and year level.",
+    a: "A package includes a structured block of 60-minute sessions, a reserved weekly time where available, session notes, practical next steps and resources where appropriate.",
   },
   {
     q: "What subjects do you tutor?",
-    a: "We support literacy, numeracy and study skills across Prep to Year 12. Coverage depends on tutor availability and the student’s year level.",
+    a: "We support literacy, numeracy, study skills and selected secondary subjects across Prep to Year 12. Exact coverage depends on tutor expertise and availability.",
   },
   {
     q: "Can you help with senior assessment and exams?",
-    a: "Yes. We support planning, scaffolding, drafting and exam preparation, especially in Years 11–12.",
+    a: "Yes. We support planning, scaffolding, drafting, revision and exam preparation, particularly in Years 11 and 12, subject to tutor expertise.",
+  },
+  {
+    q: "Can I switch tutors?",
+    a: "Yes. If another tutor would better suit your child’s learning style, subject needs or availability, we will organise the transition with you.",
+  },
+  {
+    q: "Can I pause a package?",
+    a: "School holidays and reasonable unforeseen circumstances can be accommodated with notice. Please contact Studyroom so the pause can be recorded and the tutor’s schedule managed.",
+  },
+  {
+    q: "What if I don't know which package I need?",
+    a: "Every family begins with a free consultation. We will recommend the most suitable option based on your child’s goals, expected frequency and current tutor availability.",
   },
 ];
 
@@ -282,7 +328,8 @@ export default function TutoringPage() {
           </div>
 
           <h1 className="text-3xl font-semibold leading-tight text-[color:var(--ink)] md:text-4xl">
-            Tutoring for capable students who need confidence, structure and clear direction.
+            Tutoring for capable students who need confidence, structure and
+            clear direction.
           </h1>
 
           <p className="text-base text-[color:var(--muted)] md:max-w-3xl md:text-lg">
@@ -304,7 +351,7 @@ export default function TutoringPage() {
               href="/contact"
               className="brand-cta inline-flex items-center justify-center rounded-lg px-5 py-3 text-sm font-semibold shadow-sm"
             >
-              Get in touch
+              Book a Free Consultation
             </Link>
             <Link
               href="#how-it-works"
@@ -335,47 +382,72 @@ export default function TutoringPage() {
           </div>
 
           <div className="grid gap-4 md:grid-cols-3">
-            {packages.map((pkg) => (
-              <div
-                key={pkg.title}
-                className="rounded-2xl bg-[color:var(--card)] p-5 shadow-sm ring-1 ring-[color:var(--ring)]"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-lg font-semibold text-[color:var(--ink)]">
-                      {pkg.title}
+            {packages.map((pkg) => {
+              const isRecommended = pkg.title === "10-Session Package";
+
+              return (
+                <div
+                  key={pkg.title}
+                  className={`relative rounded-2xl bg-[color:var(--card)] p-5 shadow-sm ${
+                    isRecommended
+                      ? "ring-2 ring-[color:var(--brand)] md:-translate-y-2"
+                      : "ring-1 ring-[color:var(--ring)]"
+                  }`}
+                >
+                  {isRecommended && (
+                    <div className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 rounded-md bg-[color:var(--brand)] px-5 py-2 text-xs font-semibold uppercase tracking-wide text-white shadow-sm">
+                      Most popular
                     </div>
-                    <p className="mt-1 text-sm text-[color:var(--muted)]">
-                      {pkg.desc}
-                    </p>
+                  )}
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-lg font-semibold text-[color:var(--ink)]">
+                        {pkg.title}
+                      </div>
+                      <p className="mt-1 text-sm text-[color:var(--muted)]">
+                        {pkg.desc}
+                      </p>
+                    </div>
+
+                    <div className="shrink-0 space-y-2 text-right">
+                      <div className="rounded-full bg-[#d6e5e3] px-3 py-1 text-xs font-semibold text-[color:var(--brand)]">
+                        In-home {pkg.priceInHome}
+                      </div>
+                      <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[color:var(--brand)] ring-1 ring-[color:var(--ring)]">
+                        Online {pkg.priceOnline}
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="shrink-0 space-y-2 text-right">
-                    <div className="rounded-full bg-[#d6e5e3] px-3 py-1 text-xs font-semibold text-[color:var(--brand)]">
-                      In-home {pkg.priceInHome}
-                    </div>
-                    <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[color:var(--brand)] ring-1 ring-[color:var(--ring)]">
-                      Online {pkg.priceOnline}
-                    </div>
+                  <div className="mt-4 space-y-2">
+                    {pkg.points.map((pt) => (
+                      <div key={pt} className="flex items-start gap-3">
+                        <span className="mt-1 h-5 w-5 rounded-full bg-[color:var(--brand)]/10 text-center text-xs leading-5 text-[color:var(--brand)]">
+                          ✓
+                        </span>
+                        <p className="text-sm text-[color:var(--ink)]">{pt}</p>
+                      </div>
+                    ))}
                   </div>
-                </div>
 
-                <div className="mt-4 space-y-2">
-                  {pkg.points.map((pt) => (
-                    <div key={pt} className="flex items-start gap-3">
-                      <span className="mt-1 h-5 w-5 rounded-full bg-[color:var(--brand)]/10 text-center text-xs leading-5 text-[color:var(--brand)]">
-                        ✓
-                      </span>
-                      <p className="text-sm text-[color:var(--ink)]">{pt}</p>
-                    </div>
-                  ))}
+                  <p className="mt-4 text-xs font-semibold text-[color:var(--muted)]">
+                    {pkg.tag}
+                  </p>
                 </div>
+              );
+            })}
+          </div>
 
-                <p className="mt-4 text-xs font-semibold text-[color:var(--muted)]">
-                  {pkg.tag}
-                </p>
-              </div>
-            ))}
+          <div className="rounded-2xl bg-[#f3f7f6] p-5 ring-1 ring-[color:var(--ring)]">
+            <p className="text-sm font-semibold text-[color:var(--ink)]">
+              Need help choosing?
+            </p>
+            <p className="mt-1 text-sm text-[color:var(--muted)]">
+              Most families choose the 10-session package for consistent weekly
+              progress. The 5-session package is a good starting point for a
+              focused block of support, while casual sessions are designed for
+              one-off assessment or exam preparation.
+            </p>
           </div>
 
           <div className="flex flex-wrap gap-3">
@@ -562,20 +634,30 @@ export default function TutoringPage() {
               Pricing and policies
             </h3>
             <p className="mt-2 text-sm text-[color:var(--muted)]">
-              Clear pricing, matching expectations and session policies in one place.
+              Clear pricing, matching expectations and session policies in one
+              place.
             </p>
 
-            <div className="mt-4 space-y-3">
-              {pricingAndPolicies.map((item) => (
-                <div
-                  key={item.label}
-                  className="rounded-2xl bg-white/80 p-4 ring-1 ring-[color:var(--ring)]"
-                >
-                  <div className="text-sm font-semibold text-[color:var(--ink)]">
-                    {item.label}
-                  </div>
-                  <div className="text-sm text-[color:var(--muted)]">
-                    {item.detail}
+            <div className="mt-6 space-y-6">
+              {pricingAndPolicies.map((section) => (
+                <div key={section.group}>
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-[color:var(--brand)]">
+                    {section.group}
+                  </h4>
+                  <div className="mt-3 space-y-3">
+                    {section.items.map((item) => (
+                      <div
+                        key={item.label}
+                        className="rounded-2xl bg-white/80 p-4 ring-1 ring-[color:var(--ring)]"
+                      >
+                        <div className="text-sm font-semibold text-[color:var(--ink)]">
+                          {item.label}
+                        </div>
+                        <div className="mt-1 text-sm text-[color:var(--muted)]">
+                          {item.detail}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               ))}
