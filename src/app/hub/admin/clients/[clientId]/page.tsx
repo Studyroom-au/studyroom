@@ -273,8 +273,14 @@ export default function ClientDetailPage() {
     "Unassigned";
 
   const completedSessions = sessions.filter((s) => s.status === "completed" || s.status === "COMPLETED");
-  const invoicedSessions = sessions.filter((s) => s.billingStatus === "INVOICED" || !!s.xeroInvoiceId);
-  const payableCents = completedSessions.reduce((sum, s) => sum + (s.tutorPayableCents ?? 0), 0);
+  // "DRAFT_CREATED" is the real billingStatus the engine writes once a Xero draft exists;
+  // xeroInvoiceId is kept as a secondary signal for older/edge-case docs.
+  const invoicedSessions = sessions.filter((s) => s.billingStatus === "DRAFT_CREATED" || !!s.xeroInvoiceId);
+  // Release 1A (A4): tutorPayableCents is not yet written anywhere by the billing engine,
+  // so this is reported as "not yet available" rather than a fabricated $0 total.
+  const payableSessions = completedSessions.filter((s) => typeof s.tutorPayableCents === "number");
+  const payableCents = payableSessions.reduce((sum, s) => sum + (s.tutorPayableCents ?? 0), 0);
+  const payableUnavailableCount = completedSessions.length - payableSessions.length;
 
   const sessionNotes = sessions
     .filter((s) => s.notes && s.notes.trim().length > 0)
@@ -464,8 +470,18 @@ export default function ClientDetailPage() {
               <div className="text-xs text-[color:var(--muted)]">Invoiced</div>
             </div>
             <div className="rounded-2xl border border-[color:var(--ring)] bg-[#f5f7fb] p-4 text-center">
-              <div className="text-2xl font-bold text-[color:var(--ink)]">{money(payableCents)}</div>
-              <div className="text-xs text-[color:var(--muted)]">Tutor payable</div>
+              <div className="text-2xl font-bold text-[color:var(--ink)]">
+                {payableSessions.length > 0 ? money(payableCents) : "—"}
+              </div>
+              <div className="text-xs text-[color:var(--muted)]">
+                Tutor payable
+                {payableUnavailableCount > 0 && (
+                  <span className="block text-[10px] text-amber-700">
+                    Not yet available for {payableUnavailableCount} session
+                    {payableUnavailableCount === 1 ? "" : "s"}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           {activePlan && (

@@ -352,6 +352,9 @@ export default function TutorStudentDetailPage() {
       clientId: student?.clientId ?? null,
       planId: student?.activePlanId ?? null,
       startAt: Timestamp.fromDate(start),
+      // Release 1A, Stage 3: locks this session's casual price to its
+      // original booked service date. Never modified after creation.
+      originalStartAt: Timestamp.fromDate(start),
       endAt: Timestamp.fromDate(end),
       durationMinutes: addDuration,
       durationMins: addDuration,

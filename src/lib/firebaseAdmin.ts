@@ -57,3 +57,42 @@ export async function verifyIdTokenFromRequest(req: Request) {
 
   return await getAdminAuth().verifyIdToken(token);
 }
+
+// ---------------------------------------------------------------------------
+// Shared admin identity — Release 1A, Stage 1 (A8)
+//
+// Single source of truth for "which emails count as Admin", consolidating what
+// used to be independently redeclared (and disagreeing — one email vs. two,
+// or one vs. two) across every route that gates on admin email. Matches the
+// two admin emails already recognized by firestore.rules' isAdmin().
+//
+// The actual constant/function live in src/lib/adminEmails.ts (zero
+// dependencies, so it's also safely importable from client components like
+// useUserRole and hub/layout.tsx) — re-exported here so every server route
+// that already imports from "@/lib/firebaseAdmin" keeps working unchanged.
+//
+// This only fixes the email-allowlist disagreement. Each call site's existing
+// secondary fallback (custom-claim role==="admin", or a Firestore roles/{uid}
+// lookup) is left exactly as it was — homogenizing those is out of scope here.
+// ---------------------------------------------------------------------------
+
+export { ADMIN_EMAILS, isAdminEmail } from "./adminEmails";
+
+// ---------------------------------------------------------------------------
+// Merge-safe role claim setter — Release 1A, Stage 2 follow-up
+//
+// role is confirmed as the only custom claim ever set anywhere in this
+// codebase today (verified by grepping every setCustomUserClaims call site).
+// setCustomUserClaims() replaces the ENTIRE claims object, not just the given
+// key — so calling it directly with only { role } would silently discard any
+// other claim the moment a second one is ever introduced. This helper reads
+// the user's existing claims first and merges, so every call site is safe
+// regardless of what else might be set on the account, now or in the future.
+// ---------------------------------------------------------------------------
+
+export async function setUserRoleClaim(uid: string, role: string): Promise<void> {
+  const auth = getAdminAuth();
+  const user = await auth.getUser(uid);
+  const existingClaims = user.customClaims ?? {};
+  await auth.setCustomUserClaims(uid, { ...existingClaims, role });
+}

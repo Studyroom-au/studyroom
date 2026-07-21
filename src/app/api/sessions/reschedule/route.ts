@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
-import { verifyIdTokenFromRequest } from "@/lib/firebaseAdmin";
+import { verifyIdTokenFromRequest, isAdminEmail } from "@/lib/firebaseAdmin";
+import { isStandardDuration, STANDARD_SESSION_DURATION_MINUTES } from "@/lib/scheduling/validate";
 
 interface Session {
   tutorId: string;
@@ -9,10 +10,6 @@ interface Session {
   durationMinutes?: number;
   updatedAt?: FirebaseFirestore.Timestamp;
   // Add other fields as needed
-}
-
-function isAdminEmail(email?: string | null) {
-  return (email || "").toLowerCase() === "lily.studyroom@gmail.com";
 }
 
 function minutesBetween(a: Date, b: Date) {
@@ -70,11 +67,22 @@ export async function POST(req: Request) {
         { status: 403 }
       );
     }
-    if (duration < 15) {
-      return NextResponse.json({ code: "INVALID_TIME_RANGE", error: "Min duration is 15 minutes" }, { status: 400 });
-    }
-    if (duration > 240) {
-      return NextResponse.json({ code: "MAX_DURATION_EXCEEDED", error: "Max duration is 4 hours" }, { status: 400 });
+
+    // Release 1A, Stage 3: the 60-minute rule only applies to an actual
+    // attempted duration change (duration !== existingDuration) — a time-only
+    // move that keeps the same duration never hits this check. This is what
+    // lets a session preserve whatever duration it already has (production
+    // data confirms every real session is already 60 minutes, so this only
+    // matters as a forward guardrail against a new non-60 value ever being
+    // introduced via a duration change).
+    if (duration !== existingDuration && !isStandardDuration(duration)) {
+      return NextResponse.json(
+        {
+          code: "INVALID_DURATION",
+          error: `Sessions must be exactly ${STANDARD_SESSION_DURATION_MINUTES} minutes.`,
+        },
+        { status: 400 }
+      );
     }
 
     // Overlap protection (buffer of 10 min)

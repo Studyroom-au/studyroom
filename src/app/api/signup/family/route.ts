@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
-import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
+import { getAdminAuth, getAdminDb, setUserRoleClaim } from "@/lib/firebaseAdmin";
 
 // ── Validation ────────────────────────────────────────────────────────────────
 
@@ -210,8 +210,12 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Step 3: Write parent roles and users docs ─────────────────────────────
+    // Release 1A, Stage 2: the custom claim is set alongside the Firestore
+    // roles/{uid} doc, in exactly the same branches, so the two never diverge —
+    // matching what setRole and tutor-access/decision already do.
     if (accountWasNew) {
       await Promise.all([
+        setUserRoleClaim(parentUid, "parent"),
         db.collection("roles").doc(parentUid).set({ role: "parent" }),
         db.collection("users").doc(parentUid).set({
           displayName: parentName,
@@ -224,7 +228,10 @@ export async function POST(req: NextRequest) {
     } else {
       const roleDoc = await db.collection("roles").doc(parentUid).get();
       if (!roleDoc.exists) {
-        await db.collection("roles").doc(parentUid).set({ role: "parent" });
+        await Promise.all([
+          setUserRoleClaim(parentUid, "parent"),
+          db.collection("roles").doc(parentUid).set({ role: "parent" }),
+        ]);
       }
       await db.collection("users").doc(parentUid).set({
         displayName: parentName,
@@ -235,6 +242,7 @@ export async function POST(req: NextRequest) {
 
     // ── Step 4: Write student roles and users docs ────────────────────────────
     await Promise.all([
+      setUserRoleClaim(studentUid, "student"),
       db.collection("roles").doc(studentUid).set({ role: "student" }),
       db.collection("users").doc(studentUid).set({
         displayName: studentName,

@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyIdTokenFromRequest, getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
+import { verifyIdTokenFromRequest, getAdminAuth, getAdminDb, isAdminEmail } from "@/lib/firebaseAdmin";
 import { FieldValue } from "firebase-admin/firestore";
-
-const ADMIN_EMAIL = "lily.studyroom@gmail.com";
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,7 +13,7 @@ export async function POST(req: NextRequest) {
 
     const callerUid = decoded.uid;
     const callerEmail = (decoded.email ?? "").toLowerCase().trim();
-    const isAdmin = callerEmail === ADMIN_EMAIL;
+    const isAdmin = isAdminEmail(callerEmail);
 
     const body = await req.json() as {
       studentId?: unknown;

@@ -42,3 +42,10 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+# one-time migration backups/audit files — contain real production document
+# data (IDs, timestamps); never committed
+/_migration-audit/
+
+# Firestore emulator debug log
+firestore-debug.log

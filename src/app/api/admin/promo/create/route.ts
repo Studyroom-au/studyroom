@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
-import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
+import { getAdminAuth, getAdminDb, isAdminEmail } from "@/lib/firebaseAdmin";
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const decoded = await getAdminAuth().verifyIdToken(token);
-    if (decoded.email !== "lily.studyroom@gmail.com") {
+    if (!isAdminEmail(decoded.email)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

@@ -12,4 +12,13 @@ export default defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    // scripts/** are standalone CommonJS Node CLI scripts (migrations,
+    // one-off audits) run directly via `node`, not part of the Next.js app
+    // bundle — require() is the correct, intentional style here.
+    files: ["scripts/**/*.js"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
 ]);

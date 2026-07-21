@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
+import { getAdminAuth, getAdminDb, isAdminEmail } from "@/lib/firebaseAdmin";
 
 function getBearerToken(req: Request) {
   const h = req.headers.get("authorization") || "";
@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     const user = await adminAuth.verifyIdToken(token);
 
     // Require tutor or admin role
-    const isAdmin = (user.email || "").toLowerCase() === "lily.studyroom@gmail.com";
+    const isAdmin = isAdminEmail(user.email);
     if (!isAdmin) {
       const roleSnap = await db.collection("roles").doc(user.uid).get();
       const role = roleSnap.exists ? String(roleSnap.data()?.role ?? "") : "";

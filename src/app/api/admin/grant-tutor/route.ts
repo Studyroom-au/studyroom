@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
-import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
-
-const ALLOWED_ADMIN_EMAILS = new Set(["lily.studyroom@gmail.com"]);
+import { getAdminAuth, getAdminDb, isAdminEmail } from "@/lib/firebaseAdmin";
 
 function generateCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -26,7 +24,7 @@ export async function POST(req: NextRequest) {
 
     const decoded = await adminAuth.verifyIdToken(token);
     const callerEmail = (decoded.email || "").toLowerCase();
-    const isAdmin = decoded.role === "admin" || ALLOWED_ADMIN_EMAILS.has(callerEmail);
+    const isAdmin = decoded.role === "admin" || isAdminEmail(callerEmail);
     if (!isAdmin) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }

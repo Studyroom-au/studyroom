@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { auth, db } from "@/lib/firebase";
 import { uploadSessionWorkSample } from "@/lib/storage";
+import { isAdminEmail } from "@/lib/adminEmails";
 import {
   addDoc,
   collection,
@@ -39,9 +40,9 @@ export default function SessionLogEditor({ sessionId }: { sessionId: string }) {
       const sref = doc(db, "sessions", sessionId);
       const ssnap = await getDoc(sref);
       if (!ssnap.exists()) throw new Error("Session missing.");
-      const sdata = ssnap.data() as any;
+      const sdata = ssnap.data() as { tutorId?: string };
 
-      const isAdmin = (user.email || "").toLowerCase() === "lily.studyroom@gmail.com";
+      const isAdmin = isAdminEmail(user.email);
       if (!isAdmin && sdata.tutorId !== user.uid) throw new Error("Not permitted.");
 
       // create log doc first
@@ -81,9 +82,9 @@ export default function SessionLogEditor({ sessionId }: { sessionId: string }) {
       setText("");
       setFiles([]);
       setMsg("Saved ✅");
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
-      setMsg(e?.message ?? "Save failed");
+      setMsg(e instanceof Error ? e.message : "Save failed");
     } finally {
       setSaving(false);
     }

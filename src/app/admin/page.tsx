@@ -14,6 +14,7 @@ import {
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { useUserRole } from "@/hooks/useUserRole";
+import { isAdminEmail } from "@/lib/adminEmails";
 
 type RoleType = "student" | "tutor" | "admin";
 
@@ -27,7 +28,13 @@ type AdminUser = {
   role: RoleType;
 };
 
-const OWNER_EMAIL = "lily.studyroom@gmail.com"; // 👈 change if needed
+// Note: OWNER_EMAIL (Lily's own address, used only for the "You" row label at
+// line ~260) is intentionally left as a single specific email — it's a "is this
+// my own row" cosmetic label, not an admin-authorization comparison, so it's out
+// of scope for this consolidation. Fixing it properly means comparing against
+// the *current signed-in user's* email, not the admin allowlist — a separate,
+// unrelated pre-existing bug, not touched here.
+const OWNER_EMAIL = "lily.studyroom@gmail.com";
 
 export default function AdminPage() {
   const router = useRouter();
@@ -83,8 +90,8 @@ export default function AdminPage() {
           // Default role
           let effectiveRole: RoleType = "student";
 
-          // Owner email is always admin
-          if (email && email === OWNER_EMAIL) {
+          // Any admin email is always admin
+          if (isAdminEmail(email)) {
             effectiveRole = "admin";
           } else {
             // For others, look at roles/{uid} doc (if it exists)

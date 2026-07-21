@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
+import { getAdminAuth, getAdminDb, isAdminEmail } from "@/lib/firebaseAdmin";
 import * as admin from "firebase-admin";
 
 type Role = "student" | "tutor" | "admin";
@@ -12,10 +12,6 @@ function getBearerToken(req: Request) {
   const h = req.headers.get("authorization") || "";
   const m = h.match(/^Bearer (.+)$/i);
   return m?.[1] || null;
-}
-
-function isAdminEmail(email?: string | null) {
-  return (email || "").toLowerCase() === "lily.studyroom@gmail.com";
 }
 
 async function requireUser(req: Request) {

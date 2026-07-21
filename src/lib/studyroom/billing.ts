@@ -1,6 +1,98 @@
 export const SESSION_DURATION_MINS = 60;
 export const CASUAL_INVOICE_DUE_DAYS = 3;
 
+// ---------------------------------------------------------------------------
+// Casual pricing — Release 1A, Stage 3
+//
+// Price is locked to whatever was in effect on the session's ORIGINAL booked
+// service date (sessions.originalStartAt, set once at creation and never
+// modified by reschedule) — never the mutable startAt, never the completion
+// date, never the invoice-processing date. Rescheduling a session across the
+// effective-date boundary does not change its price.
+//
+// Only "in_home" and "online" have a rate. Production data (audited directly,
+// 47/47 real session documents) confirms zero sessions have ever used
+// mode/modality "group" — new group sessions and new group plans are
+// prohibited going forward (enforced at Firestore create-rule level and in
+// the plan-selection UI), so no "group rate" is introduced here at all. If a
+// casual invoice is ever attempted for a session whose mode isn't one of
+// these two, that is treated as an anomaly and rejected rather than silently
+// priced — see the call site in serverBilling.ts.
+// ---------------------------------------------------------------------------
+
+export type CasualBillableMode = "in_home" | "online";
+
+// PRICING_EFFECTIVE_DATE is the one constant to change for the current
+// cutover — a Brisbane calendar date, "YYYY-MM-DD". Changing it before
+// deployment requires no migration and no other code change: every call site
+// reads it (directly or via CASUAL_PRICING_TIERS below), nothing duplicates
+// the literal, and it only affects sessions whose originalStartAt hasn't been
+// locked in yet (see serverBilling.ts — completed sessions are never
+// recalculated regardless of this value).
+export const PRICING_EFFECTIVE_DATE = "2026-10-06"; // Queensland school Term 4 start
+
+export type CasualPricingTier = {
+  /** Brisbane calendar date ("YYYY-MM-DD") this tier's rates apply from, inclusive. */
+  effectiveFrom: string;
+  rates: Record<CasualBillableMode, number>;
+};
+
+const LEGACY_CASUAL_RATES_CENTS: Record<CasualBillableMode, number> = {
+  in_home: 7500,
+  online: 6000,
+};
+
+const CURRENT_CASUAL_RATES_CENTS: Record<CasualBillableMode, number> = {
+  in_home: 9000,
+  online: 7500,
+};
+
+// Ordered oldest -> newest. A future price change is a NEW entry appended
+// here (with its own new rate constant and its own new effectiveFrom date) —
+// existing entries are never edited or deleted. This is what guarantees a
+// session whose originalStartAt already fell into an earlier tier can never
+// retroactively shift to a later tier's rate: the tier a booking resolves to
+// is purely a function of its own fixed originalStartAt against this fixed
+// list, never of anything that changes later.
+const CASUAL_PRICING_TIERS: readonly CasualPricingTier[] = [
+  { effectiveFrom: "2000-01-01", rates: LEGACY_CASUAL_RATES_CENTS },
+  { effectiveFrom: PRICING_EFFECTIVE_DATE, rates: CURRENT_CASUAL_RATES_CENTS },
+];
+
+// Queensland does not observe daylight saving time, so Australia/Brisbane is a
+// fixed UTC+10 offset year-round — no timezone library or DST logic is needed.
+// Constructing each boundary with an explicit "+10:00" offset (rather than
+// letting a bare date string be parsed as UTC) is what avoids the ~10-hour
+// date-shift error that would otherwise misclassify early-morning sessions on
+// a cutover date.
+function tierInstantMs(effectiveFrom: string): number {
+  return Date.parse(`${effectiveFrom}T00:00:00+10:00`);
+}
+
+export function isCasualBillableMode(mode: unknown): mode is CasualBillableMode {
+  return mode === "in_home" || mode === "online";
+}
+
+/**
+ * The rate for a casual session, determined solely by its original booked
+ * service date against the ordered tier list above. `bookedAt` must be the
+ * session's locked originalStartAt (or, only for a pre-existing session that
+ * predates this field, its current startAt as the best available fallback) —
+ * never `new Date()`, never a completion or invoice timestamp.
+ */
+export function getSessionRateCents(mode: CasualBillableMode, bookedAt: Date): number {
+  const bookedMs = bookedAt.getTime();
+  let applicable = CASUAL_PRICING_TIERS[0];
+  for (const tier of CASUAL_PRICING_TIERS) {
+    if (bookedMs >= tierInstantMs(tier.effectiveFrom)) {
+      applicable = tier;
+    } else {
+      break;
+    }
+  }
+  return applicable.rates[mode];
+}
+
 export const CASUAL_RATES = {
   standard: 7500,     // $75.00 in cents
   backToBack: 6000,   // $60.00 — consecutive sessions, gap ≤ 15 min

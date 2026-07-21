@@ -325,8 +325,15 @@ export default function SignInForm() {
       }
 
       if (data.accountWasNew) {
-        // New parent account — sign them in automatically and go to parent portal
-        await signInWithEmailAndPassword(auth, parentEmail.trim(), parentPassword.trim());
+        // New parent account — sign them in automatically and go to parent portal.
+        // signInWithEmailAndPassword mints a brand-new ID token, which already
+        // reflects the "parent" custom claim the server just set (claims are read
+        // at mint time, not cached from before this sign-in). The explicit
+        // getIdToken(true) below is a defensive guarantee, not a workaround for
+        // a known gap here — see the redeem-code flow above for the case where
+        // it's actually load-bearing (an already-signed-in session, no fresh mint).
+        const cred = await signInWithEmailAndPassword(auth, parentEmail.trim(), parentPassword.trim());
+        await cred.user.getIdToken(true);
         router.push("/parent");
       } else {
         // Account already existed — student was still added; prompt them to sign in
@@ -470,6 +477,12 @@ export default function SignInForm() {
       });
       const data = await res.json() as { ok?: boolean; error?: string };
       if (!res.ok || !data.ok) throw new Error(data.error ?? "Invalid code.");
+
+      // Release 1A, Stage 2: the server just set a "tutor" custom claim on this
+      // uid. The client's cached ID token still reflects the pre-redemption
+      // claims, so force a refresh now — otherwise the first claim-gated API
+      // call from /hub/tutor would run with a stale token.
+      await u.getIdToken(true);
 
       router.push("/hub/tutor");
     } catch (err: unknown) {

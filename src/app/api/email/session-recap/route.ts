@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import nodemailer from "nodemailer";
-import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
+import { getAdminAuth, getAdminDb, isAdminEmail } from "@/lib/firebaseAdmin";
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
       if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       const decoded = await adminAuth.verifyIdToken(token);
       const callerEmail = (decoded.email ?? "").toLowerCase();
-      const isAdmin = callerEmail === "lily.studyroom@gmail.com" || decoded.role === "admin";
+      const isAdmin = isAdminEmail(callerEmail) || decoded.role === "admin";
       if (!isAdmin) {
         const db = getAdminDb();
         const roleSnap = db ? await db.collection("roles").doc(decoded.uid).get() : null;

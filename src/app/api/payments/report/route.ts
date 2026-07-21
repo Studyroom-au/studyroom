@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
+import { getAdminAuth, getAdminDb, isAdminEmail } from "@/lib/firebaseAdmin";
 
 function getBearerToken(req: Request) {
   const h = req.headers.get("authorization") || "";
@@ -20,7 +20,7 @@ async function requireUser(req: Request) {
 export async function POST(req: Request) {
   try {
     const user = await requireUser(req);
-    const isAdmin = (user.email || "").toLowerCase() === "lily.studyroom@gmail.com";
+    const isAdmin = isAdminEmail(user.email);
     if (!isAdmin) return NextResponse.json({ error: "Admin only" }, { status: 403 });
 
     const body = await req.json();
@@ -43,26 +43,38 @@ export async function POST(req: Request) {
       .where("startAt", "<", to)
       .get();
 
-    const byTutor: Record<string, { tutorId: string; sessions: number; totalCents: number }> = {};
+    // Release 1A (A4): tutor pay is never estimated. Only a session with a real,
+    // recorded amountCents contributes to totalCents; everything else is counted
+    // separately as "unavailable" so the report never silently fabricates a figure.
+    // (As of Release 1A, amountCents is not yet written by the billing engine for
+    // any session, so unavailableSessions will typically equal sessions for now —
+    // this is expected until Release 2's tutor-pay snapshot work lands.)
+    const byTutor: Record<
+      string,
+      { tutorId: string; sessions: number; totalCents: number; unavailableSessions: number }
+    > = {};
 
     for (const d of snap.docs) {
-      const s = d.data() as any;
+      const s = d.data() as { tutorId?: string; amountCents?: number };
       const tutorId = String(s.tutorId || "");
       if (!tutorId) continue;
 
-      const amountCents =
-        typeof s.amountCents === "number"
-          ? s.amountCents
-          : Math.round(((Number(s.durationMinutes || 60) / 60) * 75) * 100);
-
-      if (!byTutor[tutorId]) byTutor[tutorId] = { tutorId, sessions: 0, totalCents: 0 };
+      if (!byTutor[tutorId]) {
+        byTutor[tutorId] = { tutorId, sessions: 0, totalCents: 0, unavailableSessions: 0 };
+      }
       byTutor[tutorId].sessions += 1;
-      byTutor[tutorId].totalCents += amountCents;
+
+      if (typeof s.amountCents === "number") {
+        byTutor[tutorId].totalCents += s.amountCents;
+      } else {
+        byTutor[tutorId].unavailableSessions += 1;
+      }
     }
 
     return NextResponse.json({ ok: true, byTutor: Object.values(byTutor) });
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error("[payments/report]", e);
-    return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 });
+    const message = e instanceof Error ? e.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

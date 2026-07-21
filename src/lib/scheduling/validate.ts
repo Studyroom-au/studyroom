@@ -3,24 +3,20 @@ import { Timestamp, type Firestore } from "firebase-admin/firestore";
 
 export type AppRole = "tutor" | "admin";
 
-export const SCHEDULING_RULES = {
-  bufferMinutes: 10,
-  allowedStartHour: 7,
-  allowedEndHour: 20,
-  maxDurationMinutes: 120,
-  recurring: {
-    includeWeek1: true,
-    weeksAhead: 8,
-  },
-} as const;
+// Release 1A, Stage 3: the only standard billable unit is 60 minutes. The old
+// 07:00-20:00 window and 120-minute cap were never enforced anywhere in the
+// app (this module had zero importers) and are replaced outright rather than
+// merged with, since a two-hour lesson is now booked as two independent
+// 60-minute sessions instead of one long one.
+export const STANDARD_SESSION_DURATION_MINUTES = 60;
+export const OVERLAP_BUFFER_MINUTES = 10;
 
 type SessionStatus =
-  | "SCHEDULED"
-  | "CONFIRMED"
-  | "COMPLETED"
-  | "CANCELLED_PARENT"
-  | "CANCELLED_STUDYROOM"
-  | "NO_SHOW";
+  | "scheduled"
+  | "completed"
+  | "cancelled_by_parent"
+  | "cancelled_by_tutor"
+  | "no_show";
 
 export type SchedulingValidationResult =
   | { ok: true; warning?: true; conflictSessionId?: string }
@@ -28,16 +24,18 @@ export type SchedulingValidationResult =
       ok: false;
       status: number;
       error: string;
-      code: "INVALID_TIME_RANGE" | "OUTSIDE_TUTORING_WINDOW" | "MAX_DURATION_EXCEEDED" | "SESSION_OVERLAP";
+      code: "INVALID_TIME_RANGE" | "INVALID_DURATION" | "SESSION_OVERLAP";
       conflictSessionId?: string;
     };
 
 export function isCancelledStatus(status?: string) {
-  return status === "CANCELLED_PARENT" || status === "CANCELLED_STUDYROOM";
+  const s = (status || "").toLowerCase();
+  return s === "cancelled_by_parent" || s === "cancelled_by_tutor";
 }
 
-function minutesSinceMidnight(d: Date) {
-  return d.getHours() * 60 + d.getMinutes();
+/** Pure, dependency-free check — the only thing that changed for this session. */
+export function isStandardDuration(durationMinutes: number): boolean {
+  return durationMinutes === STANDARD_SESSION_DURATION_MINUTES;
 }
 
 export function validateStaticSchedulingRules(start: Date, end: Date): SchedulingValidationResult {
@@ -51,31 +49,12 @@ export function validateStaticSchedulingRules(start: Date, end: Date): Schedulin
   }
 
   const durationMinutes = Math.round((end.getTime() - start.getTime()) / 60000);
-  if (durationMinutes > SCHEDULING_RULES.maxDurationMinutes) {
+  if (!isStandardDuration(durationMinutes)) {
     return {
       ok: false,
       status: 400,
-      error: `Session cannot exceed ${SCHEDULING_RULES.maxDurationMinutes} minutes.`,
-      code: "MAX_DURATION_EXCEEDED",
-    };
-  }
-
-  // Business rule: all tutoring must stay within 07:00-20:00 local time.
-  const startMin = minutesSinceMidnight(start);
-  const endMin = minutesSinceMidnight(end);
-  const minAllowed = SCHEDULING_RULES.allowedStartHour * 60;
-  const maxAllowed = SCHEDULING_RULES.allowedEndHour * 60;
-  const sameDay =
-    start.getFullYear() === end.getFullYear() &&
-    start.getMonth() === end.getMonth() &&
-    start.getDate() === end.getDate();
-
-  if (!sameDay || startMin < minAllowed || endMin > maxAllowed) {
-    return {
-      ok: false,
-      status: 400,
-      error: `Sessions must be between 07:00 and 20:00.`,
-      code: "OUTSIDE_TUTORING_WINDOW",
+      error: `Sessions must be exactly ${STANDARD_SESSION_DURATION_MINUTES} minutes.`,
+      code: "INVALID_DURATION",
     };
   }
 
@@ -92,7 +71,7 @@ async function findConflictSessionId(params: {
   const { db, tutorId, start, end, excludeSessionId } = params;
 
   // Business rule: enforce a 10-minute turnaround buffer before and after each session.
-  const bufferMs = SCHEDULING_RULES.bufferMinutes * 60 * 1000;
+  const bufferMs = OVERLAP_BUFFER_MINUTES * 60 * 1000;
   const queryStart = new Date(start.getTime() - bufferMs);
   const queryEnd = new Date(end.getTime() + bufferMs);
 

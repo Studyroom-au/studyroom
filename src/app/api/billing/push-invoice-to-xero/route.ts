@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
+import { getAdminAuth, getAdminDb, isAdminEmail } from "@/lib/firebaseAdmin";
 import { ensureXeroToken, ymd } from "@/lib/xero";
 import { Invoice, LineAmountTypes } from "xero-node";
 import { FieldValue } from "firebase-admin/firestore";
@@ -105,7 +105,7 @@ async function verifyUserIsAllowed(req: Request) {
   if (!token) throw new Error("Unauthorized");
   const decoded = await auth.verifyIdToken(token);
   const email = (decoded.email || "").toLowerCase();
-  if (email === "lily.studyroom@gmail.com") return;
+  if (isAdminEmail(email)) return;
   const db = getAdminDb();
   if (!db) throw new Error("Admin DB not configured.");
   const snap = await db.collection("roles").doc(decoded.uid).get();

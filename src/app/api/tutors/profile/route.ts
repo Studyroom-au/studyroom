@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
-import { verifyIdTokenFromRequest, getAdminDb } from "@/lib/firebaseAdmin";
+import { verifyIdTokenFromRequest, getAdminDb, isAdminEmail } from "@/lib/firebaseAdmin";
 import {
   TUTOR_PROFILE_EDITABLE_FIELDS,
   TUTOR_PROFILE_PROTECTED_FIELDS,
@@ -15,7 +15,6 @@ import {
   isValidSubjectYearCombination,
 } from "@/lib/studyroom/tutorConstants";
 
-const ADMIN_EMAIL = "lily.studyroom@gmail.com";
 const ALLOWED_ROLES = new Set(["tutor", "tutor_pending"]);
 
 async function authenticate(req: NextRequest): Promise<{ uid: string; email: string }> {
@@ -24,7 +23,7 @@ async function authenticate(req: NextRequest): Promise<{ uid: string; email: str
 }
 
 async function authorise(uid: string, email: string): Promise<boolean> {
-  if (email === ADMIN_EMAIL) return true;
+  if (isAdminEmail(email)) return true;
   const db = getAdminDb();
   const snap = await db.collection("roles").doc(uid).get();
   const role = String(snap.data()?.role ?? "");

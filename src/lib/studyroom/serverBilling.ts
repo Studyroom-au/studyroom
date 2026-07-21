@@ -10,7 +10,9 @@ import {
   formatPlanLabel,
   getDefaultSessionRateCents,
   getEntitlementSeed,
+  getSessionRateCents,
   inferTermId,
+  isCasualBillableMode,
   isInvoiceOverdue,
   isPrepaidPlan,
   normalizeMode,
@@ -35,6 +37,7 @@ type RawSession = {
   clientId?: string | null;
   planId?: string | null;
   startAt?: Timestamp;
+  originalStartAt?: Timestamp;
   endAt?: Timestamp;
   durationMinutes?: number;
   mode?: string | null;
@@ -91,6 +94,21 @@ function assertPermitted(role: Role, userId: string, sessionTutorId?: string) {
 
 function asDate(value?: Timestamp | null) {
   return value?.toDate ? value.toDate() : null;
+}
+
+/**
+ * Release 1A, Stage 3: the exact logic that locks casual pricing to a
+ * session's original booked service date. Exported and pure (no Firestore
+ * transaction, no clock read) specifically so it can be unit-tested in
+ * isolation — this is the one line that decides whether a reschedule can
+ * ever change a session's price, so it needs to be independently verifiable
+ * without spinning up a full emulator transaction.
+ */
+export function resolveBookedAt(
+  session: { originalStartAt?: Timestamp | null },
+  startAtFallback: Date
+): Date {
+  return asDate(session.originalStartAt) ?? startAtFallback;
 }
 
 function invoiceStatusFromOutcome(outcome: BillingOutcome): InvoiceStatus | null {
@@ -269,6 +287,15 @@ export async function applySessionAction(args: ApplySessionActionArgs) {
     if (!startAt) {
       throw new Error("Session missing startAt.");
     }
+    // Release 1A, Stage 3: casual pricing is locked to the session's original
+    // booked service date, never the mutable startAt (which reschedule can
+    // change), never "now". originalStartAt is set once at creation by every
+    // session-creation path and is never modified afterward — this function
+    // only ever reads it. The startAt fallback exists only for sessions
+    // created before this field existed; see billing docs for the disclosed
+    // limitation this implies for such a session if it's rescheduled after
+    // the fact.
+    const bookedAt = resolveBookedAt(session, startAt);
 
     const ctx = await hydratePlanContext({ tx, sessionRef, session, now });
     const planType = normalizePlanType(ctx.plan.type);
@@ -391,7 +418,19 @@ export async function applySessionAction(args: ApplySessionActionArgs) {
     }
 
     if (outcome === "invoice") {
-      const amountCents = Number(ctx.plan.sessionRateCents ?? getDefaultSessionRateCents(mode));
+      // Never fall back to ctx.plan.sessionRateCents here — that field is a
+      // frozen-at-plan-creation snapshot from before pricing was locked
+      // per-session, and reading it would reintroduce exactly the "price
+      // changes based on something other than the original booking" bug this
+      // stage fixes. Real production data confirms every session's mode is
+      // "in_home" or "online" (zero "group" cases, ever) — if that were ever
+      // untrue, the correct behaviour is to reject rather than guess a price.
+      if (!isCasualBillableMode(mode)) {
+        throw new Error(
+          `Cannot price casual session ${args.sessionId}: unsupported mode "${mode}".`
+        );
+      }
+      const amountCents = getSessionRateCents(mode, bookedAt);
       const issuedAt = now;
       const dueAt = new Date(issuedAt.getTime() + CASUAL_INVOICE_DUE_DAYS * 86400000);
       const studentName = String((ctx.student as { studentName?: string | null }).studentName ?? "Student");

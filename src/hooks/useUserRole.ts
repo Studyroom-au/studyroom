@@ -5,16 +5,7 @@ import { useEffect, useState } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
-
-/**
- * Hard-coded admin emails.
- * Anyone who signs in with one of these emails will be treated as "admin",
- * even if there is no roles/{uid} doc or custom claim yet.
- */
-const ADMIN_EMAILS = [
-  "lily.studyroom@gmail.com", // ← replace this with your real email
-  "contact.studyroomaustralia@gmail.com", // "another-admin@example.com", // you can add more later if needed
-] as const;
+import { isAdminEmail } from "@/lib/adminEmails";
 
 type Role = "student" | "tutor" | "tutor_pending" | "admin" | "parent";
 
@@ -38,7 +29,7 @@ export function useUserRole() {
       }
 
       // 🔐 1) Hard-coded admin emails take priority
-      if (u.email && ADMIN_EMAILS.includes(u.email as (typeof ADMIN_EMAILS)[number])) {
+      if (isAdminEmail(u.email)) {
         // No need to listen to roles doc for this user
         if (unsubRole) unsubRole();
         setRole("admin");

@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
-import { getAdminAuth } from "@/lib/firebaseAdmin";
-
-const ALLOWED_ADMIN_EMAILS = new Set(["lily.studyroom@gmail.com"]);
+import { getAdminAuth, isAdminEmail } from "@/lib/firebaseAdmin";
 
 export async function POST(req: Request) {
   try {
@@ -15,7 +13,7 @@ export async function POST(req: Request) {
 
     const decoded = await adminAuth.verifyIdToken(token);
     const callerEmail = (decoded.email || "").toLowerCase();
-    const isAdmin = decoded.role === "admin" || ALLOWED_ADMIN_EMAILS.has(callerEmail);
+    const isAdmin = decoded.role === "admin" || isAdminEmail(callerEmail);
     if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = (await req.json().catch(() => ({}))) as { to?: string; displayName?: string; accessCode?: string };

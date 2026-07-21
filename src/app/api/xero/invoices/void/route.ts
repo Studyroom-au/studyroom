@@ -1,6 +1,6 @@
 // src/app/api/xero/invoices/void/route.ts
 import { NextResponse } from "next/server";
-import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
+import { getAdminAuth, getAdminDb, isAdminEmail } from "@/lib/firebaseAdmin";
 import { ensureXeroToken } from "@/lib/xero";
 import { Invoice } from "xero-node";
 
@@ -31,7 +31,7 @@ async function requireUser(req: Request) {
 }
 
 async function requireAdmin(uid: string, email?: string | null) {
-  if ((email || "").toLowerCase() === "lily.studyroom@gmail.com") return { role: "admin" };
+  if (isAdminEmail(email)) return { role: "admin" };
 
   const db = getAdminDb();
   if (!db) throw new Error("Admin DB not configured.");

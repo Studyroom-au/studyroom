@@ -2,11 +2,7 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { getXeroClient } from "@/lib/xeroAuthClient";
-import { verifyIdTokenFromRequest } from "@/lib/firebaseAdmin";
-
-function isAdminEmail(email?: string | null) {
-  return (email || "").toLowerCase() === "lily.studyroom@gmail.com";
-}
+import { verifyIdTokenFromRequest, isAdminEmail } from "@/lib/firebaseAdmin";
 
 export async function GET(req: Request) {
   try {

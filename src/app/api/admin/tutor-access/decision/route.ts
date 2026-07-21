@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import * as admin from "firebase-admin";
-import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
-
-const ALLOWED_ADMIN_EMAILS = new Set(["lily.studyroom@gmail.com"]);
+import { getAdminAuth, getAdminDb, isAdminEmail, setUserRoleClaim } from "@/lib/firebaseAdmin";
 
 type Decision = "approve" | "reject";
 
@@ -93,7 +91,7 @@ export async function POST(req: Request) {
 
     const decoded = await adminAuth.verifyIdToken(actorToken);
     const actorEmail = (decoded.email || "").toLowerCase();
-    const isAdmin = decoded.role === "admin" || ALLOWED_ADMIN_EMAILS.has(actorEmail);
+    const isAdmin = decoded.role === "admin" || isAdminEmail(actorEmail);
     if (!isAdmin) {
       return NextResponse.json({ error: "Insufficient permissions." }, { status: 403 });
     }
@@ -125,7 +123,7 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    await adminAuth.setCustomUserClaims(targetUid, { role: nextRole });
+    await setUserRoleClaim(targetUid, nextRole);
 
     const batch = db.batch();
     batch.set(

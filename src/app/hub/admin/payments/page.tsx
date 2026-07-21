@@ -3,10 +3,17 @@
 import { useState } from "react";
 import { auth } from "@/lib/firebase";
 
+type TutorPayRow = {
+  tutorId: string;
+  sessions: number;
+  totalCents: number;
+  unavailableSessions: number;
+};
+
 export default function AdminPaymentsPage() {
   const [fromISO, setFromISO] = useState("");
   const [toISO, setToISO] = useState("");
-  const [rows, setRows] = useState<any[]>([]);
+  const [rows, setRows] = useState<TutorPayRow[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
   async function run() {
@@ -68,7 +75,15 @@ export default function AdminPaymentsPage() {
             <div key={r.tutorId} className="rounded-2xl border p-3 text-sm">
               <div><b>Tutor:</b> {r.tutorId}</div>
               <div><b>Sessions:</b> {r.sessions}</div>
-              <div><b>Total:</b> ${(r.totalCents / 100).toFixed(2)}</div>
+              <div>
+                <b>Total (recorded sessions only):</b> ${(r.totalCents / 100).toFixed(2)}
+              </div>
+              {r.unavailableSessions > 0 && (
+                <div className="mt-1 text-xs text-amber-700">
+                  Pay figure not yet available for {r.unavailableSessions} of {r.sessions} session
+                  {r.unavailableSessions === 1 ? "" : "s"} — not included in the total above.
+                </div>
+              )}
             </div>
           ))}
           {!rows.length && <div className="text-sm text-[color:var(--muted)]">No data yet.</div>}

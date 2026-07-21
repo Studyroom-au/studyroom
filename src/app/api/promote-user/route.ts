@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAdminAuth, getAdminApp } from "@/lib/firebaseAdmin";
+import { getAdminAuth, getAdminApp, setUserRoleClaim } from "@/lib/firebaseAdmin";
 
 /**
  * Only admins can promote/suspend/change roles.
@@ -41,7 +41,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    await adminAuth.setCustomUserClaims(uid, { role });
+    await setUserRoleClaim(uid, role);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json(

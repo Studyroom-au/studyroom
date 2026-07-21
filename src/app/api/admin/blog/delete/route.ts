@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminDb, verifyIdTokenFromRequest } from "@/lib/firebaseAdmin";
+import { getAdminDb, verifyIdTokenFromRequest, isAdminEmail } from "@/lib/firebaseAdmin";
 
 export async function POST(req: NextRequest) {
   try {
     const decoded = await verifyIdTokenFromRequest(req);
-    if (decoded.email !== "lily.studyroom@gmail.com") {
+    if (!isAdminEmail(decoded.email)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

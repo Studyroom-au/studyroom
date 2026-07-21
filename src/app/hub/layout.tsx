@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { isAdminEmail } from "@/lib/adminEmails";
 import AlexBuddy from "@/components/AlexBuddy";
 
 export default function HubLayout({ children }: { children: React.ReactNode }) {
@@ -21,7 +22,7 @@ export default function HubLayout({ children }: { children: React.ReactNode }) {
       const email = u.email ?? "";
 
       // Admin always passes through
-      if (email === "lily.studyroom@gmail.com") {
+      if (isAdminEmail(email)) {
         setReady(true);
         return;
       }

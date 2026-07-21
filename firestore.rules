@@ -195,13 +195,12 @@ service cloud.firestore {
         (resource.data.claimedTutorId != null && resource.data.claimedTutorId == request.auth.uid)
       );
 
-      // Tutors can claim a lead by setting claimedTutorId and status
-      allow update: if isTutor()
-        && resource.data.claimedTutorId == null
-        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
-          "claimedTutorId","status","claimedAt","updatedAt"
-        ])
-        && request.resource.data.claimedTutorId == request.auth.uid;
+      // Direct tutor self-claim is intentionally not permitted here (Release 1A,
+      // Stage 2). Assignment only happens via the request -> admin-assigns flow:
+      // a tutor requests via leads/{leadId}/tutorRequests (Admin SDK, see
+      // /api/leads/[leadsId]/request), and an admin/ops assigns claimedTutorId /
+      // assignedTutorId through the Admin SDK, which bypasses these rules.
+      allow update: if false;
 
       allow create, delete: if false;
     }
@@ -280,6 +279,12 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/clients/$(resource.data.clientId))
         && get(/databases/$(database)/documents/clients/$(resource.data.clientId)).data.parentEmail == authedEmail();
 
+      // Release 1A, Stage 3: new sessions must be exactly 60 minutes, in_home
+      // or online only (no group), and must carry an immutable originalStartAt
+      // that matches startAt at creation time — this is what locks casual
+      // pricing to the session's original booked date rather than whatever
+      // startAt later becomes after a reschedule. originalStartAt is never in
+      // the tutor update allowlist below, so it can never be changed once set.
       allow create: if isTutor()
         && request.resource.data.tutorId == request.auth.uid
         && (
@@ -289,11 +294,16 @@ service cloud.firestore {
         )
         && request.resource.data.keys().hasOnly([
           "tutorId","tutorEmail","studentId","clientId","planId",
-          "startAt","endAt","durationMinutes","durationMins",
+          "startAt","endAt","originalStartAt","durationMinutes","durationMins",
           "modality","mode","status","legacyStatus","seriesKey",
           "notes","createdAt","updatedAt"
         ])
-        && request.resource.data.status == "scheduled";
+        && request.resource.data.status == "scheduled"
+        && request.resource.data.originalStartAt == request.resource.data.startAt
+        && request.resource.data.durationMinutes == 60
+        && request.resource.data.durationMins == 60
+        && request.resource.data.mode in ["in_home", "online"]
+        && request.resource.data.modality in ["IN_HOME", "ONLINE"];
 
       // Tutors can update session details, notes, and unit plan / worksheet links
       allow update: if isTutor()

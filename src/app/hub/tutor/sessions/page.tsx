@@ -154,7 +154,9 @@ export default function TutorSessionsPage() {
   const [addStudentId, setAddStudentId] = useState("");
   const [addDate, setAddDate] = useState(""); // yyyy-mm-dd
   const [addTime, setAddTime] = useState("15:00"); // HH:MM 24h
-  const [addDuration, setAddDuration] = useState(SESSION_DURATION_MINS);
+  // Release 1A, Stage 3: 60 minutes is the only standard billable unit — no
+  // longer a user-selectable value.
+  const addDuration = SESSION_DURATION_MINS;
   const [addModality, setAddModality] = useState<AddModality>("IN_HOME");
   const [addNotes, setAddNotes] = useState("");
   const [addBusy, setAddBusy] = useState(false);
@@ -519,6 +521,10 @@ export default function TutorSessionsPage() {
           clientId: base.clientId ?? null,
           planId: base.planId ?? students[base.studentId]?.activePlanId ?? null,
           startAt: Timestamp.fromDate(start),
+          // Release 1A, Stage 3: each recurring occurrence is its own booking
+          // with its own locked price — originalStartAt is this occurrence's
+          // own startAt, not the base session's.
+          originalStartAt: Timestamp.fromDate(start),
           endAt: Timestamp.fromDate(end),
           durationMinutes: durationMin,
           durationMins: durationMin,
@@ -679,6 +685,9 @@ export default function TutorSessionsPage() {
         clientId: student.clientId ?? null,
         planId: student.activePlanId ?? null,
         startAt: Timestamp.fromDate(start),
+        // Release 1A, Stage 3: locks this session's casual price to its
+        // original booked service date. Never modified after creation.
+        originalStartAt: Timestamp.fromDate(start),
         endAt: Timestamp.fromDate(end),
         durationMinutes: addDuration,
         durationMins: addDuration,
@@ -1589,16 +1598,15 @@ export default function TutorSessionsPage() {
               <label htmlFor={idDuration} className="text-xs font-semibold text-[color:var(--muted)]">
                 Duration
               </label>
-              <select
+              {/* Release 1A, Stage 3: 60 minutes is the only standard billable
+                  unit — a 2-hour lesson is booked as two separate 60-minute
+                  sessions, so no duration picker is needed here anymore. */}
+              <div
                 id={idDuration}
-                value={addDuration}
-                onChange={(e) => setAddDuration(Number(e.target.value))}
-                className="w-full rounded-xl border border-[color:var(--ring)] bg-white px-3 py-2 text-sm"
+                className="flex w-full items-center rounded-xl border border-[color:var(--ring)] bg-[#f5f7fb] px-3 py-2 text-sm text-[color:var(--muted)]"
               >
-                <option value={45}>45 min</option>
-                <option value={60}>60 min</option>
-                <option value={90}>90 min</option>
-              </select>
+                60 min
+              </div>
             </div>
 
             <div className="space-y-2">

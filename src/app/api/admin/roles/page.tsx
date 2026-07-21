@@ -111,9 +111,9 @@ export default function AdminRolesPage() {
         {!isAdmin && (
           <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             You don&apos;t have an <code>admin</code> role yet. If your email is
-            listed in <code>ALLOWED_ADMIN_EMAILS</code> in{" "}
-            <code>/api/admin/setRole</code>, you can still use this page to set
-            roles.
+            listed in <code>ADMIN_EMAILS</code> in{" "}
+            <code>src/lib/adminEmails.ts</code>, you can still use this page to
+            set roles.
           </div>
         )}
 

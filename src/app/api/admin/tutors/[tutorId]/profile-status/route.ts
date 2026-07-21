@@ -1,11 +1,6 @@
 import { NextResponse } from "next/server";
 import * as admin from "firebase-admin";
-import { getAdminApp, verifyIdTokenFromRequest } from "@/lib/firebaseAdmin";
-
-const ADMIN_EMAILS = new Set([
-  "lily.studyroom@gmail.com",
-  "contact.studyroomaustralia@gmail.com",
-]);
+import { getAdminApp, verifyIdTokenFromRequest, isAdminEmail } from "@/lib/firebaseAdmin";
 
 const ALLOWED_STATUSES = new Set(["active", "paused", "pending_review"]);
 
@@ -19,7 +14,7 @@ export async function POST(
 
     const decoded = await verifyIdTokenFromRequest(req);
     const callerEmail = (decoded.email ?? "").toLowerCase();
-    const isAdminUser = decoded.role === "admin" || ADMIN_EMAILS.has(callerEmail);
+    const isAdminUser = decoded.role === "admin" || isAdminEmail(callerEmail);
 
     if (!isAdminUser) {
       return NextResponse.json({ ok: false, error: "Admin access required." }, { status: 403 });

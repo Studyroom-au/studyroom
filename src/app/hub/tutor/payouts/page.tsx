@@ -50,14 +50,14 @@ type CsvRow = {
   payable: string;
 };
 
-const TUTOR_DEFAULT_RATE_CENTS_PER_HOUR = 4000;
-
-function payableCentsForSession(s: SessionRow) {
-  if (typeof s.tutorPayableCents === "number" && s.tutorPayableCents > 0) {
-    return s.tutorPayableCents;
-  }
+// Release 1A (A4): tutor pay is never estimated. A completed session only has a
+// payable amount if tutorPayableCents has actually been recorded on it; otherwise
+// this returns null ("not yet available") rather than guessing a rate. A
+// non-completed session is simply not payable (0), which is a fact, not a guess.
+function payableCentsForSession(s: SessionRow): number | null {
   if (s.status.toLowerCase() !== "completed") return 0;
-  return Math.round((s.durationMinutes / 60) * TUTOR_DEFAULT_RATE_CENTS_PER_HOUR);
+  if (typeof s.tutorPayableCents === "number") return s.tutorPayableCents;
+  return null;
 }
 
 function toISODateInput(d: Date) {
@@ -160,7 +160,12 @@ export default function TutorPayoutsPage() {
   );
 
   const totalCents = useMemo(
-    () => completed.reduce((sum, s) => sum + payableCentsForSession(s), 0),
+    () => completed.reduce((sum, s) => sum + (payableCentsForSession(s) ?? 0), 0),
+    [completed]
+  );
+
+  const unavailableCount = useMemo(
+    () => completed.filter((s) => payableCentsForSession(s) === null).length,
     [completed]
   );
 
@@ -173,14 +178,17 @@ export default function TutorPayoutsPage() {
   }
 
   function exportCSV() {
-    const rows: CsvRow[] = completed.map((s) => ({
-      sessionId: s.id,
-      when: fmt(s.startAt),
-      student: studentLabel(s.studentId),
-      durationMinutes: s.durationMinutes,
-      status: s.status,
-      payable: (payableCentsForSession(s) / 100).toFixed(2),
-    }));
+    const rows: CsvRow[] = completed.map((s) => {
+      const cents = payableCentsForSession(s);
+      return {
+        sessionId: s.id,
+        when: fmt(s.startAt),
+        student: studentLabel(s.studentId),
+        durationMinutes: s.durationMinutes,
+        status: s.status,
+        payable: cents === null ? "Not yet available" : (cents / 100).toFixed(2),
+      };
+    });
 
     const header: Array<keyof CsvRow> = Object.keys(
       rows[0] ?? { sessionId: "", when: "", student: "", durationMinutes: 0, status: "SCHEDULED", payable: "" }
@@ -197,7 +205,10 @@ export default function TutorPayoutsPage() {
           .join(",")
       ),
       "",
-      `"TOTAL","","","","","${(totalCents / 100).toFixed(2)}"`,
+      `"TOTAL (recorded sessions only)","","","","","${(totalCents / 100).toFixed(2)}"`,
+      ...(unavailableCount > 0
+        ? [`"Note","${unavailableCount} of ${completed.length} completed sessions have no recorded pay figure yet and are excluded from the total above.","","","",""`]
+        : []),
     ].join("\n");
 
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -255,8 +266,14 @@ export default function TutorPayoutsPage() {
           </div>
           <div style={{ background: "#f8fafb", borderRadius: 14, padding: "12px 14px", border: "1px solid rgba(0,0,0,0.05)" }}>
             <div style={{ fontSize: 10, fontWeight: 600, color: "#748398", marginBottom: 4 }}>Total payable</div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: "#1d2428" }}>${(totalCents / 100).toFixed(2)}</div>
-            <div style={{ fontSize: 10, color: "#8a96a3", marginTop: 2 }}>Uses stored rate, falls back to $40/hr.</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: "#1d2428" }}>
+              {completed.length - unavailableCount > 0 ? `$${(totalCents / 100).toFixed(2)}` : "—"}
+            </div>
+            <div style={{ fontSize: 10, color: "#8a96a3", marginTop: 2 }}>
+              {unavailableCount > 0
+                ? `Not yet available for ${unavailableCount} of ${completed.length} session${unavailableCount === 1 ? "" : "s"}.`
+                : "Recorded pay figure per session."}
+            </div>
           </div>
         </div>
       </div>
@@ -282,7 +299,11 @@ export default function TutorPayoutsPage() {
                     {s.status}
                   </span>
                   <span style={{ fontSize: 13, fontWeight: 700, color: "#1d2428" }}>
-                    {s.status.toLowerCase() === "completed" ? `$${(payableCentsForSession(s) / 100).toFixed(2)}` : "—"}
+                    {(() => {
+                      const cents = payableCentsForSession(s);
+                      if (s.status.toLowerCase() !== "completed") return "—";
+                      return cents === null ? "Not yet available" : `$${(cents / 100).toFixed(2)}`;
+                    })()}
                   </span>
                 </div>
               </div>

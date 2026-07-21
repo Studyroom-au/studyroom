@@ -1,11 +1,6 @@
 import { NextResponse } from "next/server";
 import * as admin from "firebase-admin";
-import { getAdminApp, verifyIdTokenFromRequest } from "@/lib/firebaseAdmin";
-
-const ADMIN_EMAILS = new Set([
-  "lily.studyroom@gmail.com",
-  "contact.studyroomaustralia@gmail.com",
-]);
+import { getAdminApp, verifyIdTokenFromRequest, isAdminEmail } from "@/lib/firebaseAdmin";
 
 export async function POST(
   req: Request,
@@ -27,9 +22,9 @@ export async function POST(
     }
 
     // ── Role check ────────────────────────────────────────────────────────────
-    const isAdminEmail = ADMIN_EMAILS.has(tutorEmail);
+    const callerIsAdmin = isAdminEmail(tutorEmail);
 
-    if (!isAdminEmail) {
+    if (!callerIsAdmin) {
       const roleSnap = await db.collection("roles").doc(tutorUid).get();
       let role: string | undefined = roleSnap.exists
         ? (roleSnap.data()?.role as string | undefined)

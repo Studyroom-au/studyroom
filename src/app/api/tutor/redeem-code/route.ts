@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
-import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
+import { getAdminAuth, getAdminDb, setUserRoleClaim } from "@/lib/firebaseAdmin";
 
 function parseExpiry(value: unknown): Date | null {
   if (!value) return null;
@@ -67,6 +67,12 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Release 1A, Stage 2: keep the Firebase Auth custom claim in sync with the
+    // Firestore roles/{uid} doc, matching what setRole and tutor-access/decision
+    // already do. Without this, the ID token's `role` claim would never reflect
+    // "tutor" for anyone who signs up through this self-serve path.
+    await setUserRoleClaim(uid, "tutor");
 
     await db.collection("roles").doc(uid).set(
       {

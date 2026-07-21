@@ -1,6 +1,6 @@
 // src/app/api/sessions/cancel/route.ts
 import { NextResponse } from "next/server";
-import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
+import { getAdminAuth, getAdminDb, isAdminEmail } from "@/lib/firebaseAdmin";
 import { applySessionAction } from "@/lib/studyroom/serverBilling";
 
 function getBearerToken(req: Request) {
@@ -20,7 +20,7 @@ async function requireUser(req: Request) {
 }
 
 async function isTutorOrAdmin(uid: string, email?: string | null) {
-  if ((email || "").toLowerCase() === "lily.studyroom@gmail.com") return { role: "admin" as const };
+  if (isAdminEmail(email)) return { role: "admin" as const };
 
   const db = getAdminDb();
   if (!db) throw new Error("Admin DB not configured.");

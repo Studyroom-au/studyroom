@@ -1,11 +1,6 @@
 import { NextResponse } from "next/server";
 import * as admin from "firebase-admin";
-import { getAdminApp, verifyIdTokenFromRequest } from "@/lib/firebaseAdmin";
-
-const ADMIN_EMAILS = new Set([
-  "lily.studyroom@gmail.com",
-  "contact.studyroomaustralia@gmail.com",
-]);
+import { getAdminApp, verifyIdTokenFromRequest, isAdminEmail } from "@/lib/firebaseAdmin";
 
 export async function GET(
   req: Request,
@@ -18,7 +13,7 @@ export async function GET(
     const decoded = await verifyIdTokenFromRequest(req);
     const callerEmail = (decoded.email ?? "").toLowerCase();
     const isAdmin =
-      decoded.role === "admin" || ADMIN_EMAILS.has(callerEmail);
+      decoded.role === "admin" || isAdminEmail(callerEmail);
 
     if (!isAdmin) {
       return NextResponse.json(

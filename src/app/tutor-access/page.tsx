@@ -42,6 +42,10 @@ export default function TutorAccessPage() {
       const data = await res.json() as { ok?: boolean; error?: string };
       if (!res.ok || !data.ok) throw new Error(data.error ?? "Invalid code.");
 
+      // Release 1A, Stage 2: force a fresh ID token so the "tutor" custom claim
+      // the server just set is present before navigating into the tutor hub.
+      await u.getIdToken(true);
+
       router.replace("/hub/tutor");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong.");

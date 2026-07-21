@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
-import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
+import { getAdminAuth, getAdminDb, isAdminEmail, setUserRoleClaim } from "@/lib/firebaseAdmin";
 import * as admin from "firebase-admin";
 
 const ALLOWED_ROLES = new Set(["student", "tutor", "admin"] as const);
-const ALLOWED_ADMIN_EMAILS = new Set(["lily.studyroom@gmail.com"]);
 
 type AllowedRole = "student" | "tutor" | "admin";
 
@@ -41,7 +40,7 @@ export async function POST(req: Request) {
 
     const isAdmin =
       decoded.role === "admin" ||
-      ALLOWED_ADMIN_EMAILS.has(actorEmail);
+      isAdminEmail(actorEmail);
 
     if (!isAdmin) {
       return NextResponse.json({ error: "Insufficient permissions." }, { status: 403 });
@@ -57,7 +56,7 @@ export async function POST(req: Request) {
       );
     }
 
-    await adminAuth.setCustomUserClaims(targetUid, { role });
+    await setUserRoleClaim(targetUid, role);
 
     const batch = db.batch();
     batch.set(
@@ -73,10 +72,8 @@ export async function POST(req: Request) {
     await batch.commit();
 
     return NextResponse.json({ ok: true, targetUid, role });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err?.message ?? "Failed to set role" },
-      { status: 500 }
-    );
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to set role";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

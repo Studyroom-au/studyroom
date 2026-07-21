@@ -658,7 +658,7 @@ export default function AdminStudentDetailPage() {
   // ── Derived state ─────────────────────────────────────────────────────────────
 
   const completedCount = useMemo(
-    () => sessions.filter((s) => s.data.status === "COMPLETED").length,
+    () => sessions.filter((s) => s.data.status === "completed" || s.data.status === "COMPLETED").length,
     [sessions]
   );
 
