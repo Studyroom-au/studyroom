@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb, isAdminEmail } from "@/lib/firebaseAdmin";
 import * as admin from "firebase-admin";
+import { computeAssignedTutorIds, shouldMirrorSingularTutor } from "@/lib/studyroom/clientTutorSync";
 
 type Role = "student" | "tutor" | "admin";
 
@@ -77,9 +78,22 @@ export async function POST(req: Request) {
       if (clientSnap.exists) {
         const client = (clientSnap.data() ?? {}) as ClientDoc;
         const clientTutorId = String(client.assignedTutorId ?? "");
-        if (!clientTutorId || clientTutorId === user.uid) {
+        if (shouldMirrorSingularTutor(clientTutorId, user.uid)) {
           await clientRef.set(patch, { merge: true });
         }
+
+        // Multi-student-family correction (pre-Stage-6): recompute the full
+        // set of tutors assigned to ANY student under this client (siblings
+        // included), so the shared family record stays readable by every
+        // currently-assigned tutor, not just whichever one claimed last.
+        const siblingsSnap = await db.collection("students").where("clientId", "==", clientId).get();
+        const siblingTutorIds = siblingsSnap.docs.map((d) =>
+          d.id === studentId ? user.uid : (d.data() as { assignedTutorId?: string | null }).assignedTutorId ?? null
+        );
+        await clientRef.set(
+          { assignedTutorIds: computeAssignedTutorIds(siblingTutorIds), updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+          { merge: true }
+        );
       }
     }
 

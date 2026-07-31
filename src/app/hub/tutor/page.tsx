@@ -81,7 +81,17 @@ function buildChecklist(p: Record<string, unknown> | null): ChecklistItem[] {
     { label: "Availability",     done: nonEmptyArr(get("availabilitySlots")) || nonEmptyArr(get("availabilityDays")) },
     { label: "Subjects",         done: nonEmptyArr(get("capabilities")) },
     { label: "Learning support", done: nonEmptyArr(get("supportCapabilities")) },
-    { label: "Compliance",       done: nonEmptyStr(get("abn")) && nonEmptyStr(get("wwccNumber")) },
+    {
+      label: "Compliance",
+      // WWCC/Blue Card (number + state + expiry) is the required child-safety
+      // credential; driver licence is deliberately excluded — it's optional
+      // and must never block a complete/Active profile.
+      done:
+        nonEmptyStr(get("abn")) &&
+        nonEmptyStr(get("wwccNumber")) &&
+        nonEmptyStr(get("wwccState")) &&
+        get("wwccExpiresAt") != null,
+    },
   ];
 }
 

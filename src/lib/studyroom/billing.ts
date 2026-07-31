@@ -54,7 +54,12 @@ const CURRENT_CASUAL_RATES_CENTS: Record<CasualBillableMode, number> = {
 // retroactively shift to a later tier's rate: the tier a booking resolves to
 // is purely a function of its own fixed originalStartAt against this fixed
 // list, never of anything that changes later.
-const CASUAL_PRICING_TIERS: readonly CasualPricingTier[] = [
+// Exported so it can be used as the seed/fallback for the Firestore-backed
+// settings/casualPricingTiers doc (src/lib/studyroom/casualPricing.ts) — the
+// hardcoded list here is never removed; it's what a missing/malformed
+// Settings document safely falls back to, so a casual invoice can never
+// silently price at $0.
+export const CASUAL_PRICING_TIERS: readonly CasualPricingTier[] = [
   { effectiveFrom: "2000-01-01", rates: LEGACY_CASUAL_RATES_CENTS },
   { effectiveFrom: PRICING_EFFECTIVE_DATE, rates: CURRENT_CASUAL_RATES_CENTS },
 ];
@@ -75,15 +80,27 @@ export function isCasualBillableMode(mode: unknown): mode is CasualBillableMode 
 
 /**
  * The rate for a casual session, determined solely by its original booked
- * service date against the ordered tier list above. `bookedAt` must be the
+ * service date against an ordered tier list. `bookedAt` must be the
  * session's locked originalStartAt (or, only for a pre-existing session that
  * predates this field, its current startAt as the best available fallback) —
  * never `new Date()`, never a completion or invoice timestamp.
+ *
+ * `tiers` defaults to the hardcoded CASUAL_PRICING_TIERS above so every
+ * existing caller/test that doesn't pass a third argument is completely
+ * unaffected. The Firestore-backed settings/casualPricingTiers tier list
+ * (read once, OUTSIDE applySessionAction's transaction — see
+ * src/lib/studyroom/casualPricing.ts) is passed in explicitly by callers that
+ * want it; this function itself never touches Firestore, so it's still pure
+ * and still independently unit-testable.
  */
-export function getSessionRateCents(mode: CasualBillableMode, bookedAt: Date): number {
+export function getSessionRateCents(
+  mode: CasualBillableMode,
+  bookedAt: Date,
+  tiers: readonly CasualPricingTier[] = CASUAL_PRICING_TIERS
+): number {
   const bookedMs = bookedAt.getTime();
-  let applicable = CASUAL_PRICING_TIERS[0];
-  for (const tier of CASUAL_PRICING_TIERS) {
+  let applicable = tiers[0];
+  for (const tier of tiers) {
     if (bookedMs >= tierInstantMs(tier.effectiveFrom)) {
       applicable = tier;
     } else {
@@ -105,7 +122,14 @@ export const LATE_CANCELLATION_HOURS = 24;
 export const LATE_FEE_GRACE_DAYS = 7;
 export const LATE_FEE_CENTS = 500;
 
-export type StudyroomPlanType = "casual" | "package_5" | "package_12";
+// Release 1B: current sellable packages are casual / package_5 / package_10
+// (package_10 = exactly 10 sessions, no bonus). "package_12" is kept in the
+// type solely to correctly read/bill the small number of pre-existing legacy
+// 12-session plans (10 base + 2 bonus) that predate this change — it is never
+// offered by any creation/renewal UI or route from this point forward, and
+// must never be produced as a new value. See getEntitlementSeed/isPrepaidPlan
+// below, which both still recognize it for that legacy-read reason only.
+export type StudyroomPlanType = "casual" | "package_5" | "package_10" | "package_12";
 export type StudyroomMode = "in_home" | "online" | "group";
 export type StudyroomSessionStatus =
   | "scheduled"
@@ -116,6 +140,11 @@ export type StudyroomSessionStatus =
 export type BillingOutcome = "consume_entitlement" | "invoice" | "no_charge" | "credit";
 export type InvoiceStatus = "pending_xero" | "draft_created" | "approved" | "sent" | "paid" | "overdue" | "void" | "credited" | "waived" | "xero_failed";
 
+// Release 1B: package pricing/discount. A discount is exactly one of these
+// two shapes, never both — enforced structurally by computeDiscount() below
+// taking a single discountType rather than two independent optional amounts.
+export type DiscountType = "percent" | "fixed";
+
 export type StudyroomPlanRecord = {
   id?: string;
   clientId?: string | null;
@@ -124,12 +153,32 @@ export type StudyroomPlanRecord = {
   tutorEmail?: string | null;
   type: StudyroomPlanType;
   mode: StudyroomMode;
-  status?: "active" | "paused" | "pending_withdrawal" | "withdrawn";
+  status?: "active" | "paused" | "pending_withdrawal" | "withdrawn" | "expired";
   termId?: string | null;
   sessionRateCents: number;
   packagePriceCents?: number | null;
   graceUsedThisTerm?: boolean;
   graceTermId?: string | null;
+
+  // Release 1B — package commercial snapshot, set once at creation/renewal
+  // and never recomputed later (mirrors originalStartAt's pricing-lock
+  // guarantee for casual sessions). Only meaningful for package_5/package_10
+  // plans created via /api/plans/create or /api/plans/renew.
+  standardPriceCents?: number | null;
+  discountType?: DiscountType | null;
+  discountValue?: number | null;
+  discountAmountCents?: number | null;
+  finalPriceCents?: number | null;
+  discountReason?: string | null;
+  discountAppliedBy?: string | null;
+  discountAppliedAt?: unknown; // Firestore Timestamp — kept as unknown here to avoid an admin-SDK import in this pure module
+  pricingSnapshotAt?: unknown;
+
+  // Release 1B — renewal lineage, set only on a plan created by /api/plans/renew.
+  renewedFromPlanId?: string | null;
+  carryOverSessions?: number;
+  carryOverApprovedBy?: string | null;
+  carryOverApprovedAt?: unknown;
 };
 
 export type StudyroomEntitlementRecord = {
@@ -154,6 +203,8 @@ export type ComputeBillingOutcomeArgs = {
 export function normalizePlanType(value: unknown): StudyroomPlanType {
   const raw = String(value ?? "").trim().toLowerCase();
   if (raw === "package_5") return "package_5";
+  if (raw === "package_10") return "package_10";
+  // Legacy-read only — no current code path ever writes this value.
   if (raw === "package_12") return "package_12";
   return "casual";
 }
@@ -183,7 +234,9 @@ export function toLegacySessionStatus(status: StudyroomSessionStatus) {
 }
 
 export function isPrepaidPlan(planType: StudyroomPlanType) {
-  return planType === "package_5" || planType === "package_12";
+  // package_12 stays prepaid so the existing legacy plans keep consuming
+  // entitlements correctly instead of silently flipping to casual invoicing.
+  return planType === "package_5" || planType === "package_10" || planType === "package_12";
 }
 
 export function getDefaultSessionRateCents(mode: StudyroomMode) {
@@ -193,6 +246,12 @@ export function getDefaultSessionRateCents(mode: StudyroomMode) {
 }
 
 export function getEntitlementSeed(planType: StudyroomPlanType) {
+  if (planType === "package_10") {
+    return { remainingSessions: 10, bonusRemaining: 0 };
+  }
+  // Legacy-read only (see StudyroomPlanType) — kept so hydratePlanContext can
+  // still correctly backfill a missing entitlement for a pre-existing
+  // package_12 plan; never selected by any current creation/renewal path.
   if (planType === "package_12") {
     return { remainingSessions: 10, bonusRemaining: 2 };
   }
@@ -200,6 +259,94 @@ export function getEntitlementSeed(planType: StudyroomPlanType) {
     return { remainingSessions: 5, bonusRemaining: 0 };
   }
   return { remainingSessions: 0, bonusRemaining: 0 };
+}
+
+export type DiscountInput = {
+  standardPriceCents: number;
+  discountType?: DiscountType | null;
+  discountValue?: number | null;
+};
+
+export type DiscountResult = {
+  discountType: DiscountType | null;
+  discountValue: number | null;
+  discountAmountCents: number;
+  finalPriceCents: number;
+};
+
+/**
+ * Release 1B: the one place a package discount is ever computed. Pure,
+ * snapshot-friendly (no clock, no external read) — the caller writes the
+ * returned fields directly onto the specific plan document, once, at
+ * creation/renewal time. Throws on an invalid shape rather than silently
+ * clamping, since this always represents a real commercial decision.
+ */
+export function computeDiscount(input: DiscountInput): DiscountResult {
+  const { standardPriceCents } = input;
+  if (!Number.isFinite(standardPriceCents) || standardPriceCents < 0) {
+    throw new Error("standardPriceCents must be a non-negative number.");
+  }
+
+  const discountType = input.discountType ?? null;
+  if (discountType === null) {
+    return { discountType: null, discountValue: null, discountAmountCents: 0, finalPriceCents: standardPriceCents };
+  }
+
+  const discountValue = Number(input.discountValue);
+  if (!Number.isFinite(discountValue)) {
+    throw new Error("discountValue must be a number when discountType is set.");
+  }
+
+  if (discountType === "percent") {
+    if (discountValue < 0 || discountValue > 100) {
+      throw new Error("A percentage discount must be between 0 and 100.");
+    }
+    const discountAmountCents = Math.round((standardPriceCents * discountValue) / 100);
+    return { discountType, discountValue, discountAmountCents, finalPriceCents: Math.max(0, standardPriceCents - discountAmountCents) };
+  }
+
+  if (discountType === "fixed") {
+    if (discountValue < 0) {
+      throw new Error("A fixed discount cannot be negative.");
+    }
+    const discountAmountCents = Math.round(discountValue);
+    return { discountType, discountValue, discountAmountCents, finalPriceCents: Math.max(0, standardPriceCents - discountAmountCents) };
+  }
+
+  throw new Error(`Unknown discountType "${discountType}".`);
+}
+
+export type InvoiceLineItem = { description: string; quantity: number; unitAmount: number; accountCode?: string };
+
+/**
+ * Release 1B: the line items for a package-purchase invoice (creation or
+ * renewal) — a base line at the full standard price, plus a separate,
+ * clearly-labeled negative line for the discount if one applies. The base
+ * rate itself is never altered, so the original standard price is always
+ * visible on the invoice even when discounted, matching the discount design's
+ * audit requirement.
+ */
+export function buildPackageInvoiceLineItems(args: {
+  planType: StudyroomPlanType;
+  studentName: string;
+  standardPriceCents: number;
+  discountAmountCents: number;
+}): InvoiceLineItem[] {
+  const items: InvoiceLineItem[] = [
+    {
+      description: `${formatPlanLabel(args.planType)} — ${args.studentName}`,
+      quantity: 1,
+      unitAmount: Number((args.standardPriceCents / 100).toFixed(2)),
+    },
+  ];
+  if (args.discountAmountCents > 0) {
+    items.push({
+      description: "Discount",
+      quantity: 1,
+      unitAmount: -Number((args.discountAmountCents / 100).toFixed(2)),
+    });
+  }
+  return items;
 }
 
 export function inferTermId(at: Date) {
@@ -245,6 +392,16 @@ export function addDays(date: Date, days: number) {
   return new Date(date.getTime() + days * 86400000);
 }
 
+/**
+ * Release 1B, Stage 7: which invoice statuses a manual "Mark as paid" action
+ * must refuse — an invoice that's already void/credited/waived was never
+ * actually charged (or was explicitly forgiven), so marking it "paid" would
+ * misrepresent the family's real payment history.
+ */
+export function isMarkPaidBlocked(status: string): boolean {
+  return status === "void" || status === "credited" || status === "waived";
+}
+
 export function isInvoiceOverdue(invoice: {
   status?: string | null;
   dueAt?: Date | null;
@@ -259,7 +416,8 @@ export function isInvoiceOverdue(invoice: {
 
 export function formatPlanLabel(planType: StudyroomPlanType) {
   if (planType === "package_5") return "5-session package";
-  if (planType === "package_12") return "12-session package";
+  if (planType === "package_10") return "10-session package";
+  if (planType === "package_12") return "12-session package (legacy)";
   return "Casual";
 }
 

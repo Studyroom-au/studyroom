@@ -6,7 +6,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import type { DocumentReference } from "firebase-admin/firestore";
 
 type LineItem = {
-  // Current schema (serverBilling.ts post-fix, invoiceEngine.ts)
+  // Current schema (serverBilling.ts; also used by package-purchase invoices, Release 1B)
   description?: string | null;
   quantity?: number | null;
   unitAmount?: number | null;    // dollars

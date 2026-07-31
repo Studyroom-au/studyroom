@@ -22,6 +22,7 @@ import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin from "@fullcalendar/interaction";
+import enAuLocale from "@fullcalendar/core/locales/en-au";
 
 import type { EventClickArg, EventDropArg, EventContentArg } from "@fullcalendar/core";
 import type { EventResizeDoneArg } from "@fullcalendar/interaction";
@@ -29,6 +30,7 @@ import type { EventResizeDoneArg } from "@fullcalendar/interaction";
 import Drawer from "@/components/ui/Drawer";
 import RescheduleSession from "@/components/session/RescheduleSession";
 import SessionLogEditor from "@/components/session/SessionLogEditor";
+import { TUTOR_FINANCE_INFO_VISIBLE } from "@/lib/studyroom/featureFlags";
 import {
   SESSION_DURATION_MINS,
   formatModeLabel,
@@ -175,6 +177,8 @@ export default function TutorSessionsPage() {
   const [xeroPushing, setXeroPushing] = useState(false);
   const [xeroMsg, setXeroMsg] = useState<string | null>(null);
   const [logExpanded, setLogExpanded] = useState(false);
+  const [hasNote, setHasNote] = useState(false);
+  const [checkingNote, setCheckingNote] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [mobileViewDate, setMobileViewDate] = useState(new Date());
   const [billingExpanded, setBillingExpanded] = useState(false);
@@ -217,6 +221,30 @@ export default function TutorSessionsPage() {
     () => sessions.find((s) => s.id === openId) ?? null,
     [openId, sessions]
   );
+
+  const checkHasNote = useCallback(async (sessionId: string) => {
+    setCheckingNote(true);
+    try {
+      const logsSnap = await getDocs(collection(db, "sessions", sessionId, "logs"));
+      const any = logsSnap.docs.some((d) => String((d.data() as { text?: string }).text ?? "").trim().length > 0);
+      setHasNote(any);
+    } catch {
+      setHasNote(false);
+    } finally {
+      setCheckingNote(false);
+    }
+  }, []);
+
+  // Completing a session now requires a non-empty note server-side (Release
+  // 1B) — check as soon as a session is opened so "Mark completed" reflects
+  // reality immediately, rather than only failing after the click.
+  useEffect(() => {
+    if (!openId) {
+      setHasNote(false);
+      return;
+    }
+    checkHasNote(openId);
+  }, [openId, checkHasNote]);
 
   const openStudent = useMemo(() => {
     if (!openSession) return null;
@@ -480,9 +508,17 @@ export default function TutorSessionsPage() {
     });
 
     if (!res.ok) {
-      const t = await res.text();
-      console.error("Session update failed:", res.status, t);
-      alert("Session update failed. Check console / server logs.");
+      const body = await res.json().catch(() => null);
+      const message = body?.error || "Session update failed. Check console / server logs.";
+      console.error("Session update failed:", res.status, body);
+      if (action === "complete" && /session note is required/i.test(message)) {
+        // Defensive backstop only — the "Mark completed" button already
+        // checks this before allowing the click, so this path should be rare.
+        setLogExpanded(true);
+        alert("Please add a session note below, then mark this session complete.");
+      } else {
+        alert(message);
+      }
     } else {
       await refresh(user.uid, user.email ?? null);
       setOpenId(null);
@@ -940,6 +976,7 @@ export default function TutorSessionsPage() {
               <FullCalendar
               plugins={[timeGridPlugin, dayGridPlugin, interactionPlugin]}
               initialView="timeGridWeek"
+              locale={enAuLocale}
               headerToolbar={{
                 left: "prev,today,next",
                 center: "title",
@@ -953,6 +990,7 @@ export default function TutorSessionsPage() {
               height="auto"
               nowIndicator
               firstDay={1}
+              allDaySlot={false}
               slotMinTime="06:00:00"
               slotMaxTime="21:30:00"
               slotDuration="00:30:00"
@@ -1149,7 +1187,12 @@ export default function TutorSessionsPage() {
               </div>
             </div>
 
-            {/* Billing — collapsed unless an outcome exists */}
+            {/* Billing — hidden from the tutor-facing UI (final polish item
+                2). Tutors focus on session/student/time/mode/notes/outcome;
+                billing/invoice/price stays admin-only. The billing engine
+                itself (applySessionAction, Xero push) is unaffected — this
+                is a display-only toggle. */}
+            {TUTOR_FINANCE_INFO_VISIBLE && (
             <div style={{ padding: "10px 18px", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
               <button
                 type="button"
@@ -1206,6 +1249,7 @@ export default function TutorSessionsPage() {
                 </div>
               )}
             </div>
+            )}
 
             {/* Parent */}
             <div style={{ padding: "12px 18px", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
@@ -1268,11 +1312,33 @@ export default function TutorSessionsPage() {
                 {normalizeSessionStatus(openSession.data.status) === "scheduled" && (
                   <button
                     type="button"
-                    onClick={() => updateSessionStatus(openSession.id, "complete")}
-                    style={{ background: "#456071", color: "#fff", border: "none", borderRadius: 9, padding: "7px 13px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+                    onClick={() => {
+                      if (!hasNote) {
+                        setLogExpanded(true);
+                        return;
+                      }
+                      updateSessionStatus(openSession.id, "complete");
+                    }}
+                    title={hasNote ? undefined : "Add a session note first"}
+                    style={{
+                      background: hasNote ? "#456071" : "#cdd6dd",
+                      color: hasNote ? "#fff" : "#5c6b78",
+                      border: "none",
+                      borderRadius: 9,
+                      padding: "7px 13px",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                    }}
                   >
                     Mark completed
                   </button>
+                )}
+                {normalizeSessionStatus(openSession.data.status) === "scheduled" && !hasNote && !checkingNote && (
+                  <span style={{ fontSize: 11, color: "#a06000", alignSelf: "center" }}>
+                    Add a session note first ↓
+                  </span>
                 )}
                 {normalizeSessionStatus(openSession.data.status) === "scheduled" && (
                   <button
@@ -1413,7 +1479,7 @@ export default function TutorSessionsPage() {
                   onChange={e => setRecurringWeeks(Number(e.target.value))}
                   style={{ border: "1.5px solid rgba(0,0,0,0.09)", borderRadius: 8, padding: "4px 8px", fontSize: 11, fontFamily: "inherit", color: "#1d2428", outline: "none" }}
                 >
-                  {[1,2,3,4,6,8,10,12].map(w => (
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map(w => (
                     <option key={w} value={w}>{w} week{w > 1 ? "s" : ""}</option>
                   ))}
                 </select>
@@ -1435,7 +1501,7 @@ export default function TutorSessionsPage() {
               </div>
             </div>
 
-            {/* Session log — collapsed by default */}
+            {/* Session log — collapsed by default, unless a note is still needed to complete */}
             <div style={{ padding: "12px 18px" }}>
               <button
                 type="button"
@@ -1444,12 +1510,17 @@ export default function TutorSessionsPage() {
               >
                 <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#748398" }}>
                   Session log
+                  {normalizeSessionStatus(openSession.data.status) === "scheduled" && !hasNote && !checkingNote && (
+                    <span style={{ color: "#a06000", marginLeft: 6, letterSpacing: "normal", textTransform: "none", fontWeight: 600 }}>
+                      · required to complete
+                    </span>
+                  )}
                 </div>
                 <span style={{ fontSize: 11, color: "#8a96a3" }}>{logExpanded ? "▲" : "▼"}</span>
               </button>
               {logExpanded && (
                 <div style={{ marginTop: 10 }}>
-                  <SessionLogEditor sessionId={openSession.id} />
+                  <SessionLogEditor sessionId={openSession.id} onSaved={() => checkHasNote(openSession.id)} />
                 </div>
               )}
             </div>

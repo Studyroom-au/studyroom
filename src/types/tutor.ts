@@ -178,12 +178,34 @@ export type TutorProfile = {
   // ── Compliance — tutor-submitted ──────────────────────────────────────────────
   // Admin verifies these separately in tutors/{uid}/internal/admin.
   // A tutor cannot mark themselves as verified.
+  //
+  // wwccNumber/wwccState/wwccExpiresAt ARE the WWCC/Blue Card credential — in
+  // Queensland "Blue Card" is the common name for the Working with Children
+  // Check, so there is no separate Blue Card requirement to capture here.
   abn: string;
   wwccNumber: string;
   wwccState: string;
   wwccExpiresAt: FirestoreTimestamp | null;
-  blueCardNumber: string | null;
-  blueCardExpiresAt: FirestoreTimestamp | null;
+
+  // Optional operational compliance info, unrelated to child-safety
+  // credentials — never required for a complete/Active profile, and never
+  // exposed to parents/students/public tutor profiles/matching cards/other
+  // tutors (tutor sees/edits their own; admin can view).
+  driverLicenceNumber: string | null;
+  driverLicenceExpiry: FirestoreTimestamp | null;
+
+  // ── DEPRECATED (pre-release compliance correction) ────────────────────────
+  // These were a mistaken duplicate of the WWCC/Blue Card requirement above
+  // and are no longer editable or shown anywhere — removed from
+  // TUTOR_PROFILE_EDITABLE_FIELDS and from every UI. Kept here (optional,
+  // read-only) purely because at least one existing tutor document has a
+  // real value in blueCardExpiresAt that must not be silently discarded or
+  // auto-migrated into driverLicenceExpiry (a Blue Card expiry is not a
+  // driver licence expiry) until its meaning is confirmed.
+  /** @deprecated legacy data only — never read or written by any current code path */
+  blueCardNumber?: string | null;
+  /** @deprecated legacy data only — never read or written by any current code path */
+  blueCardExpiresAt?: FirestoreTimestamp | null;
 
   // ── Profile lifecycle (PROTECTED — not directly writable by tutor) ─────────────
   profileStatus: TutorProfileStatus;
@@ -235,8 +257,8 @@ export type TutorProfileUpdatePayload = Pick<
   | "wwccNumber"
   | "wwccState"
   | "wwccExpiresAt"
-  | "blueCardNumber"
-  | "blueCardExpiresAt"
+  | "driverLicenceNumber"
+  | "driverLicenceExpiry"
 >;
 
 // ─── Admin-only internal document: tutors/{uid}/internal/admin ────────────────

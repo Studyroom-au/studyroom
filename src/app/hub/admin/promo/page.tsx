@@ -27,7 +27,7 @@ type PromoType =
   | "package_unlock";
 
 type DiscountAppliesTo = "per_session" | "per_month";
-type PackageTier = "CASUAL" | "PACKAGE_5" | "PACKAGE_12";
+type PackageTier = "CASUAL" | "PACKAGE_5" | "PACKAGE_10";
 type PromoEligibility = "new_users_only" | "existing_users_allowed";
 
 type PromoCodeDoc = {
@@ -90,7 +90,7 @@ function promoDetails(c: PromoCodeDoc): string {
     case "package_unlock": {
       const tier =
         c.packageTier === "PACKAGE_5" ? "Package 5"
-        : c.packageTier === "PACKAGE_12" ? "Package 12"
+        : c.packageTier === "PACKAGE_10" ? "Package 10"
         : c.packageTier === "CASUAL" ? "Casual"
         : "?";
       return `${tier} — ${c.durationDays ?? "?"} days`;
@@ -362,7 +362,7 @@ export default function AdminPromoPage() {
                 >
                   <option value="CASUAL">Casual</option>
                   <option value="PACKAGE_5">Package 5</option>
-                  <option value="PACKAGE_12">Package 12</option>
+                  <option value="PACKAGE_10">Package 10</option>
                 </select>
               </Field>
             )}

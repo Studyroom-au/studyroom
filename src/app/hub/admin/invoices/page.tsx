@@ -94,10 +94,12 @@ function StatusBadge({ status }: { status: string }) {
 export default function AdminInvoicesPage() {
   const [needsActionRows, setNeedsActionRows] = useState<InvoiceRow[]>([]);
   const [draftRows, setDraftRows] = useState<InvoiceRow[]>([]);
+  const [awaitingPaymentRows, setAwaitingPaymentRows] = useState<InvoiceRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [voidingId, setVoidingId] = useState<string | null>(null);
+  const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
   const [msgMap, setMsgMap] = useState<Record<string, string>>({});
 
   function setMsg(id: string, msg: string) {
@@ -123,7 +125,21 @@ export default function AdminInvoicesPage() {
           orderBy("issuedAt", "desc")
         );
 
-        const [naSnap, draftSnap] = await Promise.all([getDocs(needsActionQ), getDocs(draftQ)]);
+        // Sent to the family / overdue — payment truth (Release 1B, Stage 7):
+        // no Xero webhook exists to know when these are actually paid, so
+        // they're surfaced here for a manual "Mark as paid" once confirmed
+        // in Xero/the bank.
+        const awaitingPaymentQ = query(
+          collection(db, "invoices"),
+          where("status", "in", ["sent", "overdue"]),
+          orderBy("issuedAt", "desc")
+        );
+
+        const [naSnap, draftSnap, awaitingSnap] = await Promise.all([
+          getDocs(needsActionQ),
+          getDocs(draftQ),
+          getDocs(awaitingPaymentQ),
+        ]);
 
         async function buildRows(docs: typeof naSnap.docs): Promise<InvoiceRow[]> {
           return Promise.all(
@@ -150,9 +166,14 @@ export default function AdminInvoicesPage() {
           );
         }
 
-        const [needsAction, drafts] = await Promise.all([buildRows(naSnap.docs), buildRows(draftSnap.docs)]);
+        const [needsAction, drafts, awaitingPayment] = await Promise.all([
+          buildRows(naSnap.docs),
+          buildRows(draftSnap.docs),
+          buildRows(awaitingSnap.docs),
+        ]);
         setNeedsActionRows(needsAction);
         setDraftRows(drafts);
+        setAwaitingPaymentRows(awaitingPayment);
       } finally {
         setLoading(false);
       }
@@ -237,6 +258,37 @@ export default function AdminInvoicesPage() {
     },
     []
   );
+
+  // Payment truth — Release 1B, Stage 7: manual, attributable record of a
+  // fact confirmed elsewhere (Xero/bank), not an automated sync.
+  const markAsPaid = useCallback(async (invoiceId: string, fromDrafts: boolean) => {
+    const user = auth.currentUser;
+    if (!user) return;
+    if (!confirm("Mark this invoice as paid? Only do this once you've confirmed payment in Xero or your bank.")) return;
+    setMarkingPaidId(invoiceId);
+    setMsg(invoiceId, "");
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch(`/api/invoices/${invoiceId}/mark-paid`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMsg(invoiceId, json.error || "Failed");
+        return;
+      }
+      if (fromDrafts) {
+        setDraftRows((prev) => prev.filter((r) => r.id !== invoiceId));
+      } else {
+        setAwaitingPaymentRows((prev) => prev.filter((r) => r.id !== invoiceId));
+      }
+    } catch (e) {
+      setMsg(invoiceId, e instanceof Error ? e.message : "Error");
+    } finally {
+      setMarkingPaidId(null);
+    }
+  }, []);
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
@@ -371,7 +423,7 @@ export default function AdminInvoicesPage() {
                         <td className="px-3 py-2 font-mono text-xs text-[color:var(--muted)]">
                           {inv.xeroInvoiceId ? inv.xeroInvoiceId.slice(0, 8) + "…" : "—"}
                         </td>
-                        <td className="px-3 py-2 flex items-center gap-2">
+                        <td className="px-3 py-2 flex flex-wrap items-center gap-2">
                           <button
                             type="button"
                             disabled={voidingId === inv.id}
@@ -379,6 +431,14 @@ export default function AdminInvoicesPage() {
                             className="rounded-lg bg-red-600 px-3 py-1 text-xs font-semibold text-white disabled:opacity-50"
                           >
                             {voidingId === inv.id ? "Voiding…" : "Void"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={markingPaidId === inv.id}
+                            onClick={() => markAsPaid(inv.id, true)}
+                            className="rounded-lg border border-green-300 bg-green-50 px-3 py-1 text-xs font-semibold text-green-800 disabled:opacity-50"
+                          >
+                            {markingPaidId === inv.id ? "Saving…" : "Mark as paid"}
                           </button>
                           {msgMap[inv.id] && (
                             <span className="text-xs text-blue-700">{msgMap[inv.id]}</span>
@@ -395,6 +455,59 @@ export default function AdminInvoicesPage() {
       )}
 
       {/* ------------------------------------------------------------------ */}
+      {/* Section 3: Awaiting Payment (Release 1B, Stage 7)                   */}
+      {/* ------------------------------------------------------------------ */}
+      {!loading && awaitingPaymentRows.length > 0 && (
+        <section className="rounded-3xl border border-green-200 bg-green-50 p-5 shadow-sm">
+          <h2 className="mb-1 text-sm font-semibold text-green-800">
+            Sent / Overdue — Awaiting Payment ({awaitingPaymentRows.length})
+          </h2>
+          <p className="mb-4 text-xs text-green-700">
+            Studyroom has no automatic way to know when Xero shows these as paid. Check Xero or your bank, then
+            record it here.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full border-separate border-spacing-0 text-sm">
+              <thead>
+                <tr className="text-left text-xs font-semibold text-green-700">
+                  <th className="px-3 py-2">Student</th>
+                  <th className="px-3 py-2">Parent</th>
+                  <th className="px-3 py-2">Date</th>
+                  <th className="px-3 py-2">Amount</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {awaitingPaymentRows.map((inv) => (
+                  <tr key={inv.id} className="border-t border-green-200">
+                    <td className="px-3 py-2 font-semibold text-[color:var(--ink)]">{inv.studentName}</td>
+                    <td className="px-3 py-2 text-[color:var(--muted)]">{inv.parentName}</td>
+                    <td className="px-3 py-2 text-[color:var(--muted)]">{inv.dateKey ?? formatDate(inv.issuedAt)}</td>
+                    <td className="px-3 py-2 text-[color:var(--muted)]">
+                      {centAmount(inv) != null ? money(centAmount(inv)!) : "—"}
+                    </td>
+                    <td className="px-3 py-2"><StatusBadge status={inv.status} /></td>
+                    <td className="px-3 py-2 flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={markingPaidId === inv.id}
+                        onClick={() => markAsPaid(inv.id, false)}
+                        className="rounded-lg border border-green-300 bg-white px-3 py-1 text-xs font-semibold text-green-800 disabled:opacity-50"
+                      >
+                        {markingPaidId === inv.id ? "Saving…" : "Mark as paid"}
+                      </button>
+                      {msgMap[inv.id] && <span className="text-xs text-red-700">{msgMap[inv.id]}</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
       {/* Info box                                                             */}
       {/* ------------------------------------------------------------------ */}
       <section className="rounded-3xl border border-[color:var(--ring)] bg-[color:var(--card)] p-5 shadow-sm text-sm text-[color:var(--muted)] space-y-2">
@@ -406,7 +519,8 @@ export default function AdminInvoicesPage() {
           <li>Use &ldquo;Void&rdquo; here to cancel a draft and re-queue the session</li>
         </ol>
         <p className="text-xs pt-1 text-[color:var(--muted)]">
-          SENT and PAID statuses are managed in Xero. Future Xero webhook sync can update them here automatically.
+          Studyroom has no automatic Xero payment sync — once you&apos;ve confirmed a payment in Xero or your bank,
+          use &ldquo;Mark as paid&rdquo; above to record it here.
         </p>
       </section>
     </div>

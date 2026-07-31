@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { collection, deleteDoc, doc, getDocs, Timestamp } from "firebase/firestore";
+import { collection, getDocs, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 type LeadStatus = "new" | "contacted" | "assigned" | "converted";
@@ -30,6 +30,7 @@ type LeadDoc = {
   claimedTutorEmail?: string | null;
   tutorRequestIds?: string[];
   createdAt?: Timestamp;
+  archived?: boolean;
 };
 
 type LeadData = {
@@ -52,9 +53,10 @@ type LeadData = {
   claimedTutorEmail?: unknown;
   tutorRequestIds?: unknown;
   createdAt?: unknown;
+  archived?: unknown;
 };
 
-type FilterKey = "all" | LeadStatus;
+type FilterKey = "all" | LeadStatus | "archived";
 
 function formatDate(ts?: Timestamp) {
   if (!ts) return "—";
@@ -115,7 +117,6 @@ export default function AdminLeadsPage() {
   const [loading, setLoading] = useState(true);
   const [leads, setLeads] = useState<LeadDoc[]>([]);
   const [filter, setFilter] = useState<FilterKey>("all");
-  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -156,6 +157,7 @@ export default function AdminLeadsPage() {
             claimedTutorEmail: asNullableString(data.claimedTutorEmail),
             tutorRequestIds: isStringArray(data.tutorRequestIds) ? data.tutorRequestIds : [],
             createdAt: asTimestamp(data.createdAt),
+            archived: data.archived === true,
           };
         });
 
@@ -174,30 +176,29 @@ export default function AdminLeadsPage() {
     load();
   }, []);
 
-  async function handleDelete(id: string) {
-    if (!window.confirm("Delete this lead? This cannot be undone.")) return;
-    setDeletingId(id);
-    try {
-      await deleteDoc(doc(db, "leads", id));
-      setLeads((prev) => prev.filter((l) => l.id !== id));
-    } catch (e) {
-      console.error(e);
-      alert("Delete failed. Check console.");
-    } finally {
-      setDeletingId(null);
-    }
-  }
+  // Leads lifecycle correction (Release 1B, Stage 9): the active Leads
+  // workspace should contain only leads still needing lead/matching work.
+  // Archived leads (explicit admin action, from the opened lead) and
+  // converted leads (already linked to a real client/student) both disappear
+  // from every status-based view here automatically — nothing is deleted;
+  // both remain reachable via the Archived filter.
+  const activeLeads = useMemo(() => leads.filter((l) => !l.archived), [leads]);
+  const archivedLeads = useMemo(() => leads.filter((l) => l.archived), [leads]);
 
   const counts = useMemo(() => {
-    const base = { all: leads.length, new: 0, contacted: 0, assigned: 0, converted: 0 };
-    for (const l of leads) base[l.status] += 1;
+    const base = { all: 0, new: 0, contacted: 0, assigned: 0, converted: 0 };
+    for (const l of activeLeads) {
+      if (l.status !== "converted") base.all += 1;
+      base[l.status] += 1;
+    }
     return base;
-  }, [leads]);
+  }, [activeLeads]);
 
   const filtered = useMemo(() => {
-    if (filter === "all") return leads;
-    return leads.filter((l) => l.status === filter);
-  }, [leads, filter]);
+    if (filter === "archived") return archivedLeads;
+    if (filter === "all") return activeLeads.filter((l) => l.status !== "converted");
+    return activeLeads.filter((l) => l.status === filter);
+  }, [activeLeads, archivedLeads, filter]);
 
   type ChipDef = { key: FilterKey; label: string; count: number; active: string; inactive: string };
   const chips: ChipDef[] = [
@@ -206,6 +207,7 @@ export default function AdminLeadsPage() {
     { key: "contacted", label: "Contacted", count: counts.contacted, active: "bg-sky-500 text-white", inactive: "bg-sky-50 text-sky-800 ring-1 ring-sky-200 hover:bg-sky-100" },
     { key: "assigned", label: "Assigned", count: counts.assigned, active: "bg-purple-500 text-white", inactive: "bg-purple-50 text-purple-800 ring-1 ring-purple-200 hover:bg-purple-100" },
     { key: "converted", label: "Converted", count: counts.converted, active: "bg-emerald-500 text-white", inactive: "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200 hover:bg-emerald-100" },
+    { key: "archived", label: "Archived", count: archivedLeads.length, active: "bg-gray-500 text-white", inactive: "bg-gray-100 text-gray-700 ring-1 ring-gray-300 hover:bg-gray-200" },
   ];
 
   return (
@@ -331,24 +333,14 @@ export default function AdminLeadsPage() {
                         )}
                       </td>
 
-                      {/* Actions */}
+                      {/* Actions — archive/permanent-delete only live inside the opened lead, never as a quick list action */}
                       <td className="px-3 py-3">
-                        <div className="flex items-center gap-2">
-                          <Link
-                            href={`/hub/admin/leads/${l.id}`}
-                            className="inline-flex items-center justify-center rounded-xl border border-[color:var(--ring)] bg-white px-2.5 py-1.5 text-xs font-semibold text-[color:var(--brand)] transition hover:bg-[#d6e5e3]/40"
-                          >
-                            Open →
-                          </Link>
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(l.id)}
-                            disabled={deletingId === l.id}
-                            className="inline-flex items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-2 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-60"
-                          >
-                            {deletingId === l.id ? "…" : "Delete"}
-                          </button>
-                        </div>
+                        <Link
+                          href={`/hub/admin/leads/${l.id}`}
+                          className="inline-flex items-center justify-center rounded-xl border border-[color:var(--ring)] bg-white px-2.5 py-1.5 text-xs font-semibold text-[color:var(--brand)] transition hover:bg-[#d6e5e3]/40"
+                        >
+                          Open →
+                        </Link>
                       </td>
                     </tr>
                   ))}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { onAuthStateChanged } from "firebase/auth";
 import { collection, getDocs, query, where, Timestamp } from "firebase/firestore";
@@ -10,12 +10,14 @@ type StudentDoc = {
   studentName?: string;
   yearLevel?: string;
   school?: string | null;
+  suburb?: string | null;
 
   clientId?: string | null;
 
   assignedTutorId?: string | null;
   assignedTutorEmail?: string | null;
 
+  status?: string;
   createdAt?: Timestamp;
 };
 
@@ -24,12 +26,14 @@ type StudentRow = {
   studentName: string;
   yearLevel: string;
   school?: string | null;
+  suburb?: string | null;
 
   clientId: string;
 
   assignedTutorId?: string | null;
   assignedTutorEmail?: string | null;
 
+  status?: string;
   createdAt?: Timestamp;
 };
 
@@ -46,6 +50,18 @@ function formatDate(ts?: Timestamp) {
 export default function TutorStudentsPage() {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<StudentRow[]>([]);
+  const [showPast, setShowPast] = useState(false);
+  const [showPaused, setShowPaused] = useState(false);
+
+  // Removal lifecycle (Release 1B, Stage 6d): "My Students" now shows only
+  // currently-active students — an ended student disappears from here
+  // immediately, but remains visible (read-only) under Past Students.
+  // Paused (final polish item 8) is a third, distinct state: also hidden
+  // from the active list, but never treated as "past" — it has its own
+  // section since the arrangement is expected to resume, not end.
+  const activeRows = useMemo(() => rows.filter((r) => r.status !== "ended" && r.status !== "paused"), [rows]);
+  const pausedRows = useMemo(() => rows.filter((r) => r.status === "paused"), [rows]);
+  const pastRows = useMemo(() => rows.filter((r) => r.status === "ended"), [rows]);
 
   useEffect(() => {
     const off = onAuthStateChanged(auth, async (u) => {
@@ -70,9 +86,11 @@ export default function TutorStudentsPage() {
             studentName: data.studentName ?? "",
             yearLevel: data.yearLevel ?? "",
             school: data.school ?? null,
+            suburb: data.suburb ?? null,
             clientId: data.clientId ?? "",
             assignedTutorId: data.assignedTutorId ?? null,
             assignedTutorEmail: data.assignedTutorEmail ?? null,
+            status: data.status ?? "active",
             createdAt: data.createdAt,
           };
         });
@@ -124,13 +142,13 @@ export default function TutorStudentsPage() {
             </div>
           ))}
         </div>
-      ) : rows.length === 0 ? (
+      ) : activeRows.length === 0 ? (
         <div style={{ border: "1.5px dashed #e4eaef", borderRadius: 16, padding: 40, textAlign: "center", fontSize: 13, color: "#8a96a3" }}>
           No students assigned yet.
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 }}>
-          {rows.map((s) => (
+          {activeRows.map((s) => (
             <div key={s.id} style={{ background: "white", borderRadius: 18, border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 1px 4px rgba(0,0,0,0.04)", overflow: "hidden", display: "flex", flexDirection: "column" }}>
               <div style={{ height: 4, background: "#456071" }} />
               <div style={{ padding: 16, display: "flex", flexDirection: "column", flexGrow: 1 }}>
@@ -143,6 +161,9 @@ export default function TutorStudentsPage() {
                     <div style={{ fontSize: 11, color: "#8a96a3", marginTop: 1 }}>
                       {[s.yearLevel, s.school].filter(Boolean).join(" · ") || "Details pending"}
                     </div>
+                    {s.suburb && (
+                      <div style={{ fontSize: 11, color: "#8a96a3", marginTop: 1 }}>{s.suburb}</div>
+                    )}
                   </div>
                 </div>
 
@@ -163,6 +184,67 @@ export default function TutorStudentsPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {pausedRows.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          <button
+            type="button"
+            onClick={() => setShowPaused((v) => !v)}
+            style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 600, color: "#b8860b", padding: 0 }}
+          >
+            {showPaused ? "Hide" : "Show"} paused students ({pausedRows.length})
+          </button>
+          {showPaused && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12, marginTop: 10 }}>
+              {pausedRows.map((s) => (
+                <div key={s.id} style={{ background: "#fffbeb", borderRadius: 18, border: "1px dashed #e8c877", padding: 16 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "#1d2428" }}>{s.studentName || "—"}</div>
+                  <div style={{ fontSize: 11, color: "#8a96a3", marginTop: 1 }}>
+                    {[s.yearLevel, s.school].filter(Boolean).join(" · ") || "Details pending"}
+                  </div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#b8860b", marginTop: 6 }}>Paused</div>
+                  <Link
+                    href={`/hub/tutor/students/${s.id}`}
+                    style={{ display: "inline-block", marginTop: 10, color: "#456071", fontSize: 12, fontWeight: 600, textDecoration: "none" }}
+                  >
+                    Open →
+                  </Link>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {pastRows.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          <button
+            type="button"
+            onClick={() => setShowPast((v) => !v)}
+            style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 600, color: "#748398", padding: 0 }}
+          >
+            {showPast ? "Hide" : "Show"} past students ({pastRows.length})
+          </button>
+          {showPast && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12, marginTop: 10, opacity: 0.75 }}>
+              {pastRows.map((s) => (
+                <div key={s.id} style={{ background: "white", borderRadius: 18, border: "1px dashed rgba(0,0,0,0.12)", padding: 16 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "#1d2428" }}>{s.studentName || "—"}</div>
+                  <div style={{ fontSize: 11, color: "#8a96a3", marginTop: 1 }}>
+                    {[s.yearLevel, s.school].filter(Boolean).join(" · ") || "Details pending"}
+                  </div>
+                  <Link
+                    href={`/hub/tutor/students/${s.id}`}
+                    style={{ display: "inline-block", marginTop: 10, color: "#456071", fontSize: 12, fontWeight: 600, textDecoration: "none" }}
+                  >
+                    Open →
+                  </Link>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

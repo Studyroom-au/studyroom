@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { verifyIdTokenFromRequest, getAdminDb, isAdminEmail } from "@/lib/firebaseAdmin";
+import { resolveTutorNameFromLeads } from "@/lib/studyroom/tutorIdentity";
 import {
   TUTOR_PROFILE_EDITABLE_FIELDS,
   TUTOR_PROFILE_PROTECTED_FIELDS,
@@ -30,6 +31,22 @@ async function authorise(uid: string, email: string): Promise<boolean> {
   return ALLOWED_ROLES.has(role);
 }
 
+/**
+ * Admin full-profile editing (final pre-release addition): an admin caller
+ * may target another tutor's tutors/{uid} document by passing `uid` — a
+ * non-admin caller can never do this (their own uid is always used,
+ * regardless of what's in the request), so this never widens what a tutor
+ * can touch. This is the ONE thing that changed to let
+ * /hub/admin/tutors/[tutorId] reuse this exact same schema/validation/API
+ * logic instead of maintaining a second one.
+ */
+function resolveTargetUid(callerUid: string, callerEmail: string, requestedUid: unknown): string {
+  if (isAdminEmail(callerEmail) && typeof requestedUid === "string" && requestedUid.trim().length > 0) {
+    return requestedUid.trim();
+  }
+  return callerUid;
+}
+
 // Recursively convert Firestore Timestamps to ISO strings for JSON serialisation.
 function serialise(val: unknown): unknown {
   if (val && typeof val === "object") {
@@ -51,18 +68,53 @@ function serialise(val: unknown): unknown {
 
 export async function GET(req: NextRequest) {
   try {
-    const { uid, email } = await authenticate(req);
-    if (!(await authorise(uid, email))) {
+    const { uid: callerUid, email: callerEmail } = await authenticate(req);
+    if (!(await authorise(callerUid, callerEmail))) {
       return NextResponse.json({ error: "Forbidden — tutor or tutor_pending role required." }, { status: 403 });
     }
 
+    const requestedUid = req.nextUrl.searchParams.get("uid");
+    const uid = resolveTargetUid(callerUid, callerEmail, requestedUid);
+
     const db = getAdminDb();
-    const snap = await db.collection("tutors").doc(uid).get();
-    if (!snap.exists) {
-      return NextResponse.json({ profile: null });
+
+    // Canonical identity self-heal (pre-Release identity fix): every profile
+    // load is a chance to bring users/{uid}.email back in sync with the
+    // authenticated Auth account (the only place it can ever come from) and
+    // to backfill a signup name from the tutor's own invite/request lead if
+    // one was never captured — this is what makes an existing tutor who
+    // signed up before this fix "just work" the next time they load their
+    // profile, with no migration script needed. Never overwrites a name an
+    // admin has already set. When admin is viewing another tutor (uid !==
+    // callerUid), email is looked up on the TARGET's own Auth record, not
+    // the admin's — self-heal only ever syncs a doc from its own account.
+    const userRef = db.collection("users").doc(uid);
+    const userSnap = await userRef.get();
+    const existingUser = userSnap.exists ? (userSnap.data() ?? {}) : {};
+    const existingEmail = String(existingUser.email ?? "").trim().toLowerCase();
+    const existingName = String(existingUser.name ?? existingUser.displayName ?? "").trim();
+    const targetEmail = uid === callerUid ? callerEmail : existingEmail;
+
+    const identityPatch: Record<string, unknown> = {};
+    if (uid === callerUid && callerEmail && existingEmail !== callerEmail) {
+      identityPatch.email = callerEmail;
+    }
+    let name = existingName;
+    if (!name) {
+      name = await resolveTutorNameFromLeads(db, targetEmail);
+      if (name) identityPatch.name = name;
+    }
+    if (Object.keys(identityPatch).length > 0) {
+      identityPatch.updatedAt = FieldValue.serverTimestamp();
+      await userRef.set(identityPatch, { merge: true });
     }
 
-    return NextResponse.json({ profile: serialise(snap.data() ?? {}) });
+    const snap = await db.collection("tutors").doc(uid).get();
+    if (!snap.exists) {
+      return NextResponse.json({ profile: null, identity: { name, email: targetEmail } });
+    }
+
+    return NextResponse.json({ profile: serialise(snap.data() ?? {}), identity: { name, email: targetEmail } });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unexpected error";
     if (msg.includes("Missing Authorization") || msg.includes("auth/")) {
@@ -81,8 +133,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { uid, email } = await authenticate(req);
-    if (!(await authorise(uid, email))) {
+    const { uid: callerUid, email: callerEmail } = await authenticate(req);
+    if (!(await authorise(callerUid, callerEmail))) {
       return NextResponse.json({ error: "Forbidden — tutor or tutor_pending role required." }, { status: 403 });
     }
 
@@ -92,6 +144,15 @@ export async function POST(req: NextRequest) {
     } catch {
       return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
     }
+
+    // Admin full-profile editing: extract (and remove) `uid` before the
+    // allowlist check below — it's a request-routing field, not a Tutor
+    // Profile V2 field, so it must never reach TUTOR_PROFILE_EDITABLE_FIELDS
+    // validation or the Firestore patch. Non-admin callers can never target
+    // another uid (see resolveTargetUid).
+    const requestedUid = body.uid;
+    delete body.uid;
+    const uid = resolveTargetUid(callerUid, callerEmail, requestedUid);
 
     // ── Field allowlist validation ────────────────────────────────────────────
     const editableSet = new Set<string>(TUTOR_PROFILE_EDITABLE_FIELDS);
@@ -125,10 +186,15 @@ export async function POST(req: NextRequest) {
             return;
           }
           const c = cap as Record<string, unknown>;
-          if (
-            typeof c.subject !== "string" ||
-            !(ALL_TUTOR_SUBJECTS as readonly string[]).includes(c.subject)
-          ) {
+          // A subject outside the fixed QLD curriculum lists is a tutor-
+          // entered custom/"Other" subject (e.g. "Japanese") — accepted as
+          // long as it's a non-empty, reasonably short string. Not hardcoded
+          // to any specific subject name, so future ones need no code change.
+          const isKnownSubject =
+            typeof c.subject === "string" && (ALL_TUTOR_SUBJECTS as readonly string[]).includes(c.subject);
+          const isCustomSubject =
+            typeof c.subject === "string" && c.subject.trim().length > 0 && c.subject.trim().length <= 60;
+          if (!isKnownSubject && !isCustomSubject) {
             errors.push(`capabilities[${i}].subject "${c.subject}" is not a valid subject.`);
           }
           if (!Array.isArray(c.years) || (c.years as unknown[]).length === 0) {
@@ -237,11 +303,11 @@ export async function POST(req: NextRequest) {
     }
 
     if (
-      "blueCardNumber" in body &&
-      body.blueCardNumber !== null &&
-      typeof body.blueCardNumber !== "string"
+      "driverLicenceNumber" in body &&
+      body.driverLicenceNumber !== null &&
+      typeof body.driverLicenceNumber !== "string"
     ) {
-      errors.push("blueCardNumber must be a string or null.");
+      errors.push("driverLicenceNumber must be a string or null.");
     }
 
     for (const f of ["desiredHoursPerWeek", "maxHoursPerWeek", "maxTravelMinutes", "maxTravelKm", "maxActiveStudents"] as const) {
@@ -273,7 +339,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    for (const f of ["wwccExpiresAt", "blueCardExpiresAt"] as const) {
+    for (const f of ["wwccExpiresAt", "driverLicenceExpiry"] as const) {
       if (f in body && body[f] !== null && typeof body[f] !== "string") {
         errors.push(`${f} must be a date string (YYYY-MM-DD) or null.`);
       }
@@ -286,7 +352,7 @@ export async function POST(req: NextRequest) {
     // ── Build Firestore patch ─────────────────────────────────────────────────
     const patch: Record<string, unknown> = {};
     for (const [key, val] of Object.entries(body)) {
-      if ((key === "wwccExpiresAt" || key === "blueCardExpiresAt") && typeof val === "string" && val) {
+      if ((key === "wwccExpiresAt" || key === "driverLicenceExpiry") && typeof val === "string" && val) {
         const d = new Date(val);
         patch[key] = isNaN(d.getTime()) ? null : Timestamp.fromDate(d);
       } else {

@@ -11,7 +11,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:emulator": "firebase emulators:exec --only firestore --project demo-studyroom-rules-test \"vitest run --config vitest.config.emulator.ts\"",
-    "audit:sessions": "node scripts/audit-sessions.js"
+    "audit:sessions": "node scripts/audit-sessions.js",
+    "audit:packages": "node scripts/audit-packages.js"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.20",

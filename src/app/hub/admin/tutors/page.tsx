@@ -12,6 +12,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   Timestamp,
   updateDoc,
   where,
@@ -59,6 +60,7 @@ type TutorRow = {
   maxActiveStudents: number | null;
   profileStatus: string | null;   // null = no tutors/{uid} doc
   profileData: Record<string, unknown> | null;
+  archived: boolean;
 };
 
 type PendingTutorRow = {
@@ -108,7 +110,13 @@ function buildProfileChecklist(p: Record<string, unknown> | null): ChecklistItem
     { label: "Availability",      done: p != null && (a(p.availabilitySlots) || a(p.availabilityDays)) },
     { label: "Subjects",          done: p != null && a(p.capabilities) },
     { label: "Learning support",  done: p != null && a(p.supportCapabilities) },
-    { label: "Compliance",        done: p != null && s(p.abn) && s(p.wwccNumber) },
+    {
+      label: "Compliance",
+      // WWCC/Blue Card (number + state + expiry) is the required child-safety
+      // credential; driver licence is deliberately excluded — it's optional
+      // and must never block a complete/Active profile.
+      done: p != null && s(p.abn) && s(p.wwccNumber) && s(p.wwccState) && p.wwccExpiresAt != null,
+    },
   ];
 }
 
@@ -180,7 +188,6 @@ function ProfileCell({
 
 type EditState = {
   name: string;
-  email: string;
   phone: string;
   bio: string;
   subjectsRaw: string;
@@ -190,14 +197,17 @@ function EditPanel({
   tutor,
   onSave,
   onCancel,
+  onArchiveToggled,
+  onPermanentlyDeleted,
 }: {
   tutor: TutorRow;
   onSave: (uid: string, patch: Partial<TutorRow>) => void;
   onCancel: () => void;
+  onArchiveToggled: (uid: string, archived: boolean) => void;
+  onPermanentlyDeleted: (uid: string) => void;
 }) {
   const [form, setForm] = useState<EditState>({
     name: tutor.name === "No name set" ? "" : tutor.name,
-    email: tutor.email,
     phone: tutor.phone,
     bio: tutor.bio,
     subjectsRaw: tutor.subjects.join(", "),
@@ -205,6 +215,54 @@ function EditPanel({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [archiving, setArchiving] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleToggleArchive() {
+    setArchiving(true);
+    setErr(null);
+    try {
+      const nextArchived = !tutor.archived;
+      // setDoc with merge, not updateDoc — a tutor with no Tutor Profile V2
+      // yet still needs to be archivable (creates a minimal profile doc
+      // holding just this flag rather than failing on a missing document).
+      await setDoc(
+        doc(db, "tutors", tutor.uid),
+        { archived: nextArchived, archivedAt: nextArchived ? serverTimestamp() : null, updatedAt: serverTimestamp() },
+        { merge: true }
+      );
+      onArchiveToggled(tutor.uid, nextArchived);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to update archive status.");
+    } finally {
+      setArchiving(false);
+    }
+  }
+
+  async function handlePermanentDelete() {
+    if (tutor.studentCount > 0) {
+      setErr("This tutor has assigned students with real history and cannot be permanently deleted — archive instead.");
+      return;
+    }
+    const expected = (tutor.hasName ? tutor.name : tutor.email || tutor.uid).trim().toLowerCase();
+    if (deleteConfirmText.trim().toLowerCase() !== expected) {
+      setErr("Type the tutor's name/email exactly as shown to confirm permanent deletion.");
+      return;
+    }
+    setDeleting(true);
+    setErr(null);
+    try {
+      await deleteDoc(doc(db, "roles", tutor.uid));
+      await deleteDoc(doc(db, "tutors", tutor.uid)).catch(() => {});
+      onPermanentlyDeleted(tutor.uid);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to permanently delete tutor.");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   function set(field: keyof EditState, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -220,19 +278,34 @@ function EditPanel({
         .map((s) => s.trim())
         .filter(Boolean);
 
+      // Name is the only identity field admin can correct here — email is
+      // read-only (it's the tutor's authenticated Auth login email; there is
+      // no in-app flow that changes it, so it's never shown as an editable
+      // text field). Subjects stay on users/{uid} (legacy quick-tag field).
       await updateDoc(doc(db, "users", tutor.uid), {
         name: form.name.trim() || null,
-        email: form.email.trim() || null,
-        phone: form.phone.trim() || null,
-        bio: form.bio.trim() || null,
         subjects,
         updatedAt: serverTimestamp(),
       });
 
+      // Bio and phone have exactly one canonical home — tutors/{uid} (Tutor
+      // Profile V2), the same document the tutor's own "My Profile" form and
+      // the admin detail page already read/write. setDoc+merge (not
+      // updateDoc) so this still works for a tutor who hasn't filled in
+      // their own profile yet and has no tutors/{uid} doc at all.
+      await setDoc(
+        doc(db, "tutors", tutor.uid),
+        {
+          phone: form.phone.trim() || null,
+          bio: form.bio.trim() || null,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
       const patch: Partial<TutorRow> = {
         name: form.name.trim() || "No name set",
         hasName: !!form.name.trim(),
-        email: form.email.trim(),
         phone: form.phone.trim(),
         bio: form.bio.trim(),
         subjects,
@@ -263,13 +336,9 @@ function EditPanel({
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-xs font-semibold text-[color:var(--muted)]">Email</span>
-          <input
-            type="email"
-            value={form.email}
-            onChange={(e) => set("email", e.target.value)}
-            placeholder="tutor@example.com"
-            className={inputCls}
-          />
+          <div className={`${inputCls} bg-[#eef1f4] text-[color:var(--muted)]`} title="Read-only — this is the tutor's authenticated login email">
+            {tutor.email || "No email on file"}
+          </div>
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-xs font-semibold text-[color:var(--muted)]">Phone</span>
@@ -326,6 +395,64 @@ function EditPanel({
           <span className="text-xs font-semibold text-emerald-600">Saved</span>
         )}
       </div>
+
+      {/* Item 3: removal lifecycle — archive is the normal action; permanent
+          delete only lives here (inside the opened edit panel), never as a
+          quick list action, and only when there's no real history to lose. */}
+      <div className="mt-5 border-t border-[color:var(--ring)] pt-4">
+        <p className="mb-2 text-xs font-bold uppercase tracking-wide text-[color:var(--muted)]">
+          Remove tutor
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={handleToggleArchive}
+            disabled={archiving}
+            className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-1.5 text-xs font-semibold text-amber-800 transition hover:bg-amber-100 disabled:opacity-60"
+          >
+            {archiving ? "Working…" : tutor.archived ? "Restore from archive" : "Archive tutor"}
+          </button>
+          {!showDeleteConfirm ? (
+            <button
+              type="button"
+              onClick={() => setShowDeleteConfirm(true)}
+              className="rounded-xl border border-rose-200 bg-white px-4 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-50"
+            >
+              Permanently delete…
+            </button>
+          ) : (
+            <div className="w-full rounded-xl border border-rose-200 bg-rose-50 p-3">
+              <p className="text-xs text-rose-800">
+                This permanently removes the tutor role and profile — it does not delete session, billing, or
+                assignment history, and is refused if the tutor has any assigned students. Use this only for a
+                genuine mistake or test record. Type <strong>{tutor.hasName ? tutor.name : tutor.email || tutor.uid}</strong> to confirm.
+              </p>
+              <input
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                className="mt-2 w-full rounded-lg border border-rose-300 bg-white px-2 py-1.5 text-sm"
+              />
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={handlePermanentDelete}
+                  disabled={deleting}
+                  className="rounded-xl bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                >
+                  {deleting ? "Deleting…" : "Confirm permanent delete"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText(""); }}
+                  className="rounded-xl border border-[color:var(--ring)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--muted)]"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -344,7 +471,6 @@ export default function AdminTutorsPage() {
   const [addTutorBusy, setAddTutorBusy] = useState(false);
   const [addTutorMsg, setAddTutorMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [editingUid, setEditingUid] = useState<string | null>(null);
-  const [deletingUid, setDeletingUid] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -393,14 +519,34 @@ export default function AdminTutorsPage() {
             profile && typeof profile.maxActiveStudents === "number"
               ? profile.maxActiveStudents
               : null;
+
+          // Item 2 correction: the tutor's own Tutor Profile V2 (tutors/{uid})
+          // is the canonical source for phone/subjects once they've filled
+          // it in — users/{uid} is a separate, older doc that's never
+          // populated by that form. Prefer the profile; fall back to the
+          // legacy users-doc fields only if no profile exists yet, so
+          // Lily/Tiara don't have to re-enter what the tutor already gave.
+          const profilePhone = profile && typeof profile.phone === "string" ? profile.phone : "";
+          const profileCapabilities = profile && Array.isArray(profile.capabilities) ? profile.capabilities : [];
+          const profileSubjects = profileCapabilities
+            .map((c) => (c as { subject?: string })?.subject)
+            .filter((s): s is string => !!s);
+
+          // Bio must have exactly one canonical source (final pre-release
+          // fix): tutors/{uid}.bio, same as the tutor's own "My Profile"
+          // form and the admin detail page already use. users/{uid}.bio is
+          // legacy-only — nothing writes it anymore — kept as a fallback
+          // only in case an old admin-entered value still exists there.
+          const profileBio = profile && typeof profile.bio === "string" ? profile.bio : "";
+
           return {
             uid,
             name: raw || "No name set",
             hasName: !!raw,
             email: user.email || emailByTutorId[uid] || "",
-            phone: user.phone || "",
-            bio: user.bio || "",
-            subjects: Array.isArray(user.subjects) ? user.subjects : [],
+            phone: profilePhone || user.phone || "",
+            bio: profileBio || user.bio || "",
+            subjects: profileSubjects.length > 0 ? profileSubjects : (Array.isArray(user.subjects) ? user.subjects : []),
             studentCount: countByTutorId[uid] || 0,
             maxActiveStudents,
             profileStatus:
@@ -410,10 +556,49 @@ export default function AdminTutorsPage() {
                 ? "draft"
                 : null,
             profileData: profile,
+            archived: !!(profile && profile.archived === true),
           } satisfies TutorRow;
         })
       );
       setRows(loaded);
+
+      // Canonical identity resolution (final pre-release fix): for any
+      // tutor whose name/email couldn't be resolved from users/{uid} (i.e.
+      // they signed up before that doc was populated at signup time),
+      // resolve it on demand from Firebase Auth + their original invite/
+      // request lead, via the one admin-only server route — rather than
+      // waiting for the tutor to next load their own profile page.
+      const missingIdentityUids = loaded.filter((r) => !r.hasName || !r.email).map((r) => r.uid);
+      if (missingIdentityUids.length > 0) {
+        try {
+          const idToken = await auth.currentUser?.getIdToken();
+          const res = await fetch("/api/admin/tutors/resolve-identity", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+            body: JSON.stringify({ uids: missingIdentityUids }),
+          });
+          const data = (await res.json().catch(() => null)) as
+            | { identities?: Record<string, { name: string; email: string }> }
+            | null;
+          const identities = data?.identities;
+          if (identities) {
+            setRows((prev) =>
+              prev.map((r) => {
+                const resolved = identities[r.uid];
+                if (!resolved) return r;
+                return {
+                  ...r,
+                  name: !r.hasName && resolved.name ? resolved.name : r.name,
+                  hasName: r.hasName || !!resolved.name,
+                  email: r.email || resolved.email,
+                };
+              })
+            );
+          }
+        } catch (e) {
+          console.warn("[admin/tutors] identity resolution failed:", e);
+        }
+      }
 
       const pendingLoaded = await Promise.all(
         pendingUids.map(async (uid) => {
@@ -573,31 +758,24 @@ export default function AdminTutorsPage() {
     );
   }
 
-  async function handleDeleteTutor(uid: string, name: string) {
-    if (
-      !window.confirm(
-        `Remove ${name} as a tutor? This will remove their tutor role but not their user account.`
-      )
-    )
-      return;
+  function handleArchiveToggled(uid: string, archived: boolean) {
+    setRows((prev) => prev.map((r) => (r.uid === uid ? { ...r, archived } : r)));
+  }
 
-    setDeletingUid(uid);
-    try {
-      await deleteDoc(doc(db, "roles", uid));
-      setRows((prev) => prev.filter((r) => r.uid !== uid));
-      if (editingUid === uid) setEditingUid(null);
-    } catch (e) {
-      console.error(e);
-      setActionError("Failed to remove tutor role. Check console.");
-    } finally {
-      setDeletingUid(null);
-    }
+  function handlePermanentlyDeleted(uid: string) {
+    setRows((prev) => prev.filter((r) => r.uid !== uid));
+    setEditingUid(null);
   }
 
   const sortedRows = useMemo(
-    () => [...rows].sort((a, b) => a.name.localeCompare(b.name)),
+    () => [...rows].filter((r) => !r.archived).sort((a, b) => a.name.localeCompare(b.name)),
     [rows]
   );
+  const archivedRows = useMemo(
+    () => [...rows].filter((r) => r.archived).sort((a, b) => a.name.localeCompare(b.name)),
+    [rows]
+  );
+  const [showArchived, setShowArchived] = useState(false);
   const sortedPendingRows = useMemo(
     () =>
       [...pendingRows].sort((a, b) => {
@@ -918,23 +1096,16 @@ export default function AdminTutorsPage() {
                       </Link>
                     </td>
                     <td className="px-4 py-4">
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setEditingUid(editingUid === t.uid ? null : t.uid)}
-                          className="inline-flex items-center justify-center rounded-xl border border-[color:var(--ring)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--brand)] transition hover:bg-[#d6e5e3]/40"
-                        >
-                          {editingUid === t.uid ? "Close" : "Edit"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteTutor(t.uid, t.hasName ? t.name : t.email || t.uid)}
-                          disabled={deletingUid === t.uid}
-                          className="inline-flex items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-60"
-                        >
-                          {deletingUid === t.uid ? "…" : "Delete"}
-                        </button>
-                      </div>
+                      {/* Item 3: removal (archive/permanent-delete) is only
+                          available once the row is opened for editing, never
+                          as a quick list action. */}
+                      <button
+                        type="button"
+                        onClick={() => setEditingUid(editingUid === t.uid ? null : t.uid)}
+                        className="inline-flex items-center justify-center rounded-xl border border-[color:var(--ring)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--brand)] transition hover:bg-[#d6e5e3]/40"
+                      >
+                        {editingUid === t.uid ? "Close" : "Edit"}
+                      </button>
                     </td>
                   </tr>
 
@@ -946,6 +1117,8 @@ export default function AdminTutorsPage() {
                           tutor={t}
                           onSave={handleEditSave}
                           onCancel={() => setEditingUid(null)}
+                          onArchiveToggled={handleArchiveToggled}
+                          onPermanentlyDeleted={handlePermanentlyDeleted}
                         />
                       </td>
                     </tr>
@@ -954,6 +1127,53 @@ export default function AdminTutorsPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Item 3: Archived/Past Tutors — kept separate from the active
+          directory; retains all assignment/session/history records. */}
+      {archivedRows.length > 0 && (
+        <div className="rounded-3xl border border-[color:var(--ring)] bg-[color:var(--card)] shadow-sm">
+          <button
+            type="button"
+            onClick={() => setShowArchived((v) => !v)}
+            className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold text-[color:var(--ink)]"
+          >
+            <span>Archived / Past Tutors ({archivedRows.length})</span>
+            <span className="text-xs text-[color:var(--muted)]">{showArchived ? "Hide" : "Show"}</span>
+          </button>
+          {showArchived && (
+            <div className="border-t border-[color:var(--ring)] divide-y divide-[color:var(--ring)]">
+              {archivedRows.map((t) => (
+                <div key={t.uid} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+                  <div>
+                    <span className="text-sm font-semibold text-[color:var(--ink)]">
+                      {t.hasName ? t.name : t.email || t.uid}
+                    </span>
+                    <span className="ml-2 text-xs text-[color:var(--muted)]">{t.studentCount} assigned (history retained)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditingUid(editingUid === t.uid ? null : t.uid)}
+                    className="rounded-xl border border-[color:var(--ring)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--brand)] hover:bg-[#d6e5e3]/40"
+                  >
+                    {editingUid === t.uid ? "Close" : "Open"}
+                  </button>
+                  {editingUid === t.uid && (
+                    <div className="w-full">
+                      <EditPanel
+                        tutor={t}
+                        onSave={handleEditSave}
+                        onCancel={() => setEditingUid(null)}
+                        onArchiveToggled={handleArchiveToggled}
+                        onPermanentlyDeleted={handlePermanentlyDeleted}
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -10,13 +10,16 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
   query,
   serverTimestamp,
   Timestamp,
   updateDoc,
   where,
+  writeBatch,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
+import { formatPlanLabel } from "@/lib/studyroom/billing";
 
 type ClientDoc = {
   parentName?: string;
@@ -33,6 +36,7 @@ type ClientDoc = {
   activePlanId?: string | null;
   adminNotes?: string | null;
   createdAt?: Timestamp;
+  status?: string;
 };
 
 type StudentDoc = {
@@ -49,6 +53,7 @@ type StudentDoc = {
   challenges?: string | null;
   package?: string | null;
   tutorConfirmedAt?: Timestamp | null;
+  status?: string;
 };
 
 type SessionDoc = {
@@ -68,6 +73,14 @@ type PlanDoc = {
   type?: string;
   status?: string;
   studentId?: string | null;
+  finalPriceCents?: number | null;
+  standardPriceCents?: number | null;
+  discountType?: "percent" | "fixed" | null;
+  discountValue?: number | null;
+};
+
+type EntitlementDoc = {
+  remainingSessions?: number;
 };
 
 type UserDoc = {
@@ -108,6 +121,7 @@ export default function ClientDetailPage() {
   const [students, setStudents] = useState<StudentDoc[]>([]);
   const [sessions, setSessions] = useState<SessionDoc[]>([]);
   const [plans, setPlans] = useState<PlanDoc[]>([]);
+  const [entitlements, setEntitlements] = useState<Record<string, EntitlementDoc>>({});
   const [tutorProfile, setTutorProfile] = useState<UserDoc | null>(null);
 
   const [adminNotes, setAdminNotes] = useState("");
@@ -120,6 +134,23 @@ export default function ClientDetailPage() {
     addressLine1: "", suburb: "", postcode: "",
   });
   const [savingParent, setSavingParent] = useState(false);
+
+  // Add / Link child (final pre-release addition, item 2) —
+  // "Add new child" navigates to add-existing with this family preselected;
+  // "Link existing student" merges an already-enrolled student (from a
+  // duplicate family record) into this one via the transactional server
+  // route, which is the only thing that touches sessions/invoices/plans.
+  const [reloadKey, setReloadKey] = useState(0);
+  const [showAddLinkMenu, setShowAddLinkMenu] = useState(false);
+  const [showLinkPanel, setShowLinkPanel] = useState(false);
+  const [linkCandidatesLoading, setLinkCandidatesLoading] = useState(false);
+  const [linkSearchTerm, setLinkSearchTerm] = useState("");
+  const [linkCandidates, setLinkCandidates] = useState<
+    Array<{ id: string; studentName: string; clientId: string; parentName: string; parentEmail: string; likely: boolean }>
+  >([]);
+  const [selectedLinkCandidateId, setSelectedLinkCandidateId] = useState<string | null>(null);
+  const [linking, setLinking] = useState(false);
+  const [linkMsg, setLinkMsg] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -165,6 +196,17 @@ export default function ClientDetailPage() {
         }));
         setPlans(planDocs);
 
+        // Entitlement balances for each active, non-casual plan (per student,
+        // not one family-wide value — Release 1B, Stage 6).
+        const activePrepaidPlans = planDocs.filter((p) => p.status === "active" && p.type !== "casual");
+        const entitlementEntries = await Promise.all(
+          activePrepaidPlans.map(async (p) => {
+            const snap = await getDoc(doc(db, "entitlements", p.id));
+            return [p.id, snap.exists() ? (snap.data() as EntitlementDoc) : {}] as const;
+          })
+        );
+        setEntitlements(Object.fromEntries(entitlementEntries));
+
         // Assigned tutor profile
         const tutorId = asString(clientData.assignedTutorId);
         if (tutorId) {
@@ -176,7 +218,7 @@ export default function ClientDetailPage() {
       }
     }
     load();
-  }, [clientId]);
+  }, [clientId, reloadKey]);
 
   async function saveParentInfo() {
     setSavingParent(true);
@@ -224,9 +266,54 @@ export default function ClientDetailPage() {
     }
   }
 
-  async function deleteClient() {
+  // Removal lifecycle (Release 1B, Stage 6d): "End family" is the normal
+  // action — it cascades to every one of this family's students so they
+  // disappear from their tutors' active lists immediately, without deleting
+  // anything. The old "Delete client" only ever removed the client doc,
+  // leaving students dangling (still "active"-looking to their tutor) —
+  // exactly the traced root cause of students outliving a removed family.
+  async function endFamily() {
     const confirmed = window.confirm(
-      `Delete client record for "${client?.parentName || clientId}"? This only removes the client document — students and sessions are not deleted.`
+      `End "${client?.parentName || clientId}" as a family? All ${students.length} student(s) will be marked ended and disappear from their tutors' active lists. Session, billing, and package history is kept.`
+    );
+    if (!confirmed) return;
+
+    setDeleting(true);
+    try {
+      const batch = writeBatch(db);
+      batch.update(doc(db, "clients", clientId), { status: "ended", endedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+      // Only cascade to students not already independently ended — this
+      // preserves each such student's TRUE original endedAt (rather than
+      // overwriting it with the family's archive time), which is also what
+      // lets a future Restore tell "ended because the family was archived"
+      // apart from "was already ended before that" (final pre-release fix).
+      for (const s of students) {
+        if (s.status !== "ended") {
+          batch.update(doc(db, "students", s.id), { status: "ended", endedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+        }
+      }
+      await batch.commit();
+      setClient((prev) => (prev ? { ...prev, status: "ended" } : prev));
+    } catch (e) {
+      console.error(e);
+      alert("Failed to end family. Check console.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function deleteClient() {
+    // Guardrail: refuse if there's any real session or package history across
+    // any of this family's students — permanent delete is only for genuine
+    // mistakes/test records; a real family should be ended, not deleted.
+    if (sessions.length > 0 || plans.length > 0) {
+      alert(
+        `This family has ${sessions.length} session(s) and ${plans.length} package record(s) — it cannot be permanently deleted. Use "End family" instead.`
+      );
+      return;
+    }
+    const confirmed = window.confirm(
+      `Permanently delete client record for "${client?.parentName || clientId}"? This only removes the client document — students are not deleted (end them separately first).`
     );
     if (!confirmed) return;
 
@@ -240,6 +327,116 @@ export default function ClientDetailPage() {
       setDeleting(false);
     }
   }
+
+  // Link existing student — surfaces likely matches (normalised parent
+  // email against OTHER client records) first, but always requires explicit
+  // admin confirmation before anything is moved. Never auto-merges.
+  async function loadLinkCandidates() {
+    setLinkCandidatesLoading(true);
+    setLinkMsg(null);
+    try {
+      const normalizedEmail = (client?.parentEmail || "").trim().toLowerCase();
+      const likelyClientIds = new Set<string>();
+      if (normalizedEmail) {
+        const likelyClientsSnap = await getDocs(
+          query(collection(db, "clients"), where("parentEmail", "==", normalizedEmail))
+        );
+        likelyClientsSnap.docs.forEach((d) => {
+          if (d.id !== clientId) likelyClientIds.add(d.id);
+        });
+      }
+
+      const [allClientsSnap, allStudentsSnap] = await Promise.all([
+        getDocs(query(collection(db, "clients"), limit(300))),
+        getDocs(query(collection(db, "students"), limit(500))),
+      ]);
+      const clientsById = new Map<string, { parentName: string; parentEmail: string }>();
+      allClientsSnap.docs.forEach((d) => {
+        const data = d.data() as { parentName?: string; parentEmail?: string };
+        clientsById.set(d.id, { parentName: data.parentName || "Parent", parentEmail: data.parentEmail || "" });
+      });
+
+      const candidates = allStudentsSnap.docs
+        .filter((d) => (d.data() as { clientId?: string }).clientId !== clientId)
+        .map((d) => {
+          const data = d.data() as { studentName?: string; clientId?: string };
+          const cid = String(data.clientId ?? "");
+          const c = clientsById.get(cid);
+          return {
+            id: d.id,
+            studentName: data.studentName || "Student",
+            clientId: cid,
+            parentName: c?.parentName || "Unknown family",
+            parentEmail: c?.parentEmail || "",
+            likely: likelyClientIds.has(cid),
+          };
+        })
+        .sort((a, b) => (a.likely === b.likely ? 0 : a.likely ? -1 : 1));
+
+      setLinkCandidates(candidates);
+    } catch (e) {
+      console.error(e);
+      setLinkMsg("Failed to load students. Check console.");
+    } finally {
+      setLinkCandidatesLoading(false);
+    }
+  }
+
+  async function confirmLinkStudent() {
+    if (!selectedLinkCandidateId) return;
+    const candidate = linkCandidates.find((c) => c.id === selectedLinkCandidateId);
+    if (!candidate) return;
+
+    const confirmed = window.confirm(
+      `Move ${candidate.studentName} from ${candidate.parentName} → ${client?.parentName || "this family"}?\n\nTutor assignment, package/plan, entitlement, sessions, invoices, and inquiry history are all preserved.`
+    );
+    if (!confirmed) return;
+
+    setLinking(true);
+    setLinkMsg(null);
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error("Not signed in.");
+      const idToken = await user.getIdToken();
+      const res = await fetch("/api/students/link-to-family", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ studentId: selectedLinkCandidateId, destinationClientId: clientId }),
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        movedCounts?: { sessions: number; invoices: number; plans: number; leads: number };
+        oldFamilyArchived?: boolean;
+      };
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error || "Failed to link student.");
+      }
+      const counts = json.movedCounts;
+      setLinkMsg(
+        `${candidate.studentName} moved successfully` +
+          (counts ? ` (${counts.sessions} session(s), ${counts.invoices} invoice(s), ${counts.plans} plan(s) preserved)` : "") +
+          (json.oldFamilyArchived ? ". The old family had no students left and was archived." : ".")
+      );
+      setSelectedLinkCandidateId(null);
+      setShowLinkPanel(false);
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      setLinkMsg(e instanceof Error ? e.message : "Failed to link student.");
+    } finally {
+      setLinking(false);
+    }
+  }
+
+  const filteredLinkCandidates = linkCandidates.filter((c) => {
+    if (!linkSearchTerm.trim()) return true;
+    const term = linkSearchTerm.trim().toLowerCase();
+    return (
+      c.studentName.toLowerCase().includes(term) ||
+      c.parentName.toLowerCase().includes(term) ||
+      c.parentEmail.toLowerCase().includes(term)
+    );
+  });
 
   if (loading) {
     return (
@@ -290,7 +487,11 @@ export default function ClientDetailPage() {
       return bTime - aTime;
     });
 
-  const activePlan = plans.find((p) => p.status === "active");
+  // Multi-student-family correction: a family can have more than one active
+  // plan (one per student) — a single arbitrary "the active plan" pick would
+  // silently hide a sibling's package. The per-student list below already
+  // shows each student's own plan correctly; this is just a count.
+  const activePlanCount = plans.filter((p) => p.status === "active").length;
 
   return (
     <div className="app-bg min-h-[100svh]">
@@ -408,15 +609,130 @@ export default function ClientDetailPage() {
 
         {/* Students */}
         <section className="rounded-3xl border border-[color:var(--ring)] bg-[color:var(--card)] p-6 shadow-sm">
-          <h2 className="mb-4 text-base font-semibold text-[color:var(--ink)]">
-            Students ({students.length})
-          </h2>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-base font-semibold text-[color:var(--ink)]">
+              Students ({students.length})
+            </h2>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowAddLinkMenu((v) => !v)}
+                className="inline-flex items-center justify-center rounded-xl border border-[color:var(--ring)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--brand)] transition hover:bg-[#d6e5e3]/40"
+              >
+                Add / Link child ▾
+              </button>
+              {showAddLinkMenu && (
+                <div className="absolute right-0 z-10 mt-1 w-56 rounded-xl border border-[color:var(--ring)] bg-white p-1.5 shadow-lg">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddLinkMenu(false);
+                      router.push(`/hub/admin/students/add-existing?clientId=${clientId}`);
+                    }}
+                    className="block w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-[color:var(--ink)] hover:bg-[#f4f7f9]"
+                  >
+                    Add new child
+                    <span className="block font-normal text-[color:var(--muted)]">Enrol a new sibling under this family</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddLinkMenu(false);
+                      setShowLinkPanel(true);
+                      setLinkMsg(null);
+                      if (linkCandidates.length === 0) void loadLinkCandidates();
+                    }}
+                    className="block w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-[color:var(--ink)] hover:bg-[#f4f7f9]"
+                  >
+                    Link existing student
+                    <span className="block font-normal text-[color:var(--muted)]">Move a student from a duplicate family record</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {showLinkPanel && (
+            <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-sm font-semibold text-amber-900">Link existing student into this family</p>
+                <button
+                  type="button"
+                  onClick={() => { setShowLinkPanel(false); setSelectedLinkCandidateId(null); }}
+                  className="text-xs font-semibold text-amber-800 hover:underline"
+                >
+                  Close
+                </button>
+              </div>
+              <p className="mb-3 text-xs text-amber-800">
+                Preserves tutor, package/plan, entitlement, sessions, invoices, and inquiry history. Likely matches
+                (same parent email) are shown first — nothing is moved until you confirm.
+              </p>
+              <input
+                value={linkSearchTerm}
+                onChange={(e) => setLinkSearchTerm(e.target.value)}
+                placeholder="Search by student or parent name/email…"
+                className="mb-3 w-full rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm"
+              />
+              {linkCandidatesLoading ? (
+                <p className="text-sm text-amber-800">Loading students…</p>
+              ) : (
+                <div className="max-h-64 overflow-y-auto rounded-lg border border-amber-200 bg-white">
+                  {filteredLinkCandidates.length === 0 ? (
+                    <p className="p-3 text-sm text-[color:var(--muted)]">No matching students found.</p>
+                  ) : (
+                    filteredLinkCandidates.slice(0, 50).map((c) => (
+                      <label
+                        key={c.id}
+                        className={`flex cursor-pointer items-center justify-between gap-2 border-t border-amber-100 px-3 py-2 text-sm first:border-t-0 ${
+                          selectedLinkCandidateId === c.id ? "bg-amber-100" : "hover:bg-amber-50/60"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name="linkCandidate"
+                            checked={selectedLinkCandidateId === c.id}
+                            onChange={() => setSelectedLinkCandidateId(c.id)}
+                          />
+                          <span>
+                            <span className="font-semibold text-[color:var(--ink)]">{c.studentName}</span>
+                            <span className="text-[color:var(--muted)]"> — {c.parentName}{c.parentEmail ? ` (${c.parentEmail})` : ""}</span>
+                          </span>
+                        </span>
+                        {c.likely && (
+                          <span className="shrink-0 rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-bold text-amber-900">
+                            Likely match
+                          </span>
+                        )}
+                      </label>
+                    ))
+                  )}
+                </div>
+              )}
+              <div className="mt-3 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={confirmLinkStudent}
+                  disabled={!selectedLinkCandidateId || linking}
+                  className="rounded-xl bg-amber-700 px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                >
+                  {linking ? "Moving…" : "Move into this family"}
+                </button>
+                {linkMsg && <span className="text-xs font-medium text-amber-900">{linkMsg}</span>}
+              </div>
+            </div>
+          )}
+
           {students.length === 0 ? (
             <p className="text-sm text-[color:var(--muted)]">No students linked to this client.</p>
           ) : (
             <div className="space-y-4">
               {students.map((s) => {
-                const plan = plans.find((p) => p.studentId === s.id);
+                // Multi-student-family correction: each student's OWN active
+                // plan, never an arbitrary family-wide pick.
+                const plan = plans.find((p) => p.studentId === s.id && p.status === "active");
+                const entitlement = plan ? entitlements[plan.id] : undefined;
                 return (
                   <div
                     key={s.id}
@@ -426,6 +742,16 @@ export default function ClientDetailPage() {
                       <span className="font-semibold text-[color:var(--ink)]">
                         {s.studentName || "Student"}
                         {s.yearLevel ? ` · ${s.yearLevel}` : ""}
+                        {s.status === "paused" && (
+                          <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+                            Paused
+                          </span>
+                        )}
+                        {s.status === "ended" && (
+                          <span className="ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-rose-800">
+                            Ended
+                          </span>
+                        )}
                       </span>
                       <Link
                         href={`/hub/admin/students/${s.id}`}
@@ -442,7 +768,20 @@ export default function ClientDetailPage() {
                         value={s.mode === "in-home" ? "In-home" : s.mode === "online" ? "Online" : null}
                       />
                       <InfoRow label="Suburb" value={s.suburb} />
-                      <InfoRow label="Package" value={plan?.type ?? s.package} />
+                      <InfoRow label="Tutor" value={s.assignedTutorEmail} />
+                      <InfoRow
+                        label="Payment arrangement"
+                        value={plan ? formatPlanLabel(plan.type as Parameters<typeof formatPlanLabel>[0]) : (s.package ?? "Casual")}
+                      />
+                      {plan && plan.type !== "casual" && (
+                        <InfoRow label="Sessions remaining" value={String(entitlement?.remainingSessions ?? "—")} />
+                      )}
+                      {plan?.finalPriceCents != null && (
+                        <InfoRow
+                          label="Agreed price"
+                          value={`$${(plan.finalPriceCents / 100).toFixed(2)}${plan.discountType ? " (discounted)" : ""}`}
+                        />
+                      )}
                       <InfoRow label="Goals" value={s.goals} />
                       <InfoRow label="Challenges" value={s.challenges} />
                       <InfoRow
@@ -484,9 +823,10 @@ export default function ClientDetailPage() {
               </div>
             </div>
           </div>
-          {activePlan && (
+          {activePlanCount > 0 && (
             <div className="mt-3 text-sm text-[color:var(--muted)]">
-              Active plan: <span className="font-semibold text-[color:var(--ink)]">{activePlan.type}</span>
+              <span className="font-semibold text-[color:var(--ink)]">{activePlanCount}</span> active package
+              {activePlanCount === 1 ? "" : "s"} — see each student above for their own package.
             </div>
           )}
         </section>
@@ -535,20 +875,33 @@ export default function ClientDetailPage() {
           </div>
         </section>
 
-        {/* Danger zone */}
+        {/* Removal lifecycle — Release 1B, Stage 6d */}
         <section className="rounded-3xl border border-red-200 bg-red-50 p-6">
-          <h2 className="mb-2 text-base font-semibold text-red-700">Danger zone</h2>
+          <h2 className="mb-2 text-base font-semibold text-red-700">Remove family</h2>
           <p className="mb-4 text-sm text-red-600">
-            Deletes the client record only. Students and sessions are not removed.
+            Status: <strong>{client?.status === "ended" ? "Ended" : "Active"}</strong>. Ending a family cascades to
+            every student so they disappear from their tutors&apos; active lists — nothing is deleted. Permanent delete
+            stays available for a genuine mistake/test record only, and is refused while any real session or
+            package history exists.
           </p>
-          <button
-            type="button"
-            onClick={deleteClient}
-            disabled={deleting}
-            className="rounded-xl border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-60"
-          >
-            {deleting ? "Deleting…" : "Delete client"}
-          </button>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={endFamily}
+              disabled={deleting || client?.status === "ended"}
+              className="rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-50 disabled:opacity-60"
+            >
+              {client?.status === "ended" ? "Family already ended" : deleting ? "Working…" : "End family"}
+            </button>
+            <button
+              type="button"
+              onClick={deleteClient}
+              disabled={deleting}
+              className="rounded-xl border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-60"
+            >
+              {deleting ? "Deleting…" : "Permanently delete client record"}
+            </button>
+          </div>
         </section>
       </div>
     </div>

@@ -115,7 +115,11 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if isSelf(uid) || isTutorOrAdmin();
       allow create: if isSelf(uid);
-      allow update: if isSelf(uid);
+      // Admin can correct a tutor's identity/profile fields (name, bio, etc.)
+      // from the admin Tutors UI — this was previously self-only, which
+      // silently broke the existing admin "Edit" panel's client-side
+      // updateDoc call (pre-publish identity audit).
+      allow update: if isSelf(uid) || isAdmin();
       allow delete: if false;
 
       match /pomoState/{docId} {
@@ -212,8 +216,21 @@ service cloud.firestore {
 
     // ---------------- CLIENTS ----------------
     match /clients/{clientId} {
-      allow read, write: if isAdmin();
+      allow read: if isAdmin();
       allow read: if isTutor() && isAssignedTutorDoc(resource.data);
+
+      // Multi-student-family correction (pre-Stage-6): a client can have
+      // several students, each with their own assigned tutor. The single
+      // assignedTutorId/assignedTutorEmail check above can only ever
+      // represent ONE tutor at a time, so assignedTutorIds — a derived array
+      // of every tutor currently assigned to at least one student under this
+      // client, recomputed from the students collection whenever a tutor
+      // assignment changes (see clientTutorSync.ts) — is checked here too.
+      // This never grants access to an unrelated family; it only widens who
+      // among this family's own assigned tutors can read it.
+      allow read: if isTutor()
+        && resource.data.assignedTutorIds is list
+        && request.auth.uid in resource.data.assignedTutorIds;
 
       // Parent can read their own client record by email match
       allow read: if isAuthed()
@@ -221,13 +238,54 @@ service cloud.firestore {
         && authedEmail() != null
         && resource.data.parentEmail == authedEmail();
 
+      // Fixed post-Release-1B (pre-publish audit): `diff()` is only valid
+      // against an existing document, so a `write` rule built around
+      // `request.resource.data.diff(resource.data)` can never evaluate true
+      // for a create (resource.data doesn't exist yet) — combined with the
+      // "allow create, delete: if false" line this used to sit next to, it
+      // meant admin could no longer create a client document from the
+      // browser at all, even though that's exactly what Add Existing
+      // Student and lead-to-client conversion both still do
+      // (add-existing/page.tsx's addDoc, leads/[leadId]/page.tsx's
+      // batch.set on a brand-new clientId). Split into a `create` and an
+      // `update` rule so each is checked in the request type it actually
+      // applies to.
+
+      // Admin can create a brand-new client doc directly from the browser.
+      // A freshly created client can never legitimately already carry a
+      // discountPreference* value (those are only ever set afterwards, via
+      // the dedicated server route below) — checking the created document's
+      // own keys is the create-time equivalent of the update-time diff()
+      // check just below.
+      allow create: if isAdmin()
+        && !request.resource.data.keys().hasAny([
+          "discountPreferenceType", "discountPreferenceValue",
+          "discountPreferenceReason", "discountPreferenceUpdatedBy", "discountPreferenceUpdatedAt"
+        ]);
+
+      // Admin keeps client-side write for ordinary fields on an existing
+      // client (parent info, admin notes, End/Restore family, tutor-mirror
+      // sync), but the five discountPreference* fields are carved out of
+      // that grant — they can only be changed via
+      // POST /api/clients/[clientId]/discount-preference (Admin SDK).
+      allow update: if isAdmin()
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          "discountPreferenceType", "discountPreferenceValue",
+          "discountPreferenceReason", "discountPreferenceUpdatedBy", "discountPreferenceUpdatedAt"
+        ]);
+
       allow update: if isTutor()
         && isAssignedTutorDoc(resource.data)
         && request.resource.data.diff(resource.data).changedKeys().hasOnly([
           "tutorNotes","updatedAt"
         ]);
 
-      allow create, delete: if false;
+      // Guarded permanent delete (admin/clients/[clientId]/page.tsx) is a
+      // real, client-side, intentionally-rare action — the app already
+      // refuses to call it for any client with real session/package
+      // history. The rule only needs to gate it to admin, same as every
+      // other guarded permanent-delete in this file (students, leads).
+      allow delete: if isAdmin();
     }
 
     // ---------------- STUDENTS ----------------
@@ -340,27 +398,62 @@ service cloud.firestore {
 
     // ---------------- INVOICES ----------------
     // NOTE: Invoice writes (create/update) are performed server-side via the
-    // Firebase Admin SDK (invoiceEngine.ts, serverBilling.ts) which bypasses
-    // these client security rules entirely. The `allow create, update, delete: if false`
-    // rule below only applies to client SDK calls — Admin SDK is always permitted.
+    // Firebase Admin SDK (serverBilling.ts, push-invoice-to-xero, etc.) which
+    // bypasses these client security rules entirely. Release 1B, Stage 4:
+    // removed the previous "allow read, write: if isAdmin()" blanket bypass —
+    // admin keeps client-side read only; every write (including admin's) must
+    // go through an authenticated Admin-SDK server route.
     match /invoices/{invoiceId} {
-      allow read, write: if isAdmin();
+      allow read: if isAdmin();
       allow read: if isTutor() && tutorOwnerMatch(resource.data);
-      allow create, update, delete: if false;
+      allow write: if false;
     }
 
     // ---------------- PLANS ----------------
+    // Release 1B, Stage 4: same tightening as invoices — admin reads
+    // client-side, but plan creation/renewal/discount/correction all go
+    // through /api/plans/* server routes (Admin SDK), never a client write.
     match /plans/{planId} {
-      allow read, write: if isAdmin();
+      allow read: if isAdmin();
       allow read: if isTutor() && tutorOwnerMatch(resource.data);
-      allow create, update, delete: if false;
+      allow write: if false;
     }
 
     // ---------------- ENTITLEMENTS ----------------
+    // Release 1B, Stage 4: same tightening — entitlement balances (including
+    // admin corrections) are only ever written via server routes.
     match /entitlements/{entitlementId} {
-      allow read, write: if isAdmin();
+      allow read: if isAdmin();
       allow read: if isTutor() && tutorOwnerMatch(resource.data);
-      allow create, update, delete: if false;
+      allow write: if false;
+
+      // Release 1B addendum: audit trail for admin balance corrections.
+      // Admin can read it (to show correction history); it is only ever
+      // written by POST /api/entitlements/[planId]/correct (Admin SDK).
+      match /corrections/{correctionId} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
+    }
+
+    // ---------------- SETTINGS (Release 1B) ----------------
+    // Canonical current package pricing (settings/packagePricing) and any
+    // future admin-config docs under this collection. Admin reads client-side
+    // to display current values; the only way to change one is the matching
+    // authenticated Admin-SDK server route (e.g. POST /api/settings/package-pricing).
+    match /settings/{docId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // ---------------- ACTION DISMISSALS (Release 1B, final polish) ----------------
+    // Persisted dismissal of an Operations Centre "Action Required" row. This is
+    // operational preference, not commercial/history data — dismissing never
+    // deletes or alters the underlying session/invoice/package/student/lead doc,
+    // it only hides a derived row from the normal view. Narrow, explicit
+    // exception to the "derived-only, no persisted task state" MVP rule.
+    match /actionDismissals/{key} {
+      allow read, write: if isAdmin();
     }
 
     // ---------------- PACKAGES ----------------

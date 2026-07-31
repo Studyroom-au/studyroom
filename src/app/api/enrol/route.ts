@@ -4,7 +4,7 @@ import * as admin from "firebase-admin";
 import nodemailer from "nodemailer";
 import { getAdminApp } from "@/lib/firebaseAdmin";
 
-type PackagePlan = "CASUAL" | "PACKAGE_5" | "PACKAGE_12";
+type PackagePlan = "CASUAL" | "PACKAGE_5" | "PACKAGE_10";
 
 type EnrolPayload = {
   parentName: string;
@@ -52,12 +52,12 @@ function cleanStrArray(v: unknown, maxItems: number, maxLen: number) {
 }
 
 function isPackagePlan(v: unknown): v is PackagePlan {
-  return v === "CASUAL" || v === "PACKAGE_5" || v === "PACKAGE_12";
+  return v === "CASUAL" || v === "PACKAGE_5" || v === "PACKAGE_10";
 }
 
 function packageLabel(p: PackagePlan) {
   if (p === "PACKAGE_5") return "5-session package";
-  if (p === "PACKAGE_12") return "12-session package";
+  if (p === "PACKAGE_10") return "10-session package";
   return "Casual sessions";
 }
 

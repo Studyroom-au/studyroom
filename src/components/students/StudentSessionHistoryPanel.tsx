@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { auth, db } from "@/lib/firebase";
 import { uploadSessionWorkSample } from "@/lib/storage";
+import { WORK_SAMPLES_UPLOAD_ENABLED } from "@/lib/studyroom/featureFlags";
 import {
   addDoc,
   collection,
@@ -510,13 +511,15 @@ export default function StudentSessionHistoryPanel({
             />
           </div>
 
-          <div style={{ marginBottom: 12 }}>
-            <FilePicker
-              id="add-log-files"
-              files={addFiles}
-              onChange={setAddFiles}
-            />
-          </div>
+          {WORK_SAMPLES_UPLOAD_ENABLED && (
+            <div style={{ marginBottom: 12 }}>
+              <FilePicker
+                id="add-log-files"
+                files={addFiles}
+                onChange={setAddFiles}
+              />
+            </div>
+          )}
 
           <div style={{ display: "flex", gap: 8 }}>
             <button
@@ -636,13 +639,15 @@ export default function StudentSessionHistoryPanel({
                           )}
 
                           {/* Add more files */}
-                          <div style={{ marginBottom: 10 }}>
-                            <FilePicker
-                              id={`edit-log-files-${log.id}`}
-                              files={editFiles}
-                              onChange={setEditFiles}
-                            />
-                          </div>
+                          {WORK_SAMPLES_UPLOAD_ENABLED && (
+                            <div style={{ marginBottom: 10 }}>
+                              <FilePicker
+                                id={`edit-log-files-${log.id}`}
+                                files={editFiles}
+                                onChange={setEditFiles}
+                              />
+                            </div>
+                          )}
 
                           <div style={{ display: "flex", gap: 6 }}>
                             <button

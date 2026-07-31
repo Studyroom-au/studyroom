@@ -20,6 +20,7 @@ import {
   normalizeSessionStatus,
   toLegacySessionStatus,
   type BillingOutcome,
+  type CasualPricingTier,
   type InvoiceStatus,
   type StudyroomEntitlementRecord,
   type StudyroomMode,
@@ -83,6 +84,12 @@ type ApplySessionActionArgs = {
   action: SessionAction;
   user: DecodedIdToken;
   role: Role;
+  // Optional Firestore-backed casual pricing tiers (see casualPricing.ts),
+  // read ONCE by the caller before this transaction starts. Left undefined,
+  // getSessionRateCents falls back to its own hardcoded default — this
+  // function never reads Firestore for pricing itself, so passing (or not
+  // passing) this never changes this transaction's read/write ordering.
+  casualPricingTiers?: readonly CasualPricingTier[];
 };
 
 function assertPermitted(role: Role, userId: string, sessionTutorId?: string) {
@@ -144,10 +151,11 @@ async function hydratePlanContext(input: {
   const student = (studentSnap?.data() ?? {}) as RawStudent;
   const client = (clientSnap?.data() ?? {}) as RawClient;
 
-  const planId =
-    String(input.session.planId ?? "") ||
-    String(student.activePlanId ?? "") ||
-    String(client.activePlanId ?? "");
+  // Multi-student-family correction: never fall back to client.activePlanId —
+  // a family can have several students with different plans, and the client
+  // doc's activePlanId reflects whichever student's plan was last
+  // created/renewed, not necessarily this session's own student.
+  const planId = String(input.session.planId ?? "") || String(student.activePlanId ?? "");
   const planRef = planId ? db.collection("plans").doc(planId) : db.collection("plans").doc();
   const planSnap = planId ? await input.tx.get(planRef) : null;
   const entitlementRef = db.collection("entitlements").doc(planRef.id);
@@ -281,6 +289,18 @@ export async function applySessionAction(args: ApplySessionActionArgs) {
 
     const session = (sessionSnap.data() ?? {}) as RawSession;
     assertPermitted(args.role, args.user.uid, session.tutorId);
+
+    // Release 1B: a session cannot be marked complete without at least one
+    // non-empty tutor note already recorded. Read before any write in this
+    // transaction (Firestore transactions require all reads first) — checked
+    // here, before hydratePlanContext, which is the first thing that writes.
+    if (args.action === "complete") {
+      const logsSnap = await tx.get(sessionRef.collection("logs"));
+      const hasNote = logsSnap.docs.some((d) => String(d.data()?.text ?? "").trim().length > 0);
+      if (!hasNote) {
+        throw new Error("A session note is required before this session can be marked complete.");
+      }
+    }
 
     const now = new Date();
     const startAt = asDate(session.startAt);
@@ -430,7 +450,7 @@ export async function applySessionAction(args: ApplySessionActionArgs) {
           `Cannot price casual session ${args.sessionId}: unsupported mode "${mode}".`
         );
       }
-      const amountCents = getSessionRateCents(mode, bookedAt);
+      const amountCents = getSessionRateCents(mode, bookedAt, args.casualPricingTiers);
       const issuedAt = now;
       const dueAt = new Date(issuedAt.getTime() + CASUAL_INVOICE_DUE_DAYS * 86400000);
       const studentName = String((ctx.student as { studentName?: string | null }).studentName ?? "Student");

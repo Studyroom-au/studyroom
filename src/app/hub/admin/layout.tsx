@@ -47,6 +47,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const isAddStudent = pathname === "/hub/admin/students/add-existing";
   const isBlog = pathname.startsWith("/hub/admin/blog");
   const isPackages = pathname.startsWith("/hub/admin/packages");
+  const isInvoices = pathname.startsWith("/hub/admin/invoices");
+  const isSettings = pathname.startsWith("/hub/admin/settings");
 
   async function handleSignOut() {
     try {
@@ -66,6 +68,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { label: "Add Student", active: isAddStudent, path: "/hub/admin/students/add-existing" },
     { label: "Blog", active: isBlog, path: "/hub/admin/blog" },
     { label: "Package Alerts", active: isPackages, path: "/hub/admin/packages" },
+    { label: "Invoices", active: isInvoices, path: "/hub/admin/invoices" },
+    { label: "Settings", active: isSettings, path: "/hub/admin/settings" },
   ];
 
   if (!mounted) return <div className="min-h-screen" />;

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { auth, db } from "@/lib/firebase";
 import { uploadSessionWorkSample } from "@/lib/storage";
 import { isAdminEmail } from "@/lib/adminEmails";
+import { WORK_SAMPLES_UPLOAD_ENABLED } from "@/lib/studyroom/featureFlags";
 import {
   addDoc,
   collection,
@@ -22,7 +23,14 @@ type Attachment = {
   size: number;
 };
 
-export default function SessionLogEditor({ sessionId }: { sessionId: string }) {
+export default function SessionLogEditor({
+  sessionId,
+  onSaved,
+}: {
+  sessionId: string;
+  /** Called after a note is successfully saved — lets the parent panel know a note now exists (e.g. to unlock "Mark completed"). */
+  onSaved?: () => void;
+}) {
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [saving, setSaving] = useState(false);
@@ -30,6 +38,15 @@ export default function SessionLogEditor({ sessionId }: { sessionId: string }) {
 
   async function save() {
     setMsg(null);
+
+    if (!text.trim()) {
+      // A completed session requires a non-empty note server-side (Release
+      // 1B) — refuse here too, so a tutor never sees "Saved" for a note that
+      // wouldn't actually satisfy that requirement.
+      setMsg("Please add some note text before saving.");
+      return;
+    }
+
     setSaving(true);
 
     try {
@@ -82,6 +99,7 @@ export default function SessionLogEditor({ sessionId }: { sessionId: string }) {
       setText("");
       setFiles([]);
       setMsg("Saved ✅");
+      onSaved?.();
     } catch (e: unknown) {
       console.error(e);
       setMsg(e instanceof Error ? e.message : "Save failed");
@@ -94,7 +112,7 @@ export default function SessionLogEditor({ sessionId }: { sessionId: string }) {
     <div className="rounded-3xl border border-[color:var(--ring)] bg-white p-4 shadow-sm">
       <h3 className="text-lg font-semibold text-[color:var(--ink)]">Session log</h3>
       <p className="mt-1 text-sm text-[color:var(--muted)]">
-        Notes + upload work samples (photos/PDFs).
+        {WORK_SAMPLES_UPLOAD_ENABLED ? "Notes + upload work samples (photos/PDFs)." : "Session notes."}
       </p>
 
       {/* ✅ a11y label */}
@@ -115,30 +133,32 @@ export default function SessionLogEditor({ sessionId }: { sessionId: string }) {
         aria-label="Session notes"
       />
 
-      <div className="mt-3 flex flex-col gap-2">
-        {/* ✅ a11y label */}
-        <label
-          htmlFor="sessionLogFiles"
-          className="block text-xs font-semibold text-[color:var(--muted)]"
-        >
-          Upload work samples
-        </label>
-        <input
-          id="sessionLogFiles"
-          name="sessionLogFiles"
-          type="file"
-          multiple
-          accept="image/*,application/pdf"
-          title="Upload work samples"
-          aria-label="Upload work samples"
-          onChange={(e) => setFiles(Array.from(e.target.files || []))}
-          className="text-sm"
-        />
+      {WORK_SAMPLES_UPLOAD_ENABLED && (
+        <div className="mt-3 flex flex-col gap-2">
+          {/* ✅ a11y label */}
+          <label
+            htmlFor="sessionLogFiles"
+            className="block text-xs font-semibold text-[color:var(--muted)]"
+          >
+            Upload work samples
+          </label>
+          <input
+            id="sessionLogFiles"
+            name="sessionLogFiles"
+            type="file"
+            multiple
+            accept="image/*,application/pdf"
+            title="Upload work samples"
+            aria-label="Upload work samples"
+            onChange={(e) => setFiles(Array.from(e.target.files || []))}
+            className="text-sm"
+          />
 
-        {!!files.length && (
-          <div className="text-xs text-[color:var(--muted)]">{files.length} file(s) selected</div>
-        )}
-      </div>
+          {!!files.length && (
+            <div className="text-xs text-[color:var(--muted)]">{files.length} file(s) selected</div>
+          )}
+        </div>
+      )}
 
       <div className="mt-4 flex items-center gap-2">
         <button

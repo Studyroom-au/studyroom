@@ -113,7 +113,12 @@ export function isValidSubjectYearCombination(
 
   if (isAciqSubject) return isAciqYear;
   if (isQcaaSubject) return isQcaaYear;
-  return false;
+
+  // A custom/"Other" subject (tutor-entered, not one of the fixed QLD
+  // curriculum lists above) isn't tied to a specific curriculum tier, so it
+  // may pair with any recognised year level — reusing ALL_YEAR_LEVELS rather
+  // than inventing a separate year-level rule for custom subjects.
+  return (ALL_YEAR_LEVELS as readonly string[]).includes(year);
 }
 
 // ─── Support capabilities (GENERAL_SUPPORT) ───────────────────────────────────
@@ -267,11 +272,19 @@ export const CAPACITY_STALENESS_DAYS = 14;
 // When ALL of these are present and non-empty, the future /api/tutors/profile
 // route transitions profileStatus from "draft" to "pending_review" and sets
 // onboardingCompletedAt if not already set.
+//
+// wwccNumber/wwccState/wwccExpiresAt together ARE the required child-safety
+// credential (QLD "Blue Card" = WWCC — there is no separate requirement).
+// driverLicenceNumber/driverLicenceExpiry are deliberately NOT in this list —
+// an online-only tutor must still be able to reach a complete/Active profile
+// without a driver licence.
 
 export const TUTOR_PROFILE_REQUIRED_FIELDS = [
   "phone",
   "abn",
   "wwccNumber",
+  "wwccState",
+  "wwccExpiresAt",
   "availabilityDays",
   "modes",
   "capabilities",
@@ -312,8 +325,8 @@ export const TUTOR_PROFILE_EDITABLE_FIELDS = [
   "wwccNumber",
   "wwccState",
   "wwccExpiresAt",
-  "blueCardNumber",
-  "blueCardExpiresAt",
+  "driverLicenceNumber",
+  "driverLicenceExpiry",
 ] as const;
 
 export type TutorProfileEditableField =

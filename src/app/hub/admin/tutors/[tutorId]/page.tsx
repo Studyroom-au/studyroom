@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import type { TutorProfileStatus } from "@/types/tutor";
+import TutorProfileForm from "@/components/tutor/TutorProfileForm";
 
 // ─── Existing types ───────────────────────────────────────────────────────────
 
@@ -14,6 +15,7 @@ type StudentDoc = {
   studentName?: string;
   yearLevel?: string;
   school?: string | null;
+  suburb?: string | null;
   clientId?: string | null;
   assignedTutorId?: string | null;
   assignedTutorEmail?: string | null;
@@ -28,6 +30,7 @@ type StudentRow = {
   studentName: string;
   yearLevel: string;
   school: string | null;
+  suburb: string | null;
   parentName: string;
   parentEmail: string;
   parentPhone: string | null;
@@ -194,17 +197,27 @@ function TutorProfileSummaryCard({
           )}
         </PSection>
 
-        {/* Compliance */}
+        {/* Compliance — WWCC/Blue Card (number + state + expiry) is the
+            required child-safety credential; driver licence is optional
+            operational info, admin-viewable only (never shown to parents/
+            students/public tutor profiles/matching cards/other tutors). */}
         <PSection title="Compliance">
           <PRow label="ABN" value={str(profile.abn)} />
-          <PRow label="WWCC Number" value={str(profile.wwccNumber)} />
-          <PRow label="WWCC State" value={str(profile.wwccState)} />
-          <PRow label="WWCC Expiry" value={formatDate(profile.wwccExpiresAt)} />
-          {!!profile.blueCardNumber && (
+          <PRow label="WWCC / Blue Card Number" value={str(profile.wwccNumber)} />
+          <PRow label="WWCC / Blue Card State" value={str(profile.wwccState)} />
+          <PRow label="WWCC / Blue Card Expiry" value={formatDate(profile.wwccExpiresAt)} />
+          {!!profile.driverLicenceNumber && (
             <>
-              <PRow label="Blue Card" value={str(profile.blueCardNumber)} />
-              <PRow label="Blue Card Expiry" value={formatDate(profile.blueCardExpiresAt)} />
+              <PRow label="Driver Licence Number" value={str(profile.driverLicenceNumber)} />
+              <PRow label="Driver Licence Expiry" value={formatDate(profile.driverLicenceExpiry)} />
             </>
+          )}
+          {(!!profile.blueCardNumber || !!profile.blueCardExpiresAt) && (
+            <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Legacy data (pre-compliance-correction), unconfirmed — not a driver licence:{" "}
+              {!!profile.blueCardNumber && <>Blue Card number on file. </>}
+              {!!profile.blueCardExpiresAt && <>Blue Card expiry: {formatDate(profile.blueCardExpiresAt)}.</>}
+            </div>
           )}
         </PSection>
 
@@ -421,6 +434,10 @@ export default function AdminTutorDetailPage() {
   const [email, setEmail] = useState("");
   const [rows, setRows] = useState<StudentRow[]>([]);
   const [tutorProfile, setTutorProfile] = useState<ProfileData | null>(null);
+  // Full-profile admin editing (final pre-release addition) — the opened
+  // tutor detail page is the authoritative full-profile editing surface;
+  // the quick-edit panel on /hub/admin/tutors remains for simple corrections.
+  const [editingProfile, setEditingProfile] = useState(false);
 
   // Review panel state
   const [profileStatus, setProfileStatus] = useState<TutorProfileStatus>("draft");
@@ -465,7 +482,36 @@ export default function AdminTutorDetailPage() {
         }));
         const fallbackEmailFromStudents =
           students.find((s) => !!s.data.assignedTutorEmail)?.data.assignedTutorEmail || "";
-        setEmail(user.email || fallbackEmailFromStudents);
+        const resolvedEmail = user.email || fallbackEmailFromStudents;
+        setEmail(resolvedEmail);
+
+        // Canonical identity resolution (final pre-release fix): if
+        // users/{uid} never got a name/email written (a tutor who signed up
+        // before that existed), resolve it on demand from Firebase Auth +
+        // their original invite/request lead — the same admin-only route
+        // the tutors list page uses — instead of permanently showing "No
+        // name set"/"No email on file".
+        const hasKnownName = !!(user.name || user.displayName);
+        if (!hasKnownName || !resolvedEmail) {
+          try {
+            const idToken = await auth.currentUser?.getIdToken();
+            const res = await fetch("/api/admin/tutors/resolve-identity", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+              body: JSON.stringify({ uids: [tutorId] }),
+            });
+            const data = (await res.json().catch(() => null)) as
+              | { identities?: Record<string, { name: string; email: string }> }
+              | null;
+            const resolved = data?.identities?.[tutorId];
+            if (resolved) {
+              if (resolved.name && !hasKnownName) setName(resolved.name);
+              if (resolved.email && !resolvedEmail) setEmail(resolved.email);
+            }
+          } catch (e) {
+            console.warn("[admin tutor detail] identity resolution failed:", e);
+          }
+        }
 
         const clientIds = Array.from(
           new Set(students.map((s) => s.data.clientId).filter((x): x is string => !!x))
@@ -485,6 +531,7 @@ export default function AdminTutorDetailPage() {
             studentName: s.data.studentName || "Student",
             yearLevel: s.data.yearLevel || "",
             school: s.data.school || null,
+            suburb: s.data.suburb || null,
             parentName: (c as ClientDoc).parentName || "",
             parentEmail: (c as ClientDoc).parentEmail || "",
             parentPhone: (c as ClientDoc).parentPhone || null,
@@ -537,6 +584,19 @@ export default function AdminTutorDetailPage() {
     return [...rows].sort((a, b) => a.studentName.localeCompare(b.studentName));
   }, [rows]);
 
+  async function reloadAfterProfileSave(identity: { name: string; email: string }) {
+    if (identity.name) setName(identity.name);
+    if (identity.email) setEmail(identity.email);
+    const profileSnap = await getDoc(doc(db, "tutors", tutorId));
+    if (profileSnap.exists()) {
+      const pdata = profileSnap.data() as ProfileData;
+      setTutorProfile(pdata);
+      const raw = typeof pdata.profileStatus === "string" ? pdata.profileStatus : "draft";
+      const validStatuses: TutorProfileStatus[] = ["draft", "pending_review", "active", "paused"];
+      setProfileStatus(validStatuses.includes(raw as TutorProfileStatus) ? (raw as TutorProfileStatus) : "draft");
+    }
+  }
+
   return (
     <div className="mx-auto max-w-6xl space-y-4">
       <header className="space-y-2">
@@ -549,13 +609,35 @@ export default function AdminTutorDetailPage() {
         <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
           Studyroom · Admin · Tutor
         </p>
-        <h1 className="text-3xl font-semibold text-[color:var(--ink)]">{name}</h1>
-        <p className="text-sm text-[color:var(--muted)]">{email || "No email on file"}</p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-3xl font-semibold text-[color:var(--ink)]">{name}</h1>
+            <p className="text-sm text-[color:var(--muted)]">{email || "No email on file"}</p>
+          </div>
+          {!loading && (
+            <button
+              type="button"
+              onClick={() => setEditingProfile((v) => !v)}
+              className="inline-flex items-center justify-center rounded-xl border border-[color:var(--ring)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--brand)] transition hover:bg-[#d6e5e3]/40"
+            >
+              {editingProfile ? "Close editor" : "Edit profile"}
+            </button>
+          )}
+        </div>
       </header>
 
       {loading ? (
         <div className="rounded-3xl border border-[color:var(--ring)] bg-[color:var(--card)] p-6 text-sm text-[color:var(--muted)]">
           Loading…
+        </div>
+      ) : editingProfile ? (
+        /* Authoritative full-profile admin editing surface (final pre-release
+           addition) — the exact same canonical Tutor Profile V2 schema,
+           validation, and /api/tutors/profile route the tutor's own "My
+           Profile" page uses. Admin and tutor edit the same data; there is
+           no separate admin copy of any of these fields. */
+        <div className="rounded-3xl border border-[color:var(--ring)] bg-[color:var(--card)] p-6 shadow-sm">
+          <TutorProfileForm mode="admin" tutorUid={tutorId} onSaved={reloadAfterProfileSave} />
         </div>
       ) : (
         <>
@@ -586,6 +668,7 @@ export default function AdminTutorDetailPage() {
                     <th className="px-4 py-3">Student</th>
                     <th className="px-4 py-3">Year</th>
                     <th className="px-4 py-3">School</th>
+                    <th className="px-4 py-3">Suburb</th>
                     <th className="px-4 py-3">Parent</th>
                     <th className="px-4 py-3">Parent email</th>
                     <th className="px-4 py-3">Parent phone</th>
@@ -603,6 +686,9 @@ export default function AdminTutorDetailPage() {
                       </td>
                       <td className="px-4 py-4 text-sm text-[color:var(--muted)]">
                         {s.school || "—"}
+                      </td>
+                      <td className="px-4 py-4 text-sm text-[color:var(--muted)]">
+                        {s.suburb || "—"}
                       </td>
                       <td className="px-4 py-4 text-sm text-[color:var(--muted)]">
                         {s.parentName || "—"}

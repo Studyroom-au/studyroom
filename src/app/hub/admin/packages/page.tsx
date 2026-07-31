@@ -33,7 +33,8 @@ type RawStudent = {
 
 function packageTypeLabel(type: string): string {
   if (type === "package_5") return "5-session package";
-  if (type === "package_12") return "12-session package";
+  if (type === "package_10") return "10-session package";
+  if (type === "package_12") return "12-session package (legacy)";
   return "Package";
 }
 
@@ -71,7 +72,8 @@ export default function AdminPackagesPage() {
               if (planSnap.exists()) {
                 const plan = planSnap.data() as RawPlan;
                 packageType = packageTypeLabel(plan.type ?? "");
-                if ((plan.type ?? "") === "package_12") totalSessions = 12;
+                if ((plan.type ?? "") === "package_12") totalSessions = 12; // legacy, read-only
+                else if ((plan.type ?? "") === "package_10") totalSessions = 10;
                 else if ((plan.type ?? "") === "package_5") totalSessions = 5;
               }
             } catch { /* skip */ }

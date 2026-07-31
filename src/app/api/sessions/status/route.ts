@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb, isAdminEmail } from "@/lib/firebaseAdmin";
 import { applySessionAction } from "@/lib/studyroom/serverBilling";
+import { getCasualPricingTiers } from "@/lib/studyroom/casualPricing";
 
 function getBearerToken(req: Request) {
   const h = req.headers.get("authorization") || "";
@@ -42,11 +43,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
 
+    // Read once, outside applySessionAction's transaction — see
+    // casualPricing.ts for why this keeps that transaction's read/write
+    // ordering completely unchanged.
+    const db = getAdminDb();
+    const casualPricingTiers = db ? await getCasualPricingTiers(db) : undefined;
+
     const result = await applySessionAction({
       sessionId,
       action: action as "complete" | "cancel_by_parent" | "cancel_by_tutor" | "no_show" | "apply_grace",
       user,
       role,
+      casualPricingTiers,
     });
 
     const secret = process.env.INTERNAL_API_SECRET;

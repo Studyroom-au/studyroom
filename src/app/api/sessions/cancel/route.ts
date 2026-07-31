@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb, isAdminEmail } from "@/lib/firebaseAdmin";
 import { applySessionAction } from "@/lib/studyroom/serverBilling";
+import { getCasualPricingTiers } from "@/lib/studyroom/casualPricing";
 
 function getBearerToken(req: Request) {
   const h = req.headers.get("authorization") || "";
@@ -44,11 +45,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing sessionId" }, { status: 400 });
     }
 
+    const db = getAdminDb();
+    const casualPricingTiers = db ? await getCasualPricingTiers(db) : undefined;
+
     const result = await applySessionAction({
       sessionId,
       action: reason === "STUDYROOM" ? "cancel_by_tutor" : "cancel_by_parent",
       user,
       role,
+      casualPricingTiers,
     });
 
     return NextResponse.json(result);

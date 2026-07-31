@@ -4,13 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { collection, doc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
-import {
-  getDefaultSessionRateCents,
-  getEntitlementSeed,
-  inferTermId,
-  normalizeMode,
-  normalizePlanType,
-} from "@/lib/studyroom/billing";
+import { normalizePlanType } from "@/lib/studyroom/billing";
 
 type ClientDoc = {
   parentName?: string;
@@ -59,7 +53,7 @@ type Props = {
 };
 
 type Mode = "online" | "in-home";
-type PackagePlan = "CASUAL" | "PACKAGE_5" | "PACKAGE_12";
+type PackagePlan = "CASUAL" | "PACKAGE_5" | "PACKAGE_10";
 
 type FormState = {
   parentName: string;
@@ -98,7 +92,7 @@ const EMPTY_FORM: FormState = {
 };
 
 function normalizePackage(v?: string | null): PackagePlan {
-  if (v === "PACKAGE_5" || v === "PACKAGE_12") return v;
+  if (v === "PACKAGE_5" || v === "PACKAGE_10") return v;
   return "CASUAL";
 }
 
@@ -220,16 +214,25 @@ export default function StudentOnboardingPanel({
       const availabilityBlocks = parseCsvLines(form.availabilityText);
       const activeClient = clients.find((c) => c.id === clientId);
       const existingStudent = studentId && studentId !== "__create__" ? students.find((s) => s.id === studentId) : null;
+      const tutorId = existingStudent?.data.assignedTutorId ?? activeClient?.data.assignedTutorId ?? null;
+      const tutorEmail = existingStudent?.data.assignedTutorEmail ?? activeClient?.data.assignedTutorEmail ?? null;
+
+      // Package/entitlement creation is server-validated (POST /api/plans/create,
+      // Release 1B Stage 4/5) — firestore.rules blocks writing plans/entitlements
+      // directly from the client. Profile fields (client/student docs) are
+      // unaffected and still written directly below.
+      // Multi-student-family correction: only the TARGET student's own
+      // activePlanId means "this student already has a plan" — never fall
+      // back to the client's, which may actually belong to a sibling (e.g.
+      // when studentId === "__create__", a brand-new sibling under an
+      // existing client must get its own plan, not be blocked by one).
+      const existingPlanId = existingStudent?.data.activePlanId ?? "";
+      const normalizedPlan = normalizePlanType(form.package);
 
       const batch = writeBatch(db);
       const clientRef = doc(db, "clients", clientId);
       const targetStudentRef =
         studentId === "__create__" || !studentId ? doc(collection(db, "students")) : doc(db, "students", studentId);
-      const existingPlanId = existingStudent?.data.activePlanId ?? activeClient?.data.activePlanId ?? "";
-      const planRef = existingPlanId ? doc(db, "plans", existingPlanId) : doc(collection(db, "plans"));
-      const normalizedPlan = normalizePlanType(form.package);
-      const normalizedMode = normalizeMode(form.mode);
-      const termId = inferTermId(new Date());
 
       batch.set(
         clientRef,
@@ -242,7 +245,6 @@ export default function StudentOnboardingPanel({
           addressLine1: form.addressLine1.trim() || null,
           postcode: form.postcode.trim() || null,
           package: form.package,
-          activePlanId: planRef.id,
           onboardingStatus: "COMPLETE",
           onboardingCompletedAt: serverTimestamp(),
           onboardingCompletedBy: auth.currentUser?.uid ?? null,
@@ -265,13 +267,9 @@ export default function StudentOnboardingPanel({
         goals: form.goals.trim() || null,
         challenges: form.challenges.trim() || null,
         package: form.package,
-        activePlanId: planRef.id,
-        assignedTutorId:
-          existingStudent?.data.assignedTutorId ?? activeClient?.data.assignedTutorId ?? null,
-        assignedTutorName:
-          existingStudent?.data.assignedTutorName ?? activeClient?.data.assignedTutorName ?? null,
-        assignedTutorEmail:
-          existingStudent?.data.assignedTutorEmail ?? activeClient?.data.assignedTutorEmail ?? null,
+        assignedTutorId: tutorId,
+        assignedTutorName: existingStudent?.data.assignedTutorName ?? activeClient?.data.assignedTutorName ?? null,
+        assignedTutorEmail: tutorEmail,
         updatedAt: serverTimestamp(),
         status: "active",
       };
@@ -280,51 +278,37 @@ export default function StudentOnboardingPanel({
       }
       batch.set(targetStudentRef, studentPatch, { merge: true });
 
-      batch.set(
-        planRef,
-        {
-          clientId,
-          studentId: targetStudentRef.id,
-          tutorId:
-            existingStudent?.data.assignedTutorId ?? activeClient?.data.assignedTutorId ?? null,
-          tutorEmail:
-            existingStudent?.data.assignedTutorEmail ?? activeClient?.data.assignedTutorEmail ?? null,
-          type: normalizedPlan,
-          mode: normalizedMode,
-          status: "active",
-          termId,
-          sessionRateCents: getDefaultSessionRateCents(normalizedMode),
-          graceUsedThisTerm: false,
-          graceTermId: termId,
-          updatedAt: serverTimestamp(),
-          createdAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+      await batch.commit();
 
-      const entitlementSeed = getEntitlementSeed(normalizedPlan);
-      if (entitlementSeed.remainingSessions > 0 || entitlementSeed.bonusRemaining > 0) {
-        batch.set(
-          doc(db, "entitlements", planRef.id),
-          {
-            planId: planRef.id,
-            tutorId:
-              existingStudent?.data.assignedTutorId ?? activeClient?.data.assignedTutorId ?? null,
-            tutorEmail:
-              existingStudent?.data.assignedTutorEmail ?? activeClient?.data.assignedTutorEmail ?? null,
-            remainingSessions: entitlementSeed.remainingSessions,
-            bonusRemaining: entitlementSeed.bonusRemaining,
-            termId,
-            bonusNonTransferable: true,
-            updatedAt: serverTimestamp(),
-            createdAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
+      let planMsg = "";
+      if (existingPlanId) {
+        // A plan already exists for this client/student — leave it untouched
+        // rather than silently mutating an immutable commercial snapshot.
+        // Package changes for an already-onboarded family go through Renew.
+        planMsg = " This client already has an active package — it was left unchanged. Use Renew on their profile to change it.";
+      } else {
+        const idToken = await auth.currentUser?.getIdToken();
+        if (idToken) {
+          const res = await fetch("/api/plans/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+            body: JSON.stringify({
+              clientId,
+              studentId: targetStudentRef.id,
+              tutorId,
+              tutorEmail,
+              mode: form.mode,
+              planType: normalizedPlan,
+            }),
+          });
+          const planResult = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            throw new Error(planResult?.error || "Profile saved, but the package could not be set up.");
+          }
+        }
       }
 
-      await batch.commit();
-      setMsg("Onboarding saved and profile updated.");
+      setMsg(`Onboarding saved and profile updated.${planMsg}`);
       onDone?.();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Failed to save onboarding.");
@@ -480,7 +464,7 @@ export default function StudentOnboardingPanel({
             >
               <option value="CASUAL">Casual</option>
               <option value="PACKAGE_5">5-session package</option>
-              <option value="PACKAGE_12">12-session package</option>
+              <option value="PACKAGE_10">10-session package</option>
             </select>
           </label>
 

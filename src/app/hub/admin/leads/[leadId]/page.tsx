@@ -10,6 +10,8 @@ import {
   collection,
   getDocs,
   query,
+  where,
+  limit,
   writeBatch,
   updateDoc,
   deleteDoc,
@@ -18,6 +20,7 @@ import {
   DocumentData,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { computeAssignedTutorIds, shouldMirrorSingularTutor } from "@/lib/studyroom/clientTutorSync";
 
 // ─── Lead types ───────────────────────────────────────────────────────────────
 
@@ -57,6 +60,7 @@ type Lead = {
   studentId?: string | null;
 
   createdAt?: Timestamp;
+  archived?: boolean;
 };
 
 // ─── Tutor Profile V2 types ───────────────────────────────────────────────────
@@ -599,6 +603,13 @@ export default function LeadDetailPage() {
   const [savingDetails, setSavingDetails] = useState(false);
   const [tutorRequests, setTutorRequests] = useState<TutorRequest[]>([]);
 
+  // Inquiry <-> enrolment matching (Release 1B, final polish item 7) — only
+  // relevant the first time this lead is converted (tutor assigned, no
+  // clientId yet). Reuses the exact same parent-email match + confirm
+  // pattern already used in add-existing/page.tsx. Never silently merges.
+  const [familyMatch, setFamilyMatch] = useState<{ clientId: string; parentName: string; studentNames: string[] } | null>(null);
+  const [familyMatchDecided, setFamilyMatchDecided] = useState(false);
+
   useEffect(() => {
     async function loadRequests() {
       try {
@@ -688,6 +699,7 @@ export default function LeadDetailPage() {
           studentId: asNullableString(data.studentId),
 
           createdAt: data.createdAt instanceof Timestamp ? data.createdAt : undefined,
+          archived: data.archived === true,
         };
 
         setLead(loaded);
@@ -849,8 +861,47 @@ export default function LeadDetailPage() {
     }
   }
 
+  // Leads lifecycle correction (Release 1B, Stage 9): archive is the normal
+  // removal action — it preserves the full lead/contact/matching record
+  // (families sometimes return) and only hides it from the active workspace.
+  // Permanent delete stays available for a genuine accidental/duplicate/test
+  // lead only, and is refused once real matching activity (tutor requests)
+  // or an actual conversion (clientId/studentId set) exists.
+  async function archiveLead() {
+    if (!lead) return;
+    setDeleting(true);
+    try {
+      await updateDoc(doc(db, "leads", leadId), { archived: true, archivedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+      setLead((prev) => (prev ? { ...prev, archived: true } : prev));
+    } catch (e) {
+      console.error(e);
+      alert("Failed to archive lead. Check console.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function restoreLead() {
+    if (!lead) return;
+    setDeleting(true);
+    try {
+      await updateDoc(doc(db, "leads", leadId), { archived: false, archivedAt: null, updatedAt: serverTimestamp() });
+      setLead((prev) => (prev ? { ...prev, archived: false } : prev));
+    } catch (e) {
+      console.error(e);
+      alert("Failed to restore lead. Check console.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   async function deleteLead() {
-    if (!window.confirm("Delete this lead? This cannot be undone.")) return;
+    if (!lead) return;
+    if (tutorRequests.length > 0 || lead.clientId || lead.studentId) {
+      alert("This lead has real matching activity or was converted to a client — it cannot be permanently deleted. Archive it instead.");
+      return;
+    }
+    if (!window.confirm("Permanently delete this lead? This is only for a genuine mistake, duplicate, or test record and cannot be undone.")) return;
     setDeleting(true);
     try {
       await deleteDoc(doc(db, "leads", leadId));
@@ -864,6 +915,27 @@ export default function LeadDetailPage() {
 
   async function saveChanges() {
     if (!lead) return;
+
+    // Inquiry <-> enrolment matching — only when this lead is being converted
+    // for the first time (assigning a tutor, no clientId yet) and the admin
+    // hasn't already made a Link/Keep-separate decision this session.
+    if (assignedTutorId && !lead.clientId && !familyMatchDecided) {
+      const normalizedEmail = lead.parentEmail.trim().toLowerCase();
+      const q = query(collection(db, "clients"), where("parentEmail", "==", normalizedEmail), limit(1));
+      const hit = await getDocs(q);
+      if (!hit.empty) {
+        const foundClientId = hit.docs[0].id;
+        const foundClient = hit.docs[0].data() as { parentName?: string };
+        const siblingsSnap = await getDocs(query(collection(db, "students"), where("clientId", "==", foundClientId)));
+        setFamilyMatch({
+          clientId: foundClientId,
+          parentName: foundClient.parentName || "This parent",
+          studentNames: siblingsSnap.docs.map((d) => String((d.data() as { studentName?: string }).studentName ?? "Student")),
+        });
+        return; // Wait for admin's Link / Keep separate decision before saving.
+      }
+    }
+
     setSaving(true);
     try {
       const leadRef = doc(db, "leads", leadId);
@@ -883,31 +955,61 @@ export default function LeadDetailPage() {
         patch.assignedTutorEmail = tutorEmail;
 
         if (status === "new" || status === "contacted") patch.status = "assigned";
+        // Linking into an existing family is a completed conversion — mark it
+        // "converted" so it leaves the active Leads workspace immediately,
+        // same as any other converted lead (final polish item 7).
+        if (familyMatch) patch.status = "converted";
 
-        const clientId = leadId;
+        // Inquiry <-> enrolment matching: if the admin chose "Link to existing
+        // family", reuse that clientId instead of leadId, and never overwrite
+        // the existing family's own details — only ensure the newly assigned
+        // tutor gains read access (assignedTutorIds), guarded the same way
+        // the multi-tutor-family correction already guards every other
+        // tutor-assignment write in this codebase.
+        const clientId = familyMatch ? familyMatch.clientId : leadId;
         const studentId = leadId;
 
         const clientRef = doc(db, "clients", clientId);
         const studentRef = doc(db, "students", studentId);
 
-        batch.set(
-          clientRef,
-          {
-            parentName: lead.parentName,
-            parentEmail: lead.parentEmail,
-            parentPhone: lead.parentPhone ?? null,
-
+        if (familyMatch) {
+          const existingClientSnap = await getDoc(clientRef);
+          const existingClientData = existingClientSnap.exists()
+            ? (existingClientSnap.data() as { assignedTutorId?: string | null })
+            : {};
+          const siblingsSnap = await getDocs(query(collection(db, "students"), where("clientId", "==", clientId)));
+          const tutorIds = computeAssignedTutorIds([
+            ...siblingsSnap.docs.map((d) => (d.data() as { assignedTutorId?: string | null }).assignedTutorId),
             assignedTutorId,
-            assignedTutorName: tutorName,
-            assignedTutorEmail: tutorEmail,
+          ]);
+          const clientPatch: Record<string, unknown> = { assignedTutorIds: tutorIds, updatedAt: serverTimestamp() };
+          if (shouldMirrorSingularTutor(existingClientData.assignedTutorId, assignedTutorId)) {
+            clientPatch.assignedTutorId = assignedTutorId;
+            clientPatch.assignedTutorName = tutorName;
+            clientPatch.assignedTutorEmail = tutorEmail;
+          }
+          batch.set(clientRef, clientPatch, { merge: true });
+        } else {
+          batch.set(
+            clientRef,
+            {
+              parentName: lead.parentName,
+              parentEmail: lead.parentEmail,
+              parentPhone: lead.parentPhone ?? null,
 
-            status: "active",
+              assignedTutorId,
+              assignedTutorName: tutorName,
+              assignedTutorEmail: tutorEmail,
+              assignedTutorIds: computeAssignedTutorIds([assignedTutorId]),
 
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
+              status: "active",
+
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          );
+        }
 
         batch.set(
           studentRef,
@@ -958,6 +1060,8 @@ export default function LeadDetailPage() {
       batch.update(leadRef, patch);
       await batch.commit();
 
+      setFamilyMatch(null);
+      setFamilyMatchDecided(false);
       router.refresh();
       alert("Saved. Student record created/updated.");
     } catch (e) {
@@ -1384,6 +1488,42 @@ export default function LeadDetailPage() {
             )}
           </div>
 
+          {/* Inquiry <-> enrolment match confirmation (final polish item 7) —
+              never silently merges; admin must explicitly choose. */}
+          {familyMatch && !familyMatchDecided && (
+            <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4">
+              <p className="text-sm font-semibold text-amber-900">Possible existing inquiry found</p>
+              <p className="mt-1 text-sm text-amber-800">
+                A client already exists for this parent email: <strong>{familyMatch.parentName}</strong>
+                {familyMatch.studentNames.length > 0 && (
+                  <> — existing student{familyMatch.studentNames.length === 1 ? "" : "s"}: {familyMatch.studentNames.join(", ")}</>
+                )}
+                . Is <strong>{lead.studentName}</strong> part of this same family, or a separate new family?
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFamilyMatchDecided(true)}
+                  className="rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-800"
+                >
+                  Link to existing family
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setFamilyMatch(null); setFamilyMatchDecided(true); }}
+                  className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+                >
+                  Keep separate
+                </button>
+              </div>
+            </div>
+          )}
+          {familyMatchDecided && (
+            <p className="mt-3 text-xs font-semibold text-teal-700">
+              {familyMatch ? "Will link to the existing family." : "Will create a separate new family."} Click Save changes to continue.
+            </p>
+          )}
+
           {/* Action buttons */}
           <div className="mt-5 flex flex-wrap gap-3">
             <button
@@ -1398,13 +1538,33 @@ export default function LeadDetailPage() {
               {saving ? "Saving…" : "Save changes"}
             </button>
 
+            {lead?.archived ? (
+              <button
+                type="button"
+                onClick={restoreLead}
+                disabled={deleting}
+                className="rounded-xl border border-teal-300 bg-teal-50 px-5 py-2 text-sm font-semibold text-teal-800 transition hover:bg-teal-100 disabled:opacity-60"
+              >
+                {deleting ? "Working…" : "Restore from archive"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={archiveLead}
+                disabled={deleting}
+                className="rounded-xl border border-amber-300 bg-amber-50 px-5 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100 disabled:opacity-60"
+              >
+                {deleting ? "Working…" : "Archive lead"}
+              </button>
+            )}
+
             <button
               type="button"
               onClick={deleteLead}
               disabled={deleting}
               className="rounded-xl border border-rose-200 bg-rose-50 px-5 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-60"
             >
-              {deleting ? "Deleting…" : "Delete lead"}
+              {deleting ? "Deleting…" : "Permanently delete…"}
             </button>
           </div>
         </section>

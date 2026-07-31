@@ -19,8 +19,24 @@ async function clearCollections() {
   const db = getAdminDb();
   for (const name of ["sessions", "students", "clients", "plans", "entitlements", "invoices"]) {
     const snap = await db.collection(name).get();
-    await Promise.all(snap.docs.map((d) => d.ref.delete()));
+    await Promise.all(
+      snap.docs.map(async (d) => {
+        const logsSnap = await d.ref.collection("logs").get();
+        await Promise.all(logsSnap.docs.map((l) => l.ref.delete()));
+        await d.ref.delete();
+      })
+    );
   }
+}
+
+async function addNote(sessionId: string, text = "Covered fractions, went well.") {
+  const db = getAdminDb();
+  await db.collection("sessions").doc(sessionId).collection("logs").add({
+    tutorId: TUTOR_UID,
+    text,
+    attachments: [],
+    createdAt: Timestamp.now(),
+  });
 }
 
 beforeEach(async () => {
@@ -51,6 +67,7 @@ describe("applySessionAction — pricing lock (Release 1A, Stage 3, emulator int
       modality: "IN_HOME",
       status: "scheduled",
     });
+    await addNote("s-reschedule-test");
 
     const result = await applySessionAction({
       sessionId: "s-reschedule-test",
@@ -87,6 +104,7 @@ describe("applySessionAction — pricing lock (Release 1A, Stage 3, emulator int
       modality: "GROUP",
       status: "scheduled",
     });
+    await addNote("s-invalid-mode");
 
     await expect(
       applySessionAction({
@@ -96,5 +114,63 @@ describe("applySessionAction — pricing lock (Release 1A, Stage 3, emulator int
         role: "tutor",
       })
     ).rejects.toThrow(/unsupported mode/i);
+  });
+});
+
+describe("applySessionAction — note-required-to-complete gate (Release 1B)", () => {
+  async function seedScheduledSession(id: string) {
+    const db = getAdminDb();
+    await db.collection("clients").doc(`client-${id}`).set({ parentEmail: `${id}@example.com` });
+    await db.collection("students").doc(`student-${id}`).set({ studentName: "Test Student", clientId: `client-${id}` });
+    await db.collection("sessions").doc(id).set({
+      tutorId: TUTOR_UID,
+      studentId: `student-${id}`,
+      clientId: `client-${id}`,
+      planId: null,
+      startAt: ts("2026-09-15T10:00:00+10:00"),
+      originalStartAt: ts("2026-09-15T10:00:00+10:00"),
+      durationMinutes: 60,
+      mode: "in_home",
+      modality: "IN_HOME",
+      status: "scheduled",
+    });
+  }
+
+  it("rejects completion when zero log entries exist for the session", async () => {
+    await seedScheduledSession("s-no-note");
+
+    await expect(
+      applySessionAction({ sessionId: "s-no-note", action: "complete", user: fakeUser, role: "tutor" })
+    ).rejects.toThrow(/session note is required/i);
+  });
+
+  it("rejects completion when a log entry exists but its text is empty/whitespace-only", async () => {
+    await seedScheduledSession("s-empty-note");
+    await addNote("s-empty-note", "   ");
+
+    await expect(
+      applySessionAction({ sessionId: "s-empty-note", action: "complete", user: fakeUser, role: "tutor" })
+    ).rejects.toThrow(/session note is required/i);
+  });
+
+  it("allows completion once at least one non-empty log entry exists", async () => {
+    await seedScheduledSession("s-has-note");
+    await addNote("s-has-note", "Covered fractions, went well.");
+
+    const result = await applySessionAction({ sessionId: "s-has-note", action: "complete", user: fakeUser, role: "tutor" });
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe("completed");
+  });
+
+  it("does not require a note for non-complete actions (e.g. cancel_by_tutor)", async () => {
+    await seedScheduledSession("s-cancel-no-note");
+
+    const result = await applySessionAction({
+      sessionId: "s-cancel-no-note",
+      action: "cancel_by_tutor",
+      user: fakeUser,
+      role: "tutor",
+    });
+    expect(result.ok).toBe(true);
   });
 });

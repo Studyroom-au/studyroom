@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -17,7 +18,9 @@ import {
   Timestamp,
   DocumentData,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
+import { computeAssignedTutorIds, shouldMirrorSingularTutor } from "@/lib/studyroom/clientTutorSync";
+import { formatPlanLabel } from "@/lib/studyroom/billing";
 
 // ─── Student / client / session types ────────────────────────────────────────
 
@@ -36,12 +39,35 @@ type StudentDoc = {
   suburb?: string | null;
   addressLine1?: string | null;
   postcode?: string | null;
+  activePlanId?: string | null;
+  status?: string;
 };
 
 type ClientDoc = {
   parentName?: string;
   parentEmail?: string;
   parentPhone?: string | null;
+};
+
+type PlanDoc = {
+  id: string;
+  type?: string;
+  status?: string;
+  mode?: string;
+  standardPriceCents?: number | null;
+  discountType?: "percent" | "fixed" | null;
+  discountValue?: number | null;
+  discountAmountCents?: number | null;
+  finalPriceCents?: number | null;
+  discountReason?: string | null;
+  renewedFromPlanId?: string | null;
+  carryOverSessions?: number;
+  createdAt?: Timestamp;
+};
+
+type EntitlementDoc = {
+  remainingSessions?: number;
+  bonusRemaining?: number;
 };
 
 type SessionDoc = {
@@ -53,9 +79,38 @@ type SessionDoc = {
   notes?: string | null;
 };
 
+// The original lead/inquiry this student was converted from (Release 1B,
+// final polish item 7) — read-only, historical context only. Never used to
+// overwrite anything on the student/client doc; the reverse is also true,
+// editing the student/client record here never touches the original lead.
+type InquiryLeadDoc = {
+  parentName?: string;
+  parentEmail?: string;
+  parentPhone?: string | null;
+  subjects?: string[];
+  mode?: string | null;
+  suburb?: string | null;
+  goals?: string | null;
+  challenges?: string | null;
+  package?: string | null;
+  source?: string;
+  createdAt?: Timestamp;
+};
+
 function fmtDate(ts?: Timestamp) {
   if (!ts) return "";
   return ts.toDate().toLocaleString();
+}
+
+function fmtCents(cents?: number | null) {
+  if (cents == null) return "—";
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+function describeDiscount(p: PlanDoc) {
+  if (!p.discountType) return null;
+  const amount = p.discountType === "percent" ? `${p.discountValue}%` : fmtCents(p.discountValue);
+  return `${amount} off${p.discountReason ? ` (${p.discountReason})` : ""}`;
 }
 
 // ─── Tutor Profile V2 types ───────────────────────────────────────────────────
@@ -473,6 +528,8 @@ export default function AdminStudentDetailPage() {
   const [loading, setLoading] = useState(true);
   const [student, setStudent] = useState<StudentDoc | null>(null);
   const [client, setClient] = useState<ClientDoc | null>(null);
+  const [inquiryLead, setInquiryLead] = useState<InquiryLeadDoc | null>(null);
+  const [inquiryOpen, setInquiryOpen] = useState(false);
   const [sessions, setSessions] = useState<Array<{ id: string; data: SessionDoc }>>([]);
   const [tutorOptions, setTutorOptions] = useState<TutorOption[]>([]);
   const [selectedTutorId, setSelectedTutorId] = useState<string>("");
@@ -486,6 +543,40 @@ export default function AdminStudentDetailPage() {
     postcode: "", addressLine1: "", goals: "", challenges: "",
   });
   const [savingProfile, setSavingProfile] = useState(false);
+
+  // ── Arrangement (Release 1B, Stage 6) ──────────────────────────────────────
+  const [plan, setPlan] = useState<PlanDoc | null>(null);
+  const [entitlement, setEntitlement] = useState<EntitlementDoc | null>(null);
+  const [planHistory, setPlanHistory] = useState<PlanDoc[]>([]);
+  const [arrangementMsg, setArrangementMsg] = useState<string | null>(null);
+  const [arrangementBusy, setArrangementBusy] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showRenewForm, setShowRenewForm] = useState(false);
+  const [showCorrectForm, setShowCorrectForm] = useState(false);
+  const [createForm, setCreateForm] = useState({ planType: "package_5" as "casual" | "package_5" | "package_10", discountType: "" as "" | "percent" | "fixed", discountValue: "", discountReason: "" });
+  const [renewForm, setRenewForm] = useState({ newPlanType: "package_10" as "package_5" | "package_10", carryOverSessions: "0", discountType: "" as "" | "percent" | "fixed", discountValue: "", discountReason: "" });
+  const [correctForm, setCorrectForm] = useState({ delta: "", reason: "" });
+
+  // ── Removal lifecycle (Release 1B, Stage 6d) ───────────────────────────────
+  const [statusBusy, setStatusBusy] = useState(false);
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deletingStudent, setDeletingStudent] = useState(false);
+
+  async function reloadArrangement(activePlanId: string | null | undefined) {
+    if (!activePlanId) {
+      setPlan(null);
+      setEntitlement(null);
+      return;
+    }
+    const [planSnap, entitlementSnap] = await Promise.all([
+      getDoc(doc(db, "plans", activePlanId)),
+      getDoc(doc(db, "entitlements", activePlanId)),
+    ]);
+    setPlan(planSnap.exists() ? ({ id: planSnap.id, ...(planSnap.data() as Omit<PlanDoc, "id">) }) : null);
+    setEntitlement(entitlementSnap.exists() ? (entitlementSnap.data() as EntitlementDoc) : null);
+  }
 
   useEffect(() => {
     async function load() {
@@ -510,6 +601,22 @@ export default function AdminStudentDetailPage() {
         } else {
           setClient(null);
         }
+
+        // Original lead/inquiry this student was converted from, if any
+        // (Release 1B, final polish item 7) — read-only historical context.
+        const leadSnap = await getDocs(
+          query(collection(db, "leads"), where("studentId", "==", studentId))
+        );
+        setInquiryLead(leadSnap.empty ? null : (leadSnap.docs[0].data() as InquiryLeadDoc));
+
+        await reloadArrangement(s.activePlanId);
+        const planHistorySnap = await getDocs(
+          query(collection(db, "plans"), where("studentId", "==", studentId))
+        );
+        const historyRows = planHistorySnap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as Omit<PlanDoc, "id">) }))
+          .sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+        setPlanHistory(historyRows);
 
         const sessionSnap = await getDocs(
           query(collection(db, "sessions"), where("studentId", "==", studentId))
@@ -616,6 +723,258 @@ export default function AdminStudentDetailPage() {
     }
   }
 
+  // ── Arrangement actions (Release 1B, Stage 6/6b) ───────────────────────────
+  // All commercial writes go through the server routes built in Stage 5 —
+  // never a direct client Firestore write to plans/entitlements/invoices.
+
+  function discountValueForApi(discountType: "" | "percent" | "fixed", raw: string): number | null {
+    if (!discountType) return null;
+    if (discountType === "fixed") return Math.round(Number(raw) * 100); // admin enters dollars
+    return Number(raw); // percent entered/sent as-is
+  }
+
+  async function handleCreatePackage() {
+    if (!student || !auth.currentUser) return;
+    setArrangementBusy(true);
+    setArrangementMsg(null);
+    try {
+      const idToken = await auth.currentUser.getIdToken();
+      const res = await fetch("/api/plans/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({
+          clientId: student.clientId,
+          studentId,
+          tutorId: student.assignedTutorId ?? null,
+          tutorEmail: student.assignedTutorEmail ?? null,
+          mode: student.mode ?? "in_home",
+          planType: createForm.planType,
+          discountType: createForm.discountType || null,
+          discountValue: discountValueForApi(createForm.discountType, createForm.discountValue),
+          discountReason: createForm.discountReason || null,
+        }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result?.error || "Failed to create package.");
+      setShowCreateForm(false);
+      setArrangementMsg("Package created.");
+      const freshStudent = await getDoc(doc(db, "students", studentId));
+      const activePlanId = (freshStudent.data() as StudentDoc | undefined)?.activePlanId;
+      await reloadArrangement(activePlanId);
+    } catch (e) {
+      setArrangementMsg(e instanceof Error ? e.message : "Failed to create package.");
+    } finally {
+      setArrangementBusy(false);
+    }
+  }
+
+  async function handleRenew() {
+    if (!plan || !auth.currentUser) return;
+    setArrangementBusy(true);
+    setArrangementMsg(null);
+    try {
+      const idToken = await auth.currentUser.getIdToken();
+      const res = await fetch("/api/plans/renew", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({
+          oldPlanId: plan.id,
+          newPlanType: renewForm.newPlanType,
+          carryOverSessions: Number(renewForm.carryOverSessions) || 0,
+          discountType: renewForm.discountType || null,
+          discountValue: discountValueForApi(renewForm.discountType, renewForm.discountValue),
+          discountReason: renewForm.discountReason || null,
+        }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result?.error || "Failed to renew package.");
+      setShowRenewForm(false);
+      setArrangementMsg("Package renewed.");
+      await reloadArrangement(result.newPlanId);
+      const historySnap = await getDocs(query(collection(db, "plans"), where("studentId", "==", studentId)));
+      setPlanHistory(
+        historySnap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as Omit<PlanDoc, "id">) }))
+          .sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0))
+      );
+    } catch (e) {
+      setArrangementMsg(e instanceof Error ? e.message : "Failed to renew package.");
+    } finally {
+      setArrangementBusy(false);
+    }
+  }
+
+  async function handleCorrectBalance() {
+    if (!plan || !auth.currentUser) return;
+    const delta = Number(correctForm.delta);
+    if (!Number.isFinite(delta) || !Number.isInteger(delta) || delta === 0) {
+      setArrangementMsg("Enter a non-zero whole number for the correction.");
+      return;
+    }
+    if (!correctForm.reason.trim()) {
+      setArrangementMsg("A reason is required for a balance correction.");
+      return;
+    }
+    const resultingBalance = (entitlement?.remainingSessions ?? 0) + delta;
+    const confirmed = confirm(
+      `This will change the remaining balance from ${entitlement?.remainingSessions ?? 0} to ${resultingBalance}. Continue?`
+    );
+    if (!confirmed) return;
+
+    setArrangementBusy(true);
+    setArrangementMsg(null);
+    try {
+      const idToken = await auth.currentUser.getIdToken();
+      const res = await fetch(`/api/entitlements/${plan.id}/correct`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ delta, reason: correctForm.reason.trim() }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result?.error || "Failed to correct balance.");
+      setShowCorrectForm(false);
+      setCorrectForm({ delta: "", reason: "" });
+      setArrangementMsg(`Balance corrected: ${result.previousRemainingSessions} → ${result.newRemainingSessions}.`);
+      await reloadArrangement(plan.id);
+    } catch (e) {
+      setArrangementMsg(e instanceof Error ? e.message : "Failed to correct balance.");
+    } finally {
+      setArrangementBusy(false);
+    }
+  }
+
+  // ── Removal lifecycle (Release 1B, Stage 6d) ───────────────────────────────
+  // Root cause traced: nothing ever set or checked a student's `status` — the
+  // field exists (written "active" at creation) but no tutor-facing list
+  // filtered on it, and the only "remove" action anywhere was deleting the
+  // parent CLIENT doc, which never touched the student doc at all — leaving
+  // assignedTutorId intact and the student looking fully active forever.
+
+  async function handleEndStudent() {
+    if (!student) return;
+    const confirmed = confirm(
+      "End this student? They will disappear from the tutor's active list. Session, billing, and package history is kept — this does not delete anything."
+    );
+    if (!confirmed) return;
+    setStatusBusy(true);
+    setStatusMsg(null);
+    try {
+      await updateDoc(doc(db, "students", studentId), {
+        status: "ended",
+        endedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      setStudent((prev) => (prev ? { ...prev, status: "ended" } : prev));
+      setStatusMsg("Student marked as ended.");
+    } catch (e) {
+      setStatusMsg(e instanceof Error ? e.message : "Failed to update status.");
+    } finally {
+      setStatusBusy(false);
+    }
+  }
+
+  async function handleRestoreStudent() {
+    if (!student) return;
+    setStatusBusy(true);
+    setStatusMsg(null);
+    try {
+      await updateDoc(doc(db, "students", studentId), {
+        status: "active",
+        endedAt: null,
+        updatedAt: serverTimestamp(),
+      });
+      setStudent((prev) => (prev ? { ...prev, status: "active" } : prev));
+      setStatusMsg("Student restored to active.");
+    } catch (e) {
+      setStatusMsg(e instanceof Error ? e.message : "Failed to update status.");
+    } finally {
+      setStatusBusy(false);
+    }
+  }
+
+  // ── Paused status (Release 1B, final polish item 8) ─────────────────────────
+  // Distinct from "ended": a pause is temporary and reversible. Tutor/plan/
+  // balance/pricing history/notes/sessions are all left completely untouched
+  // — pausing never consumes or resets an entitlement, it only changes how
+  // this student appears in tutor-facing active lists. Any future scheduled
+  // sessions are surfaced as a warning, never silently cancelled — the admin
+  // decides what to do with them separately.
+  async function handlePauseStudent() {
+    if (!student) return;
+    const now = Timestamp.now();
+    const upcoming = sessions.filter(
+      (s) => s.data.status === "scheduled" && s.data.startAt && s.data.startAt.toMillis() > now.toMillis()
+    );
+    const warning =
+      upcoming.length > 0
+        ? `This student has ${upcoming.length} upcoming scheduled session${upcoming.length === 1 ? "" : "s"} — pausing will NOT cancel ${upcoming.length === 1 ? "it" : "them"}. You'll need to reschedule or cancel separately if needed. `
+        : "";
+    const confirmed = confirm(
+      `${warning}Pause this student? They'll disappear from the tutor's active list but everything (tutor, package, balance, pricing, notes, session history) stays exactly as-is. You can resume at any time.`
+    );
+    if (!confirmed) return;
+    setStatusBusy(true);
+    setStatusMsg(null);
+    try {
+      await updateDoc(doc(db, "students", studentId), {
+        status: "paused",
+        pausedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      setStudent((prev) => (prev ? { ...prev, status: "paused" } : prev));
+      setStatusMsg("Student paused.");
+    } catch (e) {
+      setStatusMsg(e instanceof Error ? e.message : "Failed to update status.");
+    } finally {
+      setStatusBusy(false);
+    }
+  }
+
+  async function handleResumeStudent() {
+    if (!student) return;
+    setStatusBusy(true);
+    setStatusMsg(null);
+    try {
+      await updateDoc(doc(db, "students", studentId), {
+        status: "active",
+        pausedAt: null,
+        updatedAt: serverTimestamp(),
+      });
+      setStudent((prev) => (prev ? { ...prev, status: "active" } : prev));
+      setStatusMsg("Student resumed to active.");
+    } catch (e) {
+      setStatusMsg(e instanceof Error ? e.message : "Failed to update status.");
+    } finally {
+      setStatusBusy(false);
+    }
+  }
+
+  async function handlePermanentDeleteStudent() {
+    if (!student) return;
+    // Guardrail: refuse if there's any real session, package, or invoice
+    // history — permanent delete is only for genuine mistakes/test records.
+    if (sessions.length > 0 || planHistory.length > 0) {
+      setStatusMsg(
+        "This student has real session/package history and cannot be permanently deleted — use \"End student\" instead."
+      );
+      return;
+    }
+    const expected = (student.studentName || studentId).trim().toLowerCase();
+    if (deleteConfirmText.trim().toLowerCase() !== expected) {
+      setStatusMsg("Type the student's name exactly as shown to confirm permanent deletion.");
+      return;
+    }
+    setDeletingStudent(true);
+    setStatusMsg(null);
+    try {
+      await deleteDoc(doc(db, "students", studentId));
+      window.location.href = "/hub/admin/clients";
+    } catch (e) {
+      setStatusMsg(e instanceof Error ? e.message : "Failed to permanently delete student.");
+      setDeletingStudent(false);
+    }
+  }
+
   // ── Save tutor assignment — unchanged logic ───────────────────────────────────
 
   async function handleSaveTutor() {
@@ -629,14 +988,42 @@ export default function AdminStudentDetailPage() {
         assignedTutorEmail: tutor?.email ?? null,
         updatedAt: serverTimestamp(),
       });
+
       if (student?.clientId) {
-        batch.update(doc(db, "clients", student.clientId), {
-          assignedTutorId: tutor?.uid ?? null,
-          assignedTutorName: tutor?.name ?? null,
-          assignedTutorEmail: tutor?.email ?? null,
+        // Multi-student-family correction (pre-Stage-6): recompute the full
+        // set of tutors assigned to ANY student under this client (siblings
+        // included) rather than clobbering the client's tutor pointer with
+        // just this one student's tutor. Student-level assignment remains
+        // authoritative — this is a derived read, never the other way around.
+        const siblingsSnap = await getDocs(
+          query(collection(db, "students"), where("clientId", "==", student.clientId))
+        );
+        const siblingTutorIds = siblingsSnap.docs.map((d) =>
+          d.id === studentId ? tutor?.uid ?? null : ((d.data() as StudentDoc).assignedTutorId ?? null)
+        );
+        const assignedTutorIds = computeAssignedTutorIds(siblingTutorIds);
+
+        const clientSnap = await getDoc(doc(db, "clients", student.clientId));
+        const existingClientTutorId = String(
+          (clientSnap.data() as { assignedTutorId?: string } | undefined)?.assignedTutorId ?? ""
+        );
+
+        const clientPatch: Record<string, unknown> = {
+          assignedTutorIds,
           updatedAt: serverTimestamp(),
-        });
+        };
+        // Legacy singular fields, kept for backward-compatible display only
+        // (e.g. a "primary tutor" label) — never used for access control
+        // anymore, and never overwritten away from a different sibling's
+        // tutor that's already recorded there.
+        if (shouldMirrorSingularTutor(existingClientTutorId, tutor?.uid ?? null)) {
+          clientPatch.assignedTutorId = tutor?.uid ?? null;
+          clientPatch.assignedTutorName = tutor?.name ?? null;
+          clientPatch.assignedTutorEmail = tutor?.email ?? null;
+        }
+        batch.update(doc(db, "clients", student.clientId), clientPatch);
       }
+
       await batch.commit();
       setStudent((prev) =>
         prev
@@ -989,6 +1376,317 @@ export default function AdminStudentDetailPage() {
         </div>
       </section>
 
+      {/* Inquiry info — Release 1B, final polish item 7. Collapsed by default;
+          read-only historical snapshot of the original lead this student was
+          converted from. Never overwrites, and is never overwritten by,
+          anything on the student/client record. */}
+      {inquiryLead && (
+        <section className="rounded-2xl border border-[color:var(--ring)] bg-white p-4">
+          <button
+            type="button"
+            onClick={() => setInquiryOpen((v) => !v)}
+            className="flex w-full items-center justify-between text-left"
+          >
+            <h2 className="font-semibold text-[color:var(--ink)]">Inquiry info</h2>
+            <span className="text-xs font-semibold text-[color:var(--brand)]">
+              {inquiryOpen ? "Hide ▲" : "Show ▼"}
+            </span>
+          </button>
+          {inquiryOpen && (
+            <div className="mt-3 grid gap-2 text-sm text-[color:var(--muted)] md:grid-cols-2">
+              <div>
+                <span className="font-semibold text-[color:var(--ink)]">Original inquiry date:</span>{" "}
+                {inquiryLead.createdAt ? fmtDate(inquiryLead.createdAt) : "—"}
+              </div>
+              <div>
+                <span className="font-semibold text-[color:var(--ink)]">Source:</span>{" "}
+                {inquiryLead.source === "contact" ? "Contact form" : inquiryLead.source === "manual" ? "Manual" : "Enrolment form"}
+              </div>
+              <div>
+                <span className="font-semibold text-[color:var(--ink)]">Parent (at inquiry):</span>{" "}
+                {inquiryLead.parentName || "—"} ({inquiryLead.parentEmail || "—"})
+              </div>
+              <div>
+                <span className="font-semibold text-[color:var(--ink)]">Requested package:</span>{" "}
+                {inquiryLead.package || "—"}
+              </div>
+              <div>
+                <span className="font-semibold text-[color:var(--ink)]">Subjects:</span>{" "}
+                {(inquiryLead.subjects ?? []).join(", ") || "—"}
+              </div>
+              <div>
+                <span className="font-semibold text-[color:var(--ink)]">Mode / suburb:</span>{" "}
+                {inquiryLead.mode || "—"} {inquiryLead.suburb ? `· ${inquiryLead.suburb}` : ""}
+              </div>
+              {inquiryLead.goals && (
+                <div className="md:col-span-2">
+                  <span className="font-semibold text-[color:var(--ink)]">Goals:</span> {inquiryLead.goals}
+                </div>
+              )}
+              {inquiryLead.challenges && (
+                <div className="md:col-span-2">
+                  <span className="font-semibold text-[color:var(--ink)]">Challenges:</span> {inquiryLead.challenges}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Arrangement — Release 1B, Stage 6. Per-student, never one family-wide value. */}
+      <section className="rounded-2xl border border-[color:var(--ring)] bg-white p-4">
+        <h2 className="mb-3 font-semibold text-[color:var(--ink)]">Arrangement</h2>
+
+        {plan ? (
+          <div className="space-y-3 text-sm">
+            <div className="grid gap-2 md:grid-cols-2">
+              <div>
+                <span className="font-semibold text-[color:var(--ink)]">Payment arrangement:</span>{" "}
+                {formatPlanLabel((plan.type as Parameters<typeof formatPlanLabel>[0]) ?? "casual")}
+              </div>
+              {plan.type !== "casual" && (
+                <div>
+                  <span className="font-semibold text-[color:var(--ink)]">Sessions remaining:</span>{" "}
+                  {entitlement?.remainingSessions ?? "—"}
+                  {(entitlement?.bonusRemaining ?? 0) > 0 ? ` (+${entitlement?.bonusRemaining} legacy bonus)` : ""}
+                </div>
+              )}
+              {plan.standardPriceCents != null && (
+                <div>
+                  <span className="font-semibold text-[color:var(--ink)]">Agreed price:</span>{" "}
+                  {fmtCents(plan.finalPriceCents ?? plan.standardPriceCents)}
+                  {plan.discountType && (
+                    <span className="text-xs text-[color:var(--muted)]"> (standard {fmtCents(plan.standardPriceCents)}, {describeDiscount(plan)})</span>
+                  )}
+                </div>
+              )}
+              <div>
+                <span className="font-semibold text-[color:var(--ink)]">Commenced:</span> {fmtDate(plan.createdAt) || "—"}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 pt-1">
+              {plan.type !== "casual" && (
+                <button
+                  type="button"
+                  onClick={() => setShowRenewForm((v) => !v)}
+                  className="rounded-xl border border-[color:var(--ring)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--brand)] hover:bg-[#d6e5e3]/40"
+                >
+                  {showRenewForm ? "Cancel renew" : "Renew package"}
+                </button>
+              )}
+              {plan.type !== "casual" && (
+                <button
+                  type="button"
+                  onClick={() => setShowCorrectForm((v) => !v)}
+                  className="rounded-xl border border-[color:var(--ring)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--brand)] hover:bg-[#d6e5e3]/40"
+                >
+                  {showCorrectForm ? "Cancel correction" : "Correct balance"}
+                </button>
+              )}
+            </div>
+
+            {showRenewForm && (
+              <div className="rounded-xl border border-dashed border-[color:var(--ring)] p-3 space-y-2">
+                <div className="grid gap-2 md:grid-cols-2">
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold text-[color:var(--muted)]">New package</span>
+                    <select
+                      value={renewForm.newPlanType}
+                      onChange={(e) => setRenewForm((f) => ({ ...f, newPlanType: e.target.value as "package_5" | "package_10" }))}
+                      className="w-full rounded-lg border border-[color:var(--ring)] px-2 py-1.5 text-sm"
+                    >
+                      <option value="package_5">5-session package</option>
+                      <option value="package_10">10-session package</option>
+                    </select>
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold text-[color:var(--muted)]">
+                      Carry-over (max {entitlement?.remainingSessions ?? 0})
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      max={entitlement?.remainingSessions ?? 0}
+                      value={renewForm.carryOverSessions}
+                      onChange={(e) => setRenewForm((f) => ({ ...f, carryOverSessions: e.target.value }))}
+                      className="w-full rounded-lg border border-[color:var(--ring)] px-2 py-1.5 text-sm"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold text-[color:var(--muted)]">
+                      Discount {plan.discountType ? `(previously: ${describeDiscount(plan)})` : "(none previously)"}
+                    </span>
+                    <select
+                      value={renewForm.discountType}
+                      onChange={(e) => setRenewForm((f) => ({ ...f, discountType: e.target.value as "" | "percent" | "fixed" }))}
+                      className="w-full rounded-lg border border-[color:var(--ring)] px-2 py-1.5 text-sm"
+                    >
+                      <option value="">No discount</option>
+                      <option value="percent">Percentage off</option>
+                      <option value="fixed">Fixed dollar off</option>
+                    </select>
+                  </label>
+                  {renewForm.discountType && (
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-[color:var(--muted)]">
+                        {renewForm.discountType === "percent" ? "Percent (0-100)" : "Amount off (AUD)"}
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        step={renewForm.discountType === "percent" ? "1" : "0.01"}
+                        value={renewForm.discountValue}
+                        onChange={(e) => setRenewForm((f) => ({ ...f, discountValue: e.target.value }))}
+                        className="w-full rounded-lg border border-[color:var(--ring)] px-2 py-1.5 text-sm"
+                      />
+                    </label>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRenew}
+                  disabled={arrangementBusy}
+                  className="rounded-xl bg-[color:var(--brand)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                >
+                  {arrangementBusy ? "Renewing…" : "Confirm renewal"}
+                </button>
+              </div>
+            )}
+
+            {showCorrectForm && (
+              <div className="rounded-xl border border-dashed border-[color:var(--ring)] p-3 space-y-2">
+                <div className="grid gap-2 md:grid-cols-2">
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold text-[color:var(--muted)]">Adjustment (+/-)</span>
+                    <input
+                      type="number"
+                      value={correctForm.delta}
+                      onChange={(e) => setCorrectForm((f) => ({ ...f, delta: e.target.value }))}
+                      placeholder="e.g. -1 or 2"
+                      className="w-full rounded-lg border border-[color:var(--ring)] px-2 py-1.5 text-sm"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold text-[color:var(--muted)]">Reason *</span>
+                    <input
+                      value={correctForm.reason}
+                      onChange={(e) => setCorrectForm((f) => ({ ...f, reason: e.target.value }))}
+                      className="w-full rounded-lg border border-[color:var(--ring)] px-2 py-1.5 text-sm"
+                    />
+                  </label>
+                </div>
+                {correctForm.delta && Number.isFinite(Number(correctForm.delta)) && (
+                  <p className="text-xs text-[color:var(--muted)]">
+                    Resulting balance: {(entitlement?.remainingSessions ?? 0) + Number(correctForm.delta)}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={handleCorrectBalance}
+                  disabled={arrangementBusy}
+                  className="rounded-xl bg-[color:var(--brand)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                >
+                  {arrangementBusy ? "Saving…" : "Confirm correction"}
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-sm text-[color:var(--muted)]">No package on record — currently casual.</p>
+            <button
+              type="button"
+              onClick={() => setShowCreateForm((v) => !v)}
+              className="rounded-xl border border-[color:var(--ring)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--brand)] hover:bg-[#d6e5e3]/40"
+            >
+              {showCreateForm ? "Cancel" : "Set up a package"}
+            </button>
+            {showCreateForm && (
+              <div className="rounded-xl border border-dashed border-[color:var(--ring)] p-3 space-y-2">
+                <div className="grid gap-2 md:grid-cols-2">
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold text-[color:var(--muted)]">Package</span>
+                    <select
+                      value={createForm.planType}
+                      onChange={(e) => setCreateForm((f) => ({ ...f, planType: e.target.value as "casual" | "package_5" | "package_10" }))}
+                      className="w-full rounded-lg border border-[color:var(--ring)] px-2 py-1.5 text-sm"
+                    >
+                      <option value="casual">Casual</option>
+                      <option value="package_5">5-session package</option>
+                      <option value="package_10">10-session package</option>
+                    </select>
+                  </label>
+                  {createForm.planType !== "casual" && (
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-[color:var(--muted)]">Discount</span>
+                      <select
+                        value={createForm.discountType}
+                        onChange={(e) => setCreateForm((f) => ({ ...f, discountType: e.target.value as "" | "percent" | "fixed" }))}
+                        className="w-full rounded-lg border border-[color:var(--ring)] px-2 py-1.5 text-sm"
+                      >
+                        <option value="">No discount</option>
+                        <option value="percent">Percentage off</option>
+                        <option value="fixed">Fixed dollar off</option>
+                      </select>
+                    </label>
+                  )}
+                  {createForm.planType !== "casual" && createForm.discountType && (
+                    <>
+                      <label className="space-y-1">
+                        <span className="text-xs font-semibold text-[color:var(--muted)]">
+                          {createForm.discountType === "percent" ? "Percent (0-100)" : "Amount off (AUD)"}
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          step={createForm.discountType === "percent" ? "1" : "0.01"}
+                          value={createForm.discountValue}
+                          onChange={(e) => setCreateForm((f) => ({ ...f, discountValue: e.target.value }))}
+                          className="w-full rounded-lg border border-[color:var(--ring)] px-2 py-1.5 text-sm"
+                        />
+                      </label>
+                      <label className="space-y-1 md:col-span-2">
+                        <span className="text-xs font-semibold text-[color:var(--muted)]">Reason</span>
+                        <input
+                          value={createForm.discountReason}
+                          onChange={(e) => setCreateForm((f) => ({ ...f, discountReason: e.target.value }))}
+                          className="w-full rounded-lg border border-[color:var(--ring)] px-2 py-1.5 text-sm"
+                        />
+                      </label>
+                    </>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCreatePackage}
+                  disabled={arrangementBusy}
+                  className="rounded-xl bg-[color:var(--brand)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                >
+                  {arrangementBusy ? "Saving…" : "Confirm"}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {arrangementMsg && <p className="mt-2 text-xs text-[color:var(--muted)]">{arrangementMsg}</p>}
+
+        {planHistory.length > 1 && (
+          <div className="mt-4 border-t border-[color:var(--ring)] pt-3">
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">History</h3>
+            <div className="space-y-1 text-xs text-[color:var(--muted)]">
+              {planHistory.map((p) => (
+                <div key={p.id}>
+                  {formatPlanLabel((p.type as Parameters<typeof formatPlanLabel>[0]) ?? "casual")} — {p.status}
+                  {p.finalPriceCents != null ? ` — ${fmtCents(p.finalPriceCents)}` : ""} — {fmtDate(p.createdAt) || "—"}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+
       {/* Sessions */}
       <section className="rounded-2xl border border-[color:var(--ring)] bg-white p-4">
         <h2 className="mb-2 font-semibold text-[color:var(--ink)]">Sessions</h2>
@@ -1037,6 +1735,120 @@ export default function AdminStudentDetailPage() {
             </table>
           </div>
         )}
+      </section>
+
+      {/* Removal lifecycle — Release 1B, Stage 6d */}
+      <section className="rounded-2xl border border-[color:var(--ring)] bg-white p-4">
+        <h2 className="mb-3 font-semibold text-[color:var(--ink)]">Status</h2>
+        <p className="mb-3 text-sm text-[color:var(--muted)]">
+          Current status:{" "}
+          <span
+            className={`font-semibold ${
+              student?.status === "ended"
+                ? "text-rose-700"
+                : student?.status === "paused"
+                ? "text-amber-700"
+                : "text-[color:var(--ink)]"
+            }`}
+          >
+            {student?.status === "ended" ? "Ended" : student?.status === "paused" ? "Paused" : "Active"}
+          </span>
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          {student?.status === "ended" ? (
+            <button
+              type="button"
+              onClick={handleRestoreStudent}
+              disabled={statusBusy}
+              className="rounded-xl border border-teal-300 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-800 transition hover:bg-teal-100 disabled:opacity-60"
+            >
+              {statusBusy ? "Working…" : "Restore to active"}
+            </button>
+          ) : student?.status === "paused" ? (
+            <>
+              <button
+                type="button"
+                onClick={handleResumeStudent}
+                disabled={statusBusy}
+                className="rounded-xl border border-teal-300 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-800 transition hover:bg-teal-100 disabled:opacity-60"
+              >
+                {statusBusy ? "Working…" : "Resume student"}
+              </button>
+              <button
+                type="button"
+                onClick={handleEndStudent}
+                disabled={statusBusy}
+                className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 transition hover:bg-amber-100 disabled:opacity-60"
+              >
+                {statusBusy ? "Working…" : "End student"}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={handlePauseStudent}
+                disabled={statusBusy}
+                className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 transition hover:bg-amber-100 disabled:opacity-60"
+              >
+                {statusBusy ? "Working…" : "Pause student"}
+              </button>
+              <button
+                type="button"
+                onClick={handleEndStudent}
+                disabled={statusBusy}
+                className="rounded-xl border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-50 disabled:opacity-60"
+              >
+                {statusBusy ? "Working…" : "End student"}
+              </button>
+            </>
+          )}
+          {!showDeleteConfirm ? (
+            <button
+              type="button"
+              onClick={() => setShowDeleteConfirm(true)}
+              className="rounded-xl border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-50"
+            >
+              Permanently delete…
+            </button>
+          ) : null}
+        </div>
+
+        {showDeleteConfirm && (
+          <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3">
+            <p className="text-xs text-rose-800">
+              This permanently removes the student record — it is refused if any session, package, or invoice
+              history exists for this student ({sessions.length} session{sessions.length === 1 ? "" : "s"},{" "}
+              {planHistory.length} package record{planHistory.length === 1 ? "" : "s"} found). Use this only for a
+              genuine mistake or test record; otherwise use &ldquo;End student&rdquo; above. Type{" "}
+              <strong>{student?.studentName || studentId}</strong> to confirm.
+            </p>
+            <input
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              className="mt-2 w-full rounded-lg border border-rose-300 bg-white px-2 py-1.5 text-sm"
+            />
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={handlePermanentDeleteStudent}
+                disabled={deletingStudent}
+                className="rounded-xl bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+              >
+                {deletingStudent ? "Deleting…" : "Confirm permanent delete"}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText(""); }}
+                className="rounded-xl border border-[color:var(--ring)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--muted)]"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {statusMsg && <p className="mt-2 text-xs text-[color:var(--muted)]">{statusMsg}</p>}
       </section>
     </div>
   );

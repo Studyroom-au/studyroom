@@ -3,8 +3,15 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import {
+  SUBJECT_OPTIONS,
+  YEAR_LEVELS,
+  AVAILABILITY_DAYS as DAYS,
+  AVAILABILITY_SLOTS as SLOTS,
+  makeAvailabilityBlock as makeBlock,
+} from "@/lib/studyroom/enrolmentFields";
 
-type PackagePlan = "CASUAL" | "PACKAGE_5" | "PACKAGE_12";
+type PackagePlan = "CASUAL" | "PACKAGE_5" | "PACKAGE_10";
 
 type FormState = {
   parentName: string;
@@ -33,58 +40,14 @@ type FormState = {
   consent: boolean;
 };
 
-const SUBJECT_OPTIONS = [
-  "Maths",
-  "English",
-  "Science",
-  "Humanities",
-  "Study skills",
-  "Organisation",
-  "Reading",
-  "Spelling",
-  "Writing",
-];
-
-const YEAR_LEVELS = [
-  "Prep",
-  "Year 1",
-  "Year 2",
-  "Year 3",
-  "Year 4",
-  "Year 5",
-  "Year 6",
-  "Year 7",
-  "Year 8",
-  "Year 9",
-  "Year 10",
-  "Year 11",
-  "Year 12",
-];
-
 const PACKAGE_OPTIONS: Array<{ value: PackagePlan; label: string; desc: string }> = [
   { value: "CASUAL", label: "Casual sessions", desc: "Pay per session. Flexible scheduling." },
   { value: "PACKAGE_5", label: "5-session package", desc: "Great for short catch-up blocks." },
-  { value: "PACKAGE_12", label: "12-session package", desc: "Best value for consistent progress." },
+  { value: "PACKAGE_10", label: "10-session package", desc: "Best value for consistent progress." },
 ];
-
-// Availability grid
-const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
-const SLOTS = [
-  "Before school (6am - 8am)",
-  "Morning (8am - 10am)",
-  "Midday (10am - 1pm)",
-  "Early afternoon (1pm - 3pm)",
-  "After school (3pm - 5pm)",
-  "Evening (5pm - 7pm)",
-  "Late Evening (After 7pm)",
-] as const;
 
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
-}
-
-function makeBlock(day: string, slot: string) {
-  return `${day}|${slot}`;
 }
 
 export default function EnrolPage() {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminAuth, getAdminDb, setUserRoleClaim } from "@/lib/firebaseAdmin";
+import { resolveTutorNameFromLeads } from "@/lib/studyroom/tutorIdentity";
 
 function parseExpiry(value: unknown): Date | null {
   if (!value) return null;
@@ -83,10 +84,22 @@ export async function POST(req: NextRequest) {
       { merge: true }
     );
 
+    // Canonical identity capture at signup (pre-Release identity fix): email
+    // always mirrors the authenticated Auth account (the only place it can
+    // ever come from); name is taken from whichever tutor_invite/tutor_request
+    // lead matches this email, if one exists and a name hasn't already been
+    // set — never overwriting an existing value, so a later admin correction
+    // is never silently reverted by a re-redemption.
+    const existingUserSnap = await db.collection("users").doc(uid).get();
+    const existingName = String(existingUserSnap.data()?.name ?? "").trim();
+    const inviteName = existingName ? "" : await resolveTutorNameFromLeads(db, storedEmail || userEmail);
+
     await db.collection("users").doc(uid).set(
       {
         subscriptionStatus: "tutor_access",
         onboardingComplete: true,
+        email: userEmail,
+        ...(inviteName ? { name: inviteName } : {}),
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
