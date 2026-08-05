@@ -438,3 +438,76 @@ describe("firestore.rules — actionDismissals (Operations Centre dismiss, admin
     );
   });
 });
+
+describe("firestore.rules — tutorHandovers (Release 1B.1)", () => {
+  const ADMIN_UID = "admin-1";
+  const ADMIN_EMAIL = "lily.studyroom@gmail.com";
+
+  async function seedHandover(studentId: string, tutorId: string) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), "tutorHandovers", studentId), {
+        studentId,
+        tutorId,
+        studentName: "Student One",
+        status: "pending",
+        confirmedBy: ADMIN_EMAIL,
+        confirmedAt: Timestamp.now(),
+      });
+    });
+  }
+
+  it("the assigned tutor can read their own handover", async () => {
+    await seedHandover("student-h1", TUTOR_UID);
+    const tutorDb = testEnv.authenticatedContext(TUTOR_UID, { email: "tutor1@example.com" }).firestore();
+    await assertSucceeds(getDoc(doc(tutorDb, "tutorHandovers", "student-h1")));
+  });
+
+  it("an unrelated tutor cannot read another tutor's handover", async () => {
+    await seedHandover("student-h2", TUTOR_UID);
+    const otherTutorDb = testEnv.authenticatedContext(OTHER_TUTOR_UID, { email: "tutor2@example.com" }).firestore();
+    await assertFails(getDoc(doc(otherTutorDb, "tutorHandovers", "student-h2")));
+  });
+
+  it("the assigned tutor can update only their own status fields", async () => {
+    await seedHandover("student-h3", TUTOR_UID);
+    const tutorDb = testEnv.authenticatedContext(TUTOR_UID, { email: "tutor1@example.com" }).firestore();
+    await assertSucceeds(
+      updateDoc(doc(tutorDb, "tutorHandovers", "student-h3"), {
+        status: "contacted_parent",
+        statusUpdatedBy: TUTOR_UID,
+        statusUpdatedAt: Timestamp.now(),
+      })
+    );
+  });
+
+  it("the assigned tutor cannot change family-detail fields via the status update", async () => {
+    await seedHandover("student-h4", TUTOR_UID);
+    const tutorDb = testEnv.authenticatedContext(TUTOR_UID, { email: "tutor1@example.com" }).firestore();
+    await assertFails(
+      updateDoc(doc(tutorDb, "tutorHandovers", "student-h4"), {
+        parentEmail: "changed@example.com",
+        status: "contacted_parent",
+      })
+    );
+  });
+
+  it("a tutor cannot create a handover directly", async () => {
+    const tutorDb = testEnv.authenticatedContext(TUTOR_UID, { email: "tutor1@example.com" }).firestore();
+    await assertFails(
+      setDoc(doc(tutorDb, "tutorHandovers", "student-h5"), {
+        studentId: "student-h5",
+        tutorId: TUTOR_UID,
+        status: "pending",
+      })
+    );
+  });
+
+  it("admin can read and fully write any handover", async () => {
+    await seedHandover("student-h6", TUTOR_UID);
+    const adminDb = testEnv.authenticatedContext(ADMIN_UID, { email: ADMIN_EMAIL }).firestore();
+    await assertSucceeds(getDoc(doc(adminDb, "tutorHandovers", "student-h6")));
+    await assertSucceeds(
+      setDoc(doc(adminDb, "tutorHandovers", "student-h6"), { studentId: "student-h6", tutorId: TUTOR_UID, status: "pending" }, { merge: true })
+    );
+  });
+});

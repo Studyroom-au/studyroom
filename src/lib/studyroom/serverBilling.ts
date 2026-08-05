@@ -15,6 +15,7 @@ import {
   isCasualBillableMode,
   isInvoiceOverdue,
   isPrepaidPlan,
+  isSessionAlreadyResolved,
   normalizeMode,
   normalizePlanType,
   normalizeSessionStatus,
@@ -79,6 +80,12 @@ type RawInvoice = {
 
 type SessionAction = "complete" | "cancel_by_parent" | "cancel_by_tutor" | "no_show" | "apply_grace";
 
+type AdminCompletionInfo = {
+  note: string;
+  reason: string;
+  actualCompletionDate?: Date | null;
+};
+
 type ApplySessionActionArgs = {
   sessionId: string;
   action: SessionAction;
@@ -90,6 +97,16 @@ type ApplySessionActionArgs = {
   // function never reads Firestore for pricing itself, so passing (or not
   // passing) this never changes this transaction's read/write ordering.
   casualPricingTiers?: readonly CasualPricingTier[];
+  // Release 1B.1: "Complete on behalf of tutor". When present, this SAME
+  // transaction also writes the admin-authored note and the admin-override
+  // audit metadata — atomically with the session status change, entitlement
+  // deduction, and invoice write below. This closes the gap where three
+  // separate writes (note, completion, audit metadata) could partially fail
+  // and leave the record inconsistent. Only ever set by
+  // /api/sessions/admin-complete; never set for a normal tutor completion,
+  // whose behaviour (including the note-required gate) is otherwise
+  // completely unchanged by this field's existence.
+  adminCompletion?: AdminCompletionInfo;
 };
 
 function assertPermitted(role: Role, userId: string, sessionTutorId?: string) {
@@ -290,11 +307,31 @@ export async function applySessionAction(args: ApplySessionActionArgs) {
     const session = (sessionSnap.data() ?? {}) as RawSession;
     assertPermitted(args.role, args.user.uid, session.tutorId);
 
+    if (args.adminCompletion) {
+      // Refuse outright if already resolved — makes this call idempotent
+      // (a repeat submission always hits this guard, using the session data
+      // already read above, before any write has occurred) and closes a
+      // race window a route-level-only check couldn't: this is checked
+      // inside the same transaction that will perform the completion, not
+      // in a separate earlier read.
+      if (isSessionAlreadyResolved(session.status)) {
+        throw new Error(`This session is already marked "${session.status}". Use the balance/invoice correction tools instead of re-completing it.`);
+      }
+      if (!args.adminCompletion.note.trim()) {
+        throw new Error("A session note is required.");
+      }
+      if (!args.adminCompletion.reason.trim()) {
+        throw new Error("A reason is required for an admin override.");
+      }
+    }
+
     // Release 1B: a session cannot be marked complete without at least one
     // non-empty tutor note already recorded. Read before any write in this
     // transaction (Firestore transactions require all reads first) — checked
     // here, before hydratePlanContext, which is the first thing that writes.
-    if (args.action === "complete") {
+    // Skipped for an admin completion — that path writes its own note below
+    // (in the same transaction) rather than requiring one to already exist.
+    if (args.action === "complete" && !args.adminCompletion) {
       const logsSnap = await tx.get(sessionRef.collection("logs"));
       const hasNote = logsSnap.docs.some((d) => String(d.data()?.text ?? "").trim().length > 0);
       if (!hasNote) {
@@ -381,6 +418,32 @@ export async function applySessionAction(args: ApplySessionActionArgs) {
     }
     if (cancelledAt) {
       sessionPatch.cancelledAt = Timestamp.fromDate(cancelledAt);
+    }
+
+    if (args.adminCompletion) {
+      // Same transaction as the completion/deduction/invoice writes below —
+      // the admin-authored note and the audit metadata can never land
+      // without the completion itself (or vice versa).
+      const logRef = sessionRef.collection("logs").doc();
+      tx.set(logRef, {
+        tutorId: session.tutorId ?? null,
+        text: args.adminCompletion.note,
+        attachments: [],
+        enteredByAdmin: true,
+        enteredByAdminEmail: args.user.email ?? args.user.uid,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+
+      sessionPatch.adminCompletedOnBehalfOfTutor = true;
+      sessionPatch.adminOverrideBy = args.user.email ?? args.user.uid;
+      sessionPatch.adminOverrideAt = FieldValue.serverTimestamp();
+      sessionPatch.adminOverrideReason = args.adminCompletion.reason;
+      sessionPatch.adminOverrideOutcome = nextStatus;
+      sessionPatch.originalTutorId = session.tutorId ?? null;
+      if (args.adminCompletion.actualCompletionDate) {
+        sessionPatch.adminReportedActualDate = Timestamp.fromDate(args.adminCompletion.actualCompletionDate);
+      }
     }
 
     const existingInvoiceId = String(session.invoiceId ?? "");

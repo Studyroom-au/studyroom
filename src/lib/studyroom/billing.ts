@@ -402,6 +402,18 @@ export function isMarkPaidBlocked(status: string): boolean {
   return status === "void" || status === "credited" || status === "waived";
 }
 
+/**
+ * Release 1B.1: "Complete on behalf of tutor" idempotency/refusal guard —
+ * an admin override must refuse outright on a session that's already
+ * correctly completed or marked no-show, rather than re-running
+ * applySessionAction and risking a second invoice/entitlement deduction.
+ * Cancelled sessions are also considered resolved (a completion override
+ * doesn't apply to a cancellation).
+ */
+export function isSessionAlreadyResolved(status?: string | null): boolean {
+  return status === "completed" || status === "no_show" || status === "cancelled_by_parent" || status === "cancelled_by_tutor";
+}
+
 export function isInvoiceOverdue(invoice: {
   status?: string | null;
   dueAt?: Date | null;

@@ -25,6 +25,7 @@ type PackageAlertRow = { studentId: string; studentName: string; planType: strin
 type InvoiceAlertRow = { id: string; status: string; studentName: string; overdue: boolean };
 type MissingNoteRow = { id: string; studentName: string };
 type BillingFailureRow = { id: string; studentName: string };
+type HandoverHelpRow = { studentId: string; studentName: string };
 type OverdueSessionRow = { id: string; studentName: string; startAt: Date };
 type TodaySessionRow = { id: string; studentName: string; startAt: Date; status: string };
 type DismissalRow = { key: string; label: string; dismissedBy: string; dismissedAt: Date | null };
@@ -264,6 +265,7 @@ export default function AdminHubPage() {
   const [invoiceAlerts, setInvoiceAlerts] = useState<InvoiceAlertRow[]>([]);
   const [missingNotes, setMissingNotes] = useState<MissingNoteRow[]>([]);
   const [billingFailures, setBillingFailures] = useState<BillingFailureRow[]>([]);
+  const [handoverHelp, setHandoverHelp] = useState<HandoverHelpRow[]>([]);
   const [overdueSessions, setOverdueSessions] = useState<OverdueSessionRow[]>([]);
   const [todaySessions, setTodaySessions] = useState<TodaySessionRow[]>([]);
   const [dismissals, setDismissals] = useState<Record<string, DismissalRow>>({});
@@ -431,6 +433,20 @@ export default function AdminHubPage() {
         }
         setMissingNotes(missingNoteRows);
         setBillingFailures(billingFailureRows);
+
+        // ---- Action Required: tutor requested admin help on a handover ----
+        // Release 1B.1 — surfaces a tutor's "Need admin help" status action
+        // from tutorHandovers here too, alongside the derived session/
+        // invoice exceptions, without introducing a second task system.
+        const handoverHelpSnap = await getDocs(
+          query(collection(db, "tutorHandovers"), where("status", "==", "need_admin_help"))
+        );
+        setHandoverHelp(
+          handoverHelpSnap.docs.map((d) => ({
+            studentId: d.id,
+            studentName: String((d.data() as { studentName?: string }).studentName ?? "Student"),
+          }))
+        );
 
         // ---- Action Required: sessions overdue (time passed, still
         // "scheduled") — same derived check the Sessions oversight page
@@ -618,6 +634,10 @@ export default function AdminHubPage() {
     () => billingFailures.filter((b) => !(`billing-failure:${b.id}` in dismissals)),
     [billingFailures, dismissals]
   );
+  const visibleHandoverHelp = useMemo(
+    () => handoverHelp.filter((h) => !(`handover-help:${h.studentId}` in dismissals)),
+    [handoverHelp, dismissals]
+  );
 
   const actionRequiredCount = useMemo(
     () =>
@@ -627,7 +647,8 @@ export default function AdminHubPage() {
       visibleInvoiceAlerts.length +
       visibleMissingNotes.length +
       visibleOverdueSessions.length +
-      visibleBillingFailures.length,
+      visibleBillingFailures.length +
+      visibleHandoverHelp.length,
     [
       visibleUnmatched,
       visiblePackageAlerts,
@@ -636,6 +657,7 @@ export default function AdminHubPage() {
       visibleMissingNotes,
       visibleOverdueSessions,
       visibleBillingFailures,
+      visibleHandoverHelp,
     ]
   );
 
@@ -774,6 +796,17 @@ export default function AdminHubPage() {
                       label={`${b.studentName} — session billing/outcome issue`}
                       onClick={() => router.push("/hub/admin/sessions")}
                       onDismiss={() => dismissRow(key, `${b.studentName} — session billing/outcome issue`)}
+                    />
+                  );
+                })}
+                {visibleHandoverHelp.slice(0, 5).map((h) => {
+                  const key = `handover-help:${h.studentId}`;
+                  return (
+                    <Row
+                      key={h.studentId}
+                      label={`${h.studentName} — tutor requested admin help`}
+                      onClick={() => router.push(`/hub/admin/students/${h.studentId}`)}
+                      onDismiss={() => dismissRow(key, `${h.studentName} — tutor requested admin help`)}
                     />
                   );
                 })}

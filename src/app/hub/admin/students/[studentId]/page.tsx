@@ -61,7 +61,10 @@ type PlanDoc = {
   finalPriceCents?: number | null;
   discountReason?: string | null;
   renewedFromPlanId?: string | null;
+  changedFromPlanId?: string | null;
   carryOverSessions?: number;
+  initialSessionsAlreadyCompleted?: number;
+  commencementAt?: Timestamp;
   createdAt?: Timestamp;
 };
 
@@ -553,9 +556,25 @@ export default function AdminStudentDetailPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showRenewForm, setShowRenewForm] = useState(false);
   const [showCorrectForm, setShowCorrectForm] = useState(false);
+  const [showChangeForm, setShowChangeForm] = useState(false);
   const [createForm, setCreateForm] = useState({ planType: "package_5" as "casual" | "package_5" | "package_10", discountType: "" as "" | "percent" | "fixed", discountValue: "", discountReason: "" });
-  const [renewForm, setRenewForm] = useState({ newPlanType: "package_10" as "package_5" | "package_10", carryOverSessions: "0", discountType: "" as "" | "percent" | "fixed", discountValue: "", discountReason: "" });
+  const [renewForm, setRenewForm] = useState({ newPlanType: "package_10" as "package_5" | "package_10", mode: "" as "" | "in_home" | "online", carryOverSessions: "0", discountType: "" as "" | "percent" | "fixed", discountValue: "", discountReason: "" });
   const [correctForm, setCorrectForm] = useState({ delta: "", reason: "" });
+  const [showHandoverForm, setShowHandoverForm] = useState(false);
+  const [handoverForm, setHandoverForm] = useState({ commencementDate: "", suggestedNextSteps: "" });
+  const [handoverBusy, setHandoverBusy] = useState(false);
+  const [handoverMsg, setHandoverMsg] = useState<string | null>(null);
+  const [changeForm, setChangeForm] = useState({
+    targetPlanType: "package_5" as "casual" | "package_5" | "package_10",
+    mode: "in_home" as "in_home" | "online",
+    discountType: "" as "" | "percent" | "fixed",
+    discountValue: "",
+    discountReason: "",
+    commencementDate: "",
+    sessionsAlreadyCompleted: "0",
+    carryOverSessions: "0",
+    reason: "",
+  });
 
   // ── Removal lifecycle (Release 1B, Stage 6d) ───────────────────────────────
   const [statusBusy, setStatusBusy] = useState(false);
@@ -780,6 +799,7 @@ export default function AdminStudentDetailPage() {
         body: JSON.stringify({
           oldPlanId: plan.id,
           newPlanType: renewForm.newPlanType,
+          mode: renewForm.mode || undefined,
           carryOverSessions: Number(renewForm.carryOverSessions) || 0,
           discountType: renewForm.discountType || null,
           discountValue: discountValueForApi(renewForm.discountType, renewForm.discountValue),
@@ -840,6 +860,84 @@ export default function AdminStudentDetailPage() {
       setArrangementMsg(e instanceof Error ? e.message : "Failed to correct balance.");
     } finally {
       setArrangementBusy(false);
+    }
+  }
+
+  // Release 1B.1: Casual/legacy package_12 -> a current package (or, for a
+  // brand-new arrangement, -> Casual). Distinct from handleRenew above, which
+  // is only for an existing package_5/package_10 renewing into another one.
+  async function handleChangeArrangement() {
+    if (!student || !auth.currentUser) return;
+    if (!changeForm.reason.trim()) {
+      setArrangementMsg("A reason is required for an arrangement change.");
+      return;
+    }
+    setArrangementBusy(true);
+    setArrangementMsg(null);
+    try {
+      const idToken = await auth.currentUser.getIdToken();
+      const res = await fetch("/api/plans/change-arrangement", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({
+          studentId,
+          targetPlanType: changeForm.targetPlanType,
+          mode: changeForm.mode,
+          discountType: changeForm.discountType || null,
+          discountValue: discountValueForApi(changeForm.discountType, changeForm.discountValue),
+          discountReason: changeForm.discountReason || null,
+          commencementAt: changeForm.commencementDate ? new Date(changeForm.commencementDate).toISOString() : null,
+          sessionsAlreadyCompleted: Number(changeForm.sessionsAlreadyCompleted) || 0,
+          carryOverSessions: Number(changeForm.carryOverSessions) || 0,
+          reason: changeForm.reason.trim(),
+        }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result?.error || "Failed to change arrangement.");
+      setShowChangeForm(false);
+      setArrangementMsg("Arrangement changed.");
+      const freshStudent = await getDoc(doc(db, "students", studentId));
+      const activePlanId = (freshStudent.data() as StudentDoc | undefined)?.activePlanId;
+      await reloadArrangement(activePlanId);
+      const historySnap = await getDocs(query(collection(db, "plans"), where("studentId", "==", studentId)));
+      setPlanHistory(
+        historySnap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as Omit<PlanDoc, "id">) }))
+          .sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0))
+      );
+    } catch (e) {
+      setArrangementMsg(e instanceof Error ? e.message : "Failed to change arrangement.");
+    } finally {
+      setArrangementBusy(false);
+    }
+  }
+
+  // Release 1B.1: "Confirm match and send tutor handover" — a deliberately
+  // separate, later action from assigning assignedTutorId above. Only ever
+  // triggers the structured packet + in-app notification + (optional) email.
+  async function handleConfirmHandover() {
+    if (!auth.currentUser) return;
+    setHandoverBusy(true);
+    setHandoverMsg(null);
+    try {
+      const idToken = await auth.currentUser.getIdToken();
+      const res = await fetch("/api/tutors/handover/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({
+          studentId,
+          commencementDate: handoverForm.commencementDate || null,
+          suggestedNextSteps: handoverForm.suggestedNextSteps || null,
+        }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result?.error || "Failed to send handover.");
+      setShowHandoverForm(false);
+      setHandoverMsg(result.emailSent ? "Handover sent — tutor notified in-app and by email." : "Handover sent — tutor notified in-app.");
+    } catch (e) {
+      setHandoverMsg(e instanceof Error ? e.message : "Failed to send handover.");
+    } finally {
+      setHandoverBusy(false);
     }
   }
 
@@ -1346,6 +1444,53 @@ export default function AdminStudentDetailPage() {
             <span className="text-sm font-semibold text-emerald-600">Saved</span>
           )}
         </div>
+
+        {student?.assignedTutorId && (
+          <div className="mt-3 border-t border-[color:var(--ring)] pt-3">
+            <button
+              type="button"
+              onClick={() => setShowHandoverForm((v) => !v)}
+              className="rounded-xl border border-[color:var(--ring)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--brand)] hover:bg-[#d6e5e3]/40"
+            >
+              {showHandoverForm ? "Cancel" : "Confirm match and send tutor handover"}
+            </button>
+            <p className="mt-1 text-[11px] text-[color:var(--muted)]">
+              Only sends after the tutor has accepted the proposed work off-platform — this sends the full
+              handover packet and notifies the assigned tutor.
+            </p>
+            {showHandoverForm && (
+              <div className="mt-2 space-y-2 rounded-xl border border-dashed border-[color:var(--ring)] p-3">
+                <label className="block space-y-1">
+                  <span className="text-xs font-semibold text-[color:var(--muted)]">Requested/intended commencement date</span>
+                  <input
+                    type="date"
+                    value={handoverForm.commencementDate}
+                    onChange={(e) => setHandoverForm((f) => ({ ...f, commencementDate: e.target.value }))}
+                    className="w-full rounded-lg border border-[color:var(--ring)] px-2 py-1.5 text-sm"
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-xs font-semibold text-[color:var(--muted)]">Suggested next steps (optional)</span>
+                  <textarea
+                    value={handoverForm.suggestedNextSteps}
+                    onChange={(e) => setHandoverForm((f) => ({ ...f, suggestedNextSteps: e.target.value }))}
+                    rows={2}
+                    className="w-full rounded-lg border border-[color:var(--ring)] px-2 py-1.5 text-sm"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={handleConfirmHandover}
+                  disabled={handoverBusy}
+                  className="rounded-xl bg-[color:var(--brand)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                >
+                  {handoverBusy ? "Sending…" : "Send handover"}
+                </button>
+              </div>
+            )}
+            {handoverMsg && <p className="mt-2 text-xs text-[color:var(--muted)]">{handoverMsg}</p>}
+          </div>
+        )}
       </section>
 
       {/* Parent */}
@@ -1466,7 +1611,7 @@ export default function AdminStudentDetailPage() {
             </div>
 
             <div className="flex flex-wrap gap-2 pt-1">
-              {plan.type !== "casual" && (
+              {(plan.type === "package_5" || plan.type === "package_10") && (
                 <button
                   type="button"
                   onClick={() => setShowRenewForm((v) => !v)}
@@ -1475,7 +1620,7 @@ export default function AdminStudentDetailPage() {
                   {showRenewForm ? "Cancel renew" : "Renew package"}
                 </button>
               )}
-              {plan.type !== "casual" && (
+              {(plan.type === "package_5" || plan.type === "package_10") && (
                 <button
                   type="button"
                   onClick={() => setShowCorrectForm((v) => !v)}
@@ -1484,7 +1629,156 @@ export default function AdminStudentDetailPage() {
                   {showCorrectForm ? "Cancel correction" : "Correct balance"}
                 </button>
               )}
+              {(plan.type === "casual" || plan.type === "package_12") && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setChangeForm((f) => ({
+                      ...f,
+                      targetPlanType: "package_5",
+                      mode: (plan.mode === "online" ? "online" : "in_home"),
+                      sessionsAlreadyCompleted: "0",
+                      carryOverSessions: "0",
+                    }));
+                    setShowChangeForm((v) => !v);
+                  }}
+                  className="rounded-xl border border-[color:var(--ring)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--brand)] hover:bg-[#d6e5e3]/40"
+                >
+                  {showChangeForm ? "Cancel change" : plan.type === "package_12" ? "Transition from legacy package" : "Change arrangement"}
+                </button>
+              )}
             </div>
+
+            {showChangeForm && (
+              <div className="rounded-xl border border-dashed border-[color:var(--ring)] p-3 space-y-2">
+                <p className="text-xs text-[color:var(--muted)]">
+                  {plan.type === "package_12"
+                    ? "Preserves this legacy 12-session package as expired history. New package_12 sales are not offered."
+                    : "Preserves the current Casual arrangement as expired history."}
+                </p>
+                <div className="grid gap-2 md:grid-cols-2">
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold text-[color:var(--muted)]">New arrangement</span>
+                    <select
+                      value={changeForm.targetPlanType}
+                      onChange={(e) => setChangeForm((f) => ({ ...f, targetPlanType: e.target.value as "casual" | "package_5" | "package_10" }))}
+                      className="w-full rounded-lg border border-[color:var(--ring)] px-2 py-1.5 text-sm"
+                    >
+                      {plan.type !== "package_12" && <option value="casual">Casual</option>}
+                      <option value="package_5">5-session package</option>
+                      <option value="package_10">10-session package</option>
+                    </select>
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold text-[color:var(--muted)]">Mode</span>
+                    <select
+                      value={changeForm.mode}
+                      onChange={(e) => setChangeForm((f) => ({ ...f, mode: e.target.value as "in_home" | "online" }))}
+                      className="w-full rounded-lg border border-[color:var(--ring)] px-2 py-1.5 text-sm"
+                    >
+                      <option value="in_home">In-home</option>
+                      <option value="online">Online</option>
+                    </select>
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold text-[color:var(--muted)]">Commencement date</span>
+                    <input
+                      type="date"
+                      value={changeForm.commencementDate}
+                      onChange={(e) => setChangeForm((f) => ({ ...f, commencementDate: e.target.value }))}
+                      className="w-full rounded-lg border border-[color:var(--ring)] px-2 py-1.5 text-sm"
+                    />
+                  </label>
+                  {changeForm.targetPlanType !== "casual" && plan.type !== "package_12" && (
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-[color:var(--muted)]">
+                        Sessions already delivered under this package agreement
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={changeForm.sessionsAlreadyCompleted}
+                        onChange={(e) => setChangeForm((f) => ({ ...f, sessionsAlreadyCompleted: e.target.value }))}
+                        className="w-full rounded-lg border border-[color:var(--ring)] px-2 py-1.5 text-sm"
+                      />
+                    </label>
+                  )}
+                  {changeForm.targetPlanType !== "casual" && plan.type === "package_12" && (
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-[color:var(--muted)]">
+                        Carry-over from legacy package (max {entitlement?.remainingSessions ?? 0})
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        max={entitlement?.remainingSessions ?? 0}
+                        step="1"
+                        value={changeForm.carryOverSessions}
+                        onChange={(e) => setChangeForm((f) => ({ ...f, carryOverSessions: e.target.value }))}
+                        className="w-full rounded-lg border border-[color:var(--ring)] px-2 py-1.5 text-sm"
+                      />
+                    </label>
+                  )}
+                  {changeForm.targetPlanType !== "casual" && (
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-[color:var(--muted)]">Discount</span>
+                      <select
+                        value={changeForm.discountType}
+                        onChange={(e) => setChangeForm((f) => ({ ...f, discountType: e.target.value as "" | "percent" | "fixed" }))}
+                        className="w-full rounded-lg border border-[color:var(--ring)] px-2 py-1.5 text-sm"
+                      >
+                        <option value="">No discount</option>
+                        <option value="percent">Percentage off</option>
+                        <option value="fixed">Fixed dollar off</option>
+                      </select>
+                    </label>
+                  )}
+                  {changeForm.targetPlanType !== "casual" && changeForm.discountType && (
+                    <>
+                      <label className="space-y-1">
+                        <span className="text-xs font-semibold text-[color:var(--muted)]">
+                          {changeForm.discountType === "percent" ? "Percent (0-100)" : "Amount off (AUD)"}
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          step={changeForm.discountType === "percent" ? "1" : "0.01"}
+                          value={changeForm.discountValue}
+                          onChange={(e) => setChangeForm((f) => ({ ...f, discountValue: e.target.value }))}
+                          className="w-full rounded-lg border border-[color:var(--ring)] px-2 py-1.5 text-sm"
+                        />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-xs font-semibold text-[color:var(--muted)]">Discount reason</span>
+                        <input
+                          value={changeForm.discountReason}
+                          onChange={(e) => setChangeForm((f) => ({ ...f, discountReason: e.target.value }))}
+                          className="w-full rounded-lg border border-[color:var(--ring)] px-2 py-1.5 text-sm"
+                        />
+                      </label>
+                    </>
+                  )}
+                  <label className="space-y-1 md:col-span-2">
+                    <span className="text-xs font-semibold text-[color:var(--muted)]">Reason for this change *</span>
+                    <input
+                      value={changeForm.reason}
+                      onChange={(e) => setChangeForm((f) => ({ ...f, reason: e.target.value }))}
+                      placeholder="e.g. Family agreed to move to a 10-session package from this term"
+                      className="w-full rounded-lg border border-[color:var(--ring)] px-2 py-1.5 text-sm"
+                    />
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleChangeArrangement}
+                  disabled={arrangementBusy}
+                  className="rounded-xl bg-[color:var(--brand)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                >
+                  {arrangementBusy ? "Saving…" : "Confirm change"}
+                </button>
+              </div>
+            )}
 
             {showRenewForm && (
               <div className="rounded-xl border border-dashed border-[color:var(--ring)] p-3 space-y-2">
@@ -1512,6 +1806,20 @@ export default function AdminStudentDetailPage() {
                       onChange={(e) => setRenewForm((f) => ({ ...f, carryOverSessions: e.target.value }))}
                       className="w-full rounded-lg border border-[color:var(--ring)] px-2 py-1.5 text-sm"
                     />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs font-semibold text-[color:var(--muted)]">
+                      Mode {plan.mode ? `(currently: ${plan.mode === "online" ? "Online" : "In-home"})` : ""}
+                    </span>
+                    <select
+                      value={renewForm.mode}
+                      onChange={(e) => setRenewForm((f) => ({ ...f, mode: e.target.value as "" | "in_home" | "online" }))}
+                      className="w-full rounded-lg border border-[color:var(--ring)] px-2 py-1.5 text-sm"
+                    >
+                      <option value="">Keep current mode</option>
+                      <option value="in_home">In-home</option>
+                      <option value="online">Online</option>
+                    </select>
                   </label>
                   <label className="space-y-1">
                     <span className="text-xs font-semibold text-[color:var(--muted)]">

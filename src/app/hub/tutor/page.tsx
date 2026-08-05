@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, Timestamp } from "firebase/firestore";
+import { doc, getDoc, collection, query, where, getDocs, Timestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 
 // ─── Workspace card ───────────────────────────────────────────────────────────
@@ -232,11 +232,14 @@ function ProfileCard({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+type PendingHandover = { studentId: string; studentName: string };
+
 export default function TutorHomePage() {
   const [showApprovedBanner, setShowApprovedBanner] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [profileStatus, setProfileStatus] = useState<ProfileStatus | null>(null);
   const [profileData, setProfileData] = useState<Record<string, unknown> | null>(null);
+  const [pendingHandovers, setPendingHandovers] = useState<PendingHandover[]>([]);
 
   const timeOfDay = (() => {
     const h = new Date().getHours();
@@ -269,6 +272,17 @@ export default function TutorHomePage() {
         setProfileStatus(knownStatuses.includes(raw as ProfileStatus) ? (raw as ProfileStatus) : "draft");
         setProfileData(tdata);
       }
+
+      // Release 1B.1: new handovers awaiting the tutor's first action.
+      const handoversSnap = await getDocs(
+        query(collection(db, "tutorHandovers"), where("tutorId", "==", u.uid), where("status", "==", "pending"))
+      );
+      setPendingHandovers(
+        handoversSnap.docs.map((d) => ({
+          studentId: d.id,
+          studentName: String((d.data() as { studentName?: string }).studentName ?? "Student"),
+        }))
+      );
     });
     return () => off();
   }, []);
@@ -303,6 +317,27 @@ export default function TutorHomePage() {
           Tutor access approved. You now have full Tutor Portal access.
         </div>
       )}
+
+      {/* New student handover(s) — Release 1B.1 */}
+      {pendingHandovers.map((h) => (
+        <Link
+          key={h.studentId}
+          href={`/hub/tutor/handover/${h.studentId}`}
+          style={{
+            display: "block",
+            borderRadius: 16,
+            padding: "12px 16px",
+            fontSize: 13,
+            color: "#1d2428",
+            background: "linear-gradient(135deg, #eef4f8 0%, #e3edf3 100%)",
+            border: "1px solid #b8cad6",
+            borderTop: "2px solid #456071",
+            textDecoration: "none",
+          }}
+        >
+          <strong>New student match confirmed: {h.studentName}.</strong> View handover details and next steps →
+        </Link>
+      ))}
 
       {/* Profile status card — shown once data is loaded */}
       {profileStatus !== null && (

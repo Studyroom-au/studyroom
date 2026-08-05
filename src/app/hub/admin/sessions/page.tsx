@@ -155,6 +155,17 @@ export default function AdminSessionsCalendarPage() {
 
   const [openId, setOpenId] = useState<string | null>(null);
 
+  // Release 1B.1: "Complete on behalf of tutor" — admin-only override form.
+  const [showAdminComplete, setShowAdminComplete] = useState(false);
+  const [adminCompleteBusy, setAdminCompleteBusy] = useState(false);
+  const [adminCompleteMsg, setAdminCompleteMsg] = useState<string | null>(null);
+  const [adminCompleteForm, setAdminCompleteForm] = useState({
+    outcome: "completed" as "completed" | "no_show",
+    note: "",
+    actualCompletionDate: "",
+    reason: "",
+  });
+
   // Oversight view (Release 1B, final polish item 1) — Calendar stays the
   // existing drag/resize view; Agenda is a flat, filterable list. Filters
   // apply to both views and to the Today summary / Needs Attention below.
@@ -486,6 +497,42 @@ export default function AdminSessionsCalendarPage() {
 
   function onEventClick(arg: EventClickArg) {
     setOpenId(arg.event.id);
+  }
+
+  async function runAdminComplete() {
+    const user = auth.currentUser;
+    if (!user || !openSession) return;
+    if (!adminCompleteForm.note.trim()) {
+      setAdminCompleteMsg("A session note is required.");
+      return;
+    }
+    if (!adminCompleteForm.reason.trim()) {
+      setAdminCompleteMsg("A reason is required for an admin override.");
+      return;
+    }
+    setAdminCompleteBusy(true);
+    setAdminCompleteMsg(null);
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch("/api/sessions/admin-complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({
+          sessionId: openSession.id,
+          outcome: adminCompleteForm.outcome,
+          note: adminCompleteForm.note.trim(),
+          actualCompletionDate: adminCompleteForm.actualCompletionDate || null,
+          reason: adminCompleteForm.reason.trim(),
+        }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result?.error || "Failed to complete session.");
+      window.location.reload();
+    } catch (e) {
+      setAdminCompleteMsg(e instanceof Error ? e.message : "Failed to complete session.");
+    } finally {
+      setAdminCompleteBusy(false);
+    }
   }
 
   async function runAdminAction(action: "no_show" | "apply_grace") {
@@ -857,6 +904,77 @@ export default function AdminSessionsCalendarPage() {
                   : "No notice recorded"}
             </div>
           </div>
+
+          {normalizeSessionStatus(openSession.data.status) === "scheduled" && (
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminCompleteMsg(null);
+                  setShowAdminComplete((v) => !v);
+                }}
+                className="rounded-xl border border-[color:var(--ring)] bg-white px-4 py-2 text-sm font-semibold text-[color:var(--brand)] hover:bg-[#d6e5e3]/40"
+              >
+                {showAdminComplete ? "Cancel" : "Complete on behalf of tutor"}
+              </button>
+              {showAdminComplete && (
+                <div className="mt-2 space-y-2 rounded-xl border border-dashed border-[color:var(--ring)] p-3">
+                  <label className="block space-y-1">
+                    <span className="text-xs font-semibold text-[color:var(--muted)]">Attendance / outcome</span>
+                    <select
+                      value={adminCompleteForm.outcome}
+                      onChange={(e) => setAdminCompleteForm((f) => ({ ...f, outcome: e.target.value as "completed" | "no_show" }))}
+                      className="w-full rounded-lg border border-[color:var(--ring)] px-2 py-1.5 text-sm"
+                    >
+                      <option value="completed">Completed</option>
+                      <option value="no_show">No-show</option>
+                    </select>
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-xs font-semibold text-[color:var(--muted)]">Session note *</span>
+                    <textarea
+                      value={adminCompleteForm.note}
+                      onChange={(e) => setAdminCompleteForm((f) => ({ ...f, note: e.target.value }))}
+                      rows={3}
+                      className="w-full rounded-lg border border-[color:var(--ring)] px-2 py-1.5 text-sm"
+                    />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-xs font-semibold text-[color:var(--muted)]">Actual completion date (if different)</span>
+                    <input
+                      type="date"
+                      value={adminCompleteForm.actualCompletionDate}
+                      onChange={(e) => setAdminCompleteForm((f) => ({ ...f, actualCompletionDate: e.target.value }))}
+                      className="w-full rounded-lg border border-[color:var(--ring)] px-2 py-1.5 text-sm"
+                    />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-xs font-semibold text-[color:var(--muted)]">Reason for admin override *</span>
+                    <select
+                      value={adminCompleteForm.reason}
+                      onChange={(e) => setAdminCompleteForm((f) => ({ ...f, reason: e.target.value }))}
+                      className="w-full rounded-lg border border-[color:var(--ring)] px-2 py-1.5 text-sm"
+                    >
+                      <option value="">Select a reason…</option>
+                      <option value="Tutor forgot to complete session">Tutor forgot to complete session</option>
+                      <option value="Tutor entered incomplete notes">Tutor entered incomplete notes</option>
+                      <option value="Confirmed with tutor manually">Confirmed with tutor manually</option>
+                      <option value="Administrative correction">Administrative correction</option>
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={runAdminComplete}
+                    disabled={adminCompleteBusy}
+                    className="rounded-xl bg-[color:var(--brand)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                  >
+                    {adminCompleteBusy ? "Saving…" : "Confirm completion"}
+                  </button>
+                  {adminCompleteMsg && <p className="text-xs text-red-600">{adminCompleteMsg}</p>}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="mt-4">
             <SessionLogEditor sessionId={openSession.id} />

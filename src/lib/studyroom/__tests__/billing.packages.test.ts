@@ -4,6 +4,7 @@ import {
   isPrepaidPlan,
   normalizePlanType,
   formatPlanLabel,
+  isSessionAlreadyResolved,
 } from "../billing";
 
 // Release 1B: current sellable packages are casual / package_5 / package_10
@@ -65,5 +66,23 @@ describe("formatPlanLabel", () => {
     expect(formatPlanLabel("package_12")).toBe("12-session package (legacy)");
     expect(formatPlanLabel("package_5")).toBe("5-session package");
     expect(formatPlanLabel("casual")).toBe("Casual");
+  });
+});
+
+describe("isSessionAlreadyResolved — Release 1B.1 admin-complete idempotency/refusal guard", () => {
+  it("is true for completed, no_show, and both cancellation states", () => {
+    expect(isSessionAlreadyResolved("completed")).toBe(true);
+    expect(isSessionAlreadyResolved("no_show")).toBe(true);
+    expect(isSessionAlreadyResolved("cancelled_by_parent")).toBe(true);
+    expect(isSessionAlreadyResolved("cancelled_by_tutor")).toBe(true);
+  });
+
+  it("is false for a still-scheduled session", () => {
+    expect(isSessionAlreadyResolved("scheduled")).toBe(false);
+  });
+
+  it("is false for missing/null status", () => {
+    expect(isSessionAlreadyResolved(null)).toBe(false);
+    expect(isSessionAlreadyResolved(undefined)).toBe(false);
   });
 });

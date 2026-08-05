@@ -456,6 +456,25 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // ---------------- TUTOR HANDOVERS (Release 1B.1) ----------------
+    // Structured handover packet (student/parent details, availability,
+    // suggested next steps) — created ONLY by the admin-only, server-side
+    // POST /api/tutors/handover/confirm action, deliberately separate from
+    // (and later than) the existing tutor-assignment write. Doc ID ==
+    // studentId. Only the assigned tutor on this specific handover may read
+    // it — never a different/unrelated tutor — and that tutor may only ever
+    // change their own status/statusUpdatedBy/statusUpdatedAt fields
+    // (Contacted parent / First session booked / Need admin help), never any
+    // of the family-detail fields.
+    match /tutorHandovers/{studentId} {
+      allow read, create, delete: if isAdmin();
+      allow update: if isAdmin();
+      allow read: if isTutor() && resource.data.tutorId == request.auth.uid;
+      allow update: if isTutor()
+        && resource.data.tutorId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "statusUpdatedBy", "statusUpdatedAt"]);
+    }
+
     // ---------------- PACKAGES ----------------
     match /packages/{packageId} {
       allow read, write: if isAdmin();

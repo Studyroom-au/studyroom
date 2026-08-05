@@ -1,6 +1,6 @@
 import { beforeEach, afterAll, describe, it, expect } from "vitest";
 import { getAdminDb } from "@/lib/firebaseAdmin";
-import { createPlan, renewPlan, correctEntitlementBalance } from "../planCommerce";
+import { createPlan, renewPlan, correctEntitlementBalance, changeArrangement } from "../planCommerce";
 
 const ACTOR = "lily.studyroom@gmail.com";
 
@@ -15,9 +15,19 @@ async function clearAll() {
 beforeEach(clearAll);
 afterAll(clearAll);
 
+// Release 1B.1: pricing is mode-specific (4 prices). Existing tests below
+// exercise discount/carry-over/multi-student logic, not mode-price
+// differentiation itself (see packagePricing.test.ts for that) — so both
+// modes are seeded with the same two base values to keep every pre-existing
+// price assertion valid regardless of which mode a given test happens to use.
 async function seedPricing(package5 = 42500, package10 = 80000) {
   const db = getAdminDb();
-  await db.collection("settings").doc("packagePricing").set({ package5PriceCents: package5, package10PriceCents: package10 });
+  await db.collection("settings").doc("packagePricing").set({
+    package5InHomePriceCents: package5,
+    package5OnlinePriceCents: package5,
+    package10InHomePriceCents: package10,
+    package10OnlinePriceCents: package10,
+  });
 }
 
 async function seedStudentAndClient(studentId: string, clientId: string) {
@@ -354,5 +364,231 @@ describe("multi-student families (pre-Stage-6 correction)", () => {
 
     const planD = (await db.collection("plans").doc(resultD.planId).get()).data();
     expect(planD?.status).toBe("active"); // never flipped to expired by C's renewal
+  });
+});
+
+describe("changeArrangement (emulator) — Release 1B.1", () => {
+  async function seedCasual(studentId: string, clientId: string, planId: string) {
+    const db = getAdminDb();
+    await seedStudentAndClient(studentId, clientId);
+    await db.collection("plans").doc(planId).set({
+      clientId,
+      studentId,
+      type: "casual",
+      mode: "in_home",
+      status: "active",
+    });
+    await db.collection("students").doc(studentId).set({ activePlanId: planId }, { merge: true });
+  }
+
+  async function seedLegacy(studentId: string, clientId: string, planId: string, remainingSessions: number) {
+    const db = getAdminDb();
+    await seedStudentAndClient(studentId, clientId);
+    await db.collection("plans").doc(planId).set({
+      clientId,
+      studentId,
+      type: "package_12",
+      mode: "in_home",
+      status: "active",
+    });
+    await db.collection("entitlements").doc(planId).set({ planId, remainingSessions, bonusRemaining: 2, termId: "2026-T3" });
+    await db.collection("students").doc(studentId).set({ activePlanId: planId }, { merge: true });
+  }
+
+  it("no plan at all -> package_10: creates plan/entitlement/invoice, no prior plan to expire", async () => {
+    const db = getAdminDb();
+    await seedPricing();
+    await seedStudentAndClient("s-none", "c-none");
+
+    const result = await changeArrangement(db, {
+      studentId: "s-none",
+      targetPlanType: "package_10",
+      mode: "in_home",
+      reason: "Family agreed to a 10-session package",
+      actor: ACTOR,
+    });
+
+    expect(result.oldPlanId).toBeNull();
+    const entitlement = (await db.collection("entitlements").doc(result.entitlementId!).get()).data();
+    expect(entitlement?.remainingSessions).toBe(10);
+    const student = (await db.collection("students").doc("s-none").get()).data();
+    expect(student?.activePlanId).toBe(result.newPlanId);
+  });
+
+  it("Casual -> package_5: expires the Casual plan, creates package_5 plan+entitlement+invoice", async () => {
+    const db = getAdminDb();
+    await seedPricing();
+    await seedCasual("s-c5", "c-c5", "old-casual-1");
+
+    const result = await changeArrangement(db, {
+      studentId: "s-c5",
+      targetPlanType: "package_5",
+      mode: "in_home",
+      reason: "Moving from casual to a 5-session package",
+      actor: ACTOR,
+    });
+
+    const oldPlan = (await db.collection("plans").doc("old-casual-1").get()).data();
+    expect(oldPlan?.status).toBe("expired");
+    expect(oldPlan?.type).toBe("casual"); // history preserved, never rewritten
+
+    const newPlan = (await db.collection("plans").doc(result.newPlanId).get()).data();
+    expect(newPlan?.type).toBe("package_5");
+    expect(newPlan?.changedFromPlanId).toBe("old-casual-1");
+    expect(newPlan?.standardPriceCents).toBe(42500);
+
+    const entitlement = (await db.collection("entitlements").doc(result.entitlementId!).get()).data();
+    expect(entitlement?.remainingSessions).toBe(5);
+
+    const invoicesSnap = await db.collection("invoices").where("studentId", "==", "s-c5").get();
+    expect(invoicesSnap.size).toBe(1); // no duplicate invoice
+
+    const student = (await db.collection("students").doc("s-c5").get()).data();
+    expect(student?.activePlanId).toBe(result.newPlanId);
+  });
+
+  it("Casual -> package_10 with sessions already delivered: starting balance reduced, never negative, fully auditable", async () => {
+    const db = getAdminDb();
+    await seedPricing();
+    await seedCasual("s-c10", "c-c10", "old-casual-2");
+
+    const result = await changeArrangement(db, {
+      studentId: "s-c10",
+      targetPlanType: "package_10",
+      mode: "online",
+      sessionsAlreadyCompleted: 3,
+      reason: "Two casual sessions already delivered before the package was entered by admin",
+      actor: ACTOR,
+    });
+
+    const entitlement = (await db.collection("entitlements").doc(result.entitlementId!).get()).data();
+    expect(entitlement?.remainingSessions).toBe(7); // 10 seed - 3 already completed
+
+    const newPlan = (await db.collection("plans").doc(result.newPlanId).get()).data();
+    expect(newPlan?.initialSessionsAlreadyCompleted).toBe(3);
+    expect(newPlan?.arrangementChangedBy).toBe(ACTOR);
+    expect(newPlan?.arrangementChangeReason).toMatch(/already delivered/i);
+
+    // Invoice is for the full package price — already-delivered sessions
+    // were billed separately as casual invoices, never duplicated here.
+    const invoice = (await db.collection("invoices").doc(result.invoiceId!).get()).data();
+    expect(invoice?.amountCents).toBe(80000);
+  });
+
+  it("rejects sessionsAlreadyCompleted greater than the new package's own seed size", async () => {
+    const db = getAdminDb();
+    await seedPricing();
+    await seedCasual("s-toomany", "c-toomany", "old-casual-3");
+
+    await expect(
+      changeArrangement(db, {
+        studentId: "s-toomany",
+        targetPlanType: "package_5",
+        mode: "in_home",
+        sessionsAlreadyCompleted: 6,
+        reason: "test",
+        actor: ACTOR,
+      })
+    ).rejects.toThrow(/only includes 5/i);
+  });
+
+  it("legacy package_12 -> package_5 with carry-over capped at actual remaining legacy balance", async () => {
+    const db = getAdminDb();
+    await seedPricing();
+    await seedLegacy("s-legacy5", "c-legacy5", "old-legacy-1", 4);
+
+    const result = await changeArrangement(db, {
+      studentId: "s-legacy5",
+      targetPlanType: "package_5",
+      mode: "in_home",
+      carryOverSessions: 4,
+      reason: "Transitioning off the legacy 12-session package",
+      actor: ACTOR,
+    });
+
+    const oldPlan = (await db.collection("plans").doc("old-legacy-1").get()).data();
+    expect(oldPlan?.status).toBe("expired");
+    expect(oldPlan?.type).toBe("package_12"); // legacy history preserved as-is
+
+    const entitlement = (await db.collection("entitlements").doc(result.entitlementId!).get()).data();
+    expect(entitlement?.remainingSessions).toBe(9); // 5 seed + 4 carry-over
+  });
+
+  it("legacy package_12 -> package_10 rejects carry-over greater than the legacy balance", async () => {
+    const db = getAdminDb();
+    await seedPricing();
+    await seedLegacy("s-legacy10", "c-legacy10", "old-legacy-2", 2);
+
+    await expect(
+      changeArrangement(db, {
+        studentId: "s-legacy10",
+        targetPlanType: "package_10",
+        mode: "in_home",
+        carryOverSessions: 5,
+        reason: "test",
+        actor: ACTOR,
+      })
+    ).rejects.toThrow(/cannot exceed/i);
+  });
+
+  it("rejects setting both sessionsAlreadyCompleted and carryOverSessions at once", async () => {
+    const db = getAdminDb();
+    await seedPricing();
+    await seedCasual("s-both", "c-both", "old-casual-4");
+
+    await expect(
+      changeArrangement(db, {
+        studentId: "s-both",
+        targetPlanType: "package_5",
+        mode: "in_home",
+        sessionsAlreadyCompleted: 1,
+        carryOverSessions: 1,
+        reason: "test",
+        actor: ACTOR,
+      })
+    ).rejects.toThrow(/only one of/i);
+  });
+
+  it("rejects a missing reason", async () => {
+    const db = getAdminDb();
+    await seedPricing();
+    await seedCasual("s-noreason", "c-noreason", "old-casual-5");
+
+    await expect(
+      changeArrangement(db, { studentId: "s-noreason", targetPlanType: "package_5", mode: "in_home", reason: "", actor: ACTOR })
+    ).rejects.toThrow(/reason is required/i);
+  });
+
+  it("rejects changing an already-current package_5/package_10 plan (must use renewPlan instead)", async () => {
+    const db = getAdminDb();
+    await seedPricing();
+    await seedStudentAndClient("s-alreadypkg", "c-alreadypkg");
+    await db.collection("plans").doc("existing-pkg").set({ clientId: "c-alreadypkg", studentId: "s-alreadypkg", type: "package_5", status: "active", mode: "in_home" });
+    await db.collection("entitlements").doc("existing-pkg").set({ remainingSessions: 3, bonusRemaining: 0, termId: "2026-T3" });
+    await db.collection("students").doc("s-alreadypkg").set({ activePlanId: "existing-pkg" }, { merge: true });
+
+    await expect(
+      changeArrangement(db, { studentId: "s-alreadypkg", targetPlanType: "package_10", mode: "in_home", reason: "test", actor: ACTOR })
+    ).rejects.toThrow(/renew package/i);
+  });
+
+  it("sibling's arrangement is completely unaffected by another sibling's change", async () => {
+    const db = getAdminDb();
+    await seedPricing();
+    await db.collection("clients").doc("family-3").set({ parentEmail: "family3@example.com" });
+    await db.collection("students").doc("student-e").set({ studentName: "Student E", clientId: "family-3" });
+    await db.collection("students").doc("student-f").set({ studentName: "Student F", clientId: "family-3" });
+    await db.collection("plans").doc("casual-e").set({ clientId: "family-3", studentId: "student-e", type: "casual", status: "active", mode: "in_home" });
+    await db.collection("plans").doc("casual-f").set({ clientId: "family-3", studentId: "student-f", type: "casual", status: "active", mode: "in_home" });
+    await db.collection("students").doc("student-e").set({ activePlanId: "casual-e" }, { merge: true });
+    await db.collection("students").doc("student-f").set({ activePlanId: "casual-f" }, { merge: true });
+
+    await changeArrangement(db, { studentId: "student-e", targetPlanType: "package_10", mode: "in_home", reason: "test", actor: ACTOR });
+
+    const studentF = (await db.collection("students").doc("student-f").get()).data();
+    expect(studentF?.activePlanId).toBe("casual-f"); // untouched
+
+    const planF = (await db.collection("plans").doc("casual-f").get()).data();
+    expect(planF?.status).toBe("active"); // never flipped to expired by sibling's change
   });
 });

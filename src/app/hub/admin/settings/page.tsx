@@ -8,8 +8,14 @@ import { CASUAL_PRICING_TIERS } from "@/lib/studyroom/billing";
 import { DEFAULT_OPERATIONS_CUTOVER_ISO } from "@/lib/studyroom/operationsCutover";
 
 type PackagePricingDoc = {
-  package5PriceCents?: number;
-  package10PriceCents?: number;
+  package5InHomePriceCents?: number;
+  package5OnlinePriceCents?: number;
+  package10InHomePriceCents?: number;
+  package10OnlinePriceCents?: number;
+  // Legacy, non-mode-specific fields from before Release 1B.1 — displayed as
+  // legacy/informational only, never written by this page again.
+  package5PriceCents?: number | null;
+  package10PriceCents?: number | null;
   updatedBy?: string;
   updatedAt?: { toDate?: () => Date } | null;
 };
@@ -49,8 +55,10 @@ function todayBrisbaneDateString(): string {
 export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [current, setCurrent] = useState<PackagePricingDoc | null>(null);
-  const [package5, setPackage5] = useState("");
-  const [package10, setPackage10] = useState("");
+  const [package5InHome, setPackage5InHome] = useState("");
+  const [package5Online, setPackage5Online] = useState("");
+  const [package10InHome, setPackage10InHome] = useState("");
+  const [package10Online, setPackage10Online] = useState("");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -92,8 +100,10 @@ export default function AdminSettingsPage() {
         if (snap.exists()) {
           const data = snap.data() as PackagePricingDoc;
           setCurrent(data);
-          setPackage5(centsToDollarsInput(data.package5PriceCents));
-          setPackage10(centsToDollarsInput(data.package10PriceCents));
+          setPackage5InHome(centsToDollarsInput(data.package5InHomePriceCents));
+          setPackage5Online(centsToDollarsInput(data.package5OnlinePriceCents));
+          setPackage10InHome(centsToDollarsInput(data.package10InHomePriceCents));
+          setPackage10Online(centsToDollarsInput(data.package10OnlinePriceCents));
         }
         await loadCasualPricing();
         await loadOperationsCutover();
@@ -216,10 +226,12 @@ export default function AdminSettingsPage() {
     const user = auth.currentUser;
     if (!user) return;
 
-    const p5 = Math.round(Number(package5) * 100);
-    const p10 = Math.round(Number(package10) * 100);
-    if (!Number.isFinite(p5) || p5 <= 0 || !Number.isFinite(p10) || p10 <= 0) {
-      setMsg("Enter a valid price (in dollars) for both packages.");
+    const p5h = Math.round(Number(package5InHome) * 100);
+    const p5o = Math.round(Number(package5Online) * 100);
+    const p10h = Math.round(Number(package10InHome) * 100);
+    const p10o = Math.round(Number(package10Online) * 100);
+    if ([p5h, p5o, p10h, p10o].some((v) => !Number.isFinite(v) || v <= 0)) {
+      setMsg("Enter a valid price (in dollars) for all four packages.");
       return;
     }
 
@@ -229,14 +241,25 @@ export default function AdminSettingsPage() {
       const res = await fetch("/api/settings/package-pricing", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({ package5PriceCents: p5, package10PriceCents: p10 }),
+        body: JSON.stringify({
+          package5InHomePriceCents: p5h,
+          package5OnlinePriceCents: p5o,
+          package10InHomePriceCents: p10h,
+          package10OnlinePriceCents: p10o,
+        }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
         setMsg(json?.error || "Failed to save.");
       } else {
         setMsg("Saved.");
-        setCurrent((prev) => ({ ...prev, package5PriceCents: p5, package10PriceCents: p10 }));
+        setCurrent((prev) => ({
+          ...prev,
+          package5InHomePriceCents: p5h,
+          package5OnlinePriceCents: p5o,
+          package10InHomePriceCents: p10h,
+          package10OnlinePriceCents: p10o,
+        }));
       }
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Failed to save.");
@@ -267,33 +290,63 @@ export default function AdminSettingsPage() {
         <div style={{ background: "white", borderRadius: 16, border: "1px solid #e5e7eb", padding: 24 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1f24", marginBottom: 14 }}>Package pricing</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <div>
-              <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#748398", marginBottom: 6 }}>
-                5-session package — standard price (AUD)
-              </label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={package5}
-                onChange={(e) => setPackage5(e.target.value)}
-                placeholder="e.g. 425.00"
-                style={{ width: "100%", border: "1.5px solid rgba(0,0,0,0.09)", borderRadius: 8, padding: "8px 10px", fontSize: 14, fontFamily: "inherit", boxSizing: "border-box" }}
-              />
-            </div>
-            <div>
-              <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#748398", marginBottom: 6 }}>
-                10-session package — standard price (AUD)
-              </label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={package10}
-                onChange={(e) => setPackage10(e.target.value)}
-                placeholder="e.g. 800.00"
-                style={{ width: "100%", border: "1.5px solid rgba(0,0,0,0.09)", borderRadius: 8, padding: "8px 10px", fontSize: 14, fontFamily: "inherit", boxSizing: "border-box" }}
-              />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div>
+                <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#748398", marginBottom: 6 }}>
+                  5-session — in-home (AUD)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={package5InHome}
+                  onChange={(e) => setPackage5InHome(e.target.value)}
+                  placeholder="e.g. 425.00"
+                  style={{ width: "100%", border: "1.5px solid rgba(0,0,0,0.09)", borderRadius: 8, padding: "8px 10px", fontSize: 14, fontFamily: "inherit", boxSizing: "border-box" }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#748398", marginBottom: 6 }}>
+                  5-session — online (AUD)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={package5Online}
+                  onChange={(e) => setPackage5Online(e.target.value)}
+                  placeholder="e.g. 375.00"
+                  style={{ width: "100%", border: "1.5px solid rgba(0,0,0,0.09)", borderRadius: 8, padding: "8px 10px", fontSize: 14, fontFamily: "inherit", boxSizing: "border-box" }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#748398", marginBottom: 6 }}>
+                  10-session — in-home (AUD)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={package10InHome}
+                  onChange={(e) => setPackage10InHome(e.target.value)}
+                  placeholder="e.g. 800.00"
+                  style={{ width: "100%", border: "1.5px solid rgba(0,0,0,0.09)", borderRadius: 8, padding: "8px 10px", fontSize: 14, fontFamily: "inherit", boxSizing: "border-box" }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#748398", marginBottom: 6 }}>
+                  10-session — online (AUD)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={package10Online}
+                  onChange={(e) => setPackage10Online(e.target.value)}
+                  placeholder="e.g. 725.00"
+                  style={{ width: "100%", border: "1.5px solid rgba(0,0,0,0.09)", borderRadius: 8, padding: "8px 10px", fontSize: 14, fontFamily: "inherit", boxSizing: "border-box" }}
+                />
+              </div>
             </div>
             <div>
               <button
@@ -311,6 +364,11 @@ export default function AdminSettingsPage() {
               <div style={{ fontSize: 11, color: "#9aa5ad" }}>
                 Last updated {current.updatedAt.toDate().toLocaleString("en-AU")}
                 {current.updatedBy ? ` by ${current.updatedBy}` : ""}
+              </div>
+            )}
+            {(current?.package5PriceCents != null || current?.package10PriceCents != null) && (
+              <div style={{ fontSize: 11, color: "#9aa5ad", fontStyle: "italic" }}>
+                Legacy (pre-mode-specific) prices on record, no longer used: 5-session {formatCents(current?.package5PriceCents ?? undefined)}, 10-session {formatCents(current?.package10PriceCents ?? undefined)}.
               </div>
             )}
           </div>

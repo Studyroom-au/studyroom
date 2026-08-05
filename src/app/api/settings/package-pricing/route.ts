@@ -32,18 +32,26 @@ export async function POST(req: Request) {
     }
 
     const body = (await req.json().catch(() => ({}))) as {
-      package5PriceCents?: number;
-      package10PriceCents?: number;
+      package5InHomePriceCents?: number;
+      package5OnlinePriceCents?: number;
+      package10InHomePriceCents?: number;
+      package10OnlinePriceCents?: number;
     };
 
-    const package5PriceCents = Number(body.package5PriceCents);
-    const package10PriceCents = Number(body.package10PriceCents);
+    const fields: Array<[string, number | undefined]> = [
+      ["package5InHomePriceCents", body.package5InHomePriceCents],
+      ["package5OnlinePriceCents", body.package5OnlinePriceCents],
+      ["package10InHomePriceCents", body.package10InHomePriceCents],
+      ["package10OnlinePriceCents", body.package10OnlinePriceCents],
+    ];
 
-    if (!Number.isFinite(package5PriceCents) || !Number.isInteger(package5PriceCents) || package5PriceCents <= 0) {
-      return NextResponse.json({ error: "package5PriceCents must be a positive whole number of cents." }, { status: 400 });
-    }
-    if (!Number.isFinite(package10PriceCents) || !Number.isInteger(package10PriceCents) || package10PriceCents <= 0) {
-      return NextResponse.json({ error: "package10PriceCents must be a positive whole number of cents." }, { status: 400 });
+    const validated: Record<string, number> = {};
+    for (const [name, raw] of fields) {
+      const value = Number(raw);
+      if (!Number.isFinite(value) || !Number.isInteger(value) || value <= 0) {
+        return NextResponse.json({ error: `${name} must be a positive whole number of cents.` }, { status: 400 });
+      }
+      validated[name] = value;
     }
 
     await db
@@ -51,15 +59,14 @@ export async function POST(req: Request) {
       .doc(PACKAGE_PRICING_DOC_ID)
       .set(
         {
-          package5PriceCents,
-          package10PriceCents,
+          ...validated,
           updatedBy: decoded.email ?? decoded.uid,
           updatedAt: FieldValue.serverTimestamp(),
         },
         { merge: true }
       );
 
-    return NextResponse.json({ ok: true, package5PriceCents, package10PriceCents });
+    return NextResponse.json({ ok: true, ...validated });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to update package pricing";
     return NextResponse.json({ error: message }, { status: 500 });
