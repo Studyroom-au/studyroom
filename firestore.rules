@@ -193,9 +193,16 @@ service cloud.firestore {
     match /leads/{leadId} {
       allow read, write: if isAdmin();
 
-      // Tutors can read unclaimed leads or leads they have claimed
+      // Tutors can read unclaimed leads or leads they have claimed.
+      // Release 1C privacy hotfix: `type == "tutor_request"` leads are a
+      // separate recruitment-applicant record (name/email from the public
+      // "Request tutor access" form, see docs), not a tutoring lead — they
+      // must never be readable by ordinary tutors just because they're
+      // unclaimed and "new". Only that carve-out is new; a tutor's existing
+      // ability to read a lead they've actually claimed is unchanged.
       allow read: if isTutor() && (
-        (resource.data.status == "new" && resource.data.claimedTutorId == null) ||
+        (resource.data.status == "new" && resource.data.claimedTutorId == null
+          && resource.data.get("type", "") != "tutor_request") ||
         (resource.data.claimedTutorId != null && resource.data.claimedTutorId == request.auth.uid)
       );
 
@@ -212,6 +219,31 @@ service cloud.firestore {
     // ---------------- ENQUIRIES ----------------
     match /enquiries/{enquiryId} {
       allow read, write: if isTutorOrAdmin();
+    }
+
+    // ---------------- HUB EARLY ACCESS (Release 1C) ----------------
+    // Public expression-of-interest intake for standalone Hub access (demand
+    // validation only — never creates an account, subscription, or role).
+    // Deliberately NOT the `leads` collection: leads are readable by any tutor
+    // with an unclaimed "new" status, which would leak these submissions into
+    // the tutor-facing lead queue. Same admin-only, server-write-only shape as
+    // /settings above — all creates go through the Admin SDK
+    // (POST /api/hub/early-access), which bypasses these rules entirely.
+    match /hubEarlyAccess/{submissionId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // ---------------- TUTOR APPLICATIONS (Release 1C) ----------------
+    // Public pre-account tutor recruitment intake (website "Apply to tutor"
+    // form). This is intentionally separate from tutorAccessRequest (an
+    // authenticated field on users/{uid}) and tutors/{uid} (the operational
+    // tutor profile) — a public applicant has neither a Firebase Auth account
+    // nor a role yet. Intake inbox only, no recruitment-stage state machine.
+    // All creates go through the Admin SDK (POST /api/tutor-applications).
+    match /tutorApplications/{applicationId} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     // ---------------- CLIENTS ----------------

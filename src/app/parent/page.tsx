@@ -7,6 +7,7 @@ import { auth } from "@/lib/firebase";
 import Image from "next/image";
 import Link from "next/link";
 import FeedbackButton from "@/components/FeedbackButton";
+import SubjectBadge from "@/components/SubjectBadge";
 
 // ─── Constants ───────────────────────────────────────────
 const YEAR_LEVELS = [
@@ -21,6 +22,8 @@ type TaskItem = {
   done: boolean;
   source?: string;
   dueDate?: string | null;
+  upcomingId?: string;
+  subject?: string;
 };
 
 type UpcomingItem = {
@@ -685,6 +688,10 @@ function TaskRow({ task }: { task: TaskItem }) {
   const sourceLabel =
     task.source === "parent_assigned" ? "From parent" :
     task.source === "tutor_assigned" ? "From tutor" : null;
+  // The API already resolves the final subject (assessment's own subject, or
+  // a confident detection from the assessment's title, or nothing) — no
+  // client-side re-derivation needed here.
+  const linkedSubject = task.subject && task.subject.trim() ? task.subject : null;
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 9,
@@ -711,6 +718,7 @@ function TaskRow({ task }: { task: TaskItem }) {
         display: "flex", alignItems: "center", flexWrap: "wrap" as const, gap: 5,
       }}>
         {task.title}
+        {linkedSubject && <SubjectBadge subject={linkedSubject} />}
         {sourceLabel && (
           <span style={{
             fontSize: 9, fontWeight: 600, padding: "2px 7px", borderRadius: 20,

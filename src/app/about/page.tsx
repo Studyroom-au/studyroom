@@ -1,5 +1,16 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  // Just "About" — the root layout's title template already appends
+  // "| Studyroom Australia", so a page-level "About Studyroom Australia"
+  // was producing a doubled "About Studyroom Australia | Studyroom Australia".
+  title: "About",
+  description:
+    "Studyroom Australia is a tutoring service founded by Lily, supporting Prep to Year 12 students across Logan, Brisbane Southside and online with calm, confidence-focused 1:1 tutoring.",
+  alternates: { canonical: "/about" },
+};
 
 export default function AboutPage() {
   return (

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getAdminAuth } from "@/lib/firebaseAdmin";
+import { secureAppUrl } from "@/lib/siteUrl";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2026-02-25.clover",
@@ -17,8 +18,8 @@ export async function POST(req: NextRequest) {
     const email = decoded.email ?? "";
 
     // Callers may override success/cancel URLs (e.g. parent portal → /parent).
-    let successUrl = `${process.env.NEXT_PUBLIC_APP_URL}/onboarding?session_id={CHECKOUT_SESSION_ID}`;
-    let cancelUrl = `${process.env.NEXT_PUBLIC_APP_URL}/subscribe`;
+    let successUrl = `${secureAppUrl()}/onboarding?session_id={CHECKOUT_SESSION_ID}`;
+    let cancelUrl = `${secureAppUrl()}/subscribe`;
     try {
       const body = await req.json() as { successUrl?: string; cancelUrl?: string };
       if (body.successUrl) successUrl = body.successUrl;

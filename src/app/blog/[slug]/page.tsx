@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getPostBySlug } from "../../../lib/posts";
+import { absoluteUrl } from "@/lib/siteUrl";
 
 export const dynamic = "force-dynamic";
 
@@ -14,13 +15,14 @@ export async function generateMetadata({
   const { slug } = await params;
   const post = await getPostBySlug(slug);
 
-  if (!post) return { title: "Post not found — Studyroom Australia" };
+  if (!post) return { title: "Post not found" };
 
-  const SITE_URL = (process.env.NEXT_PUBLIC_BASE_URL ?? "").replace(/\/$/, "");
-  const canonical = SITE_URL ? `${SITE_URL}/blog/${post.slug}` : undefined;
+  const canonical = absoluteUrl(`/blog/${post.slug}`);
 
   return {
-    title: `${post.title} — Studyroom Australia`,
+    // No manual "— Studyroom Australia" suffix — the root layout's title
+    // template already appends "| Studyroom Australia".
+    title: post.title,
     description: post.description,
     openGraph: {
       title: post.title,
@@ -28,9 +30,9 @@ export async function generateMetadata({
       type: "article",
       publishedTime: post.date,
       authors: post.author ? [post.author] : ["Studyroom"],
-      ...(canonical ? { url: canonical } : {}),
+      url: canonical,
     },
-    ...(canonical ? { alternates: { canonical } } : {}),
+    alternates: { canonical },
   };
 }
 

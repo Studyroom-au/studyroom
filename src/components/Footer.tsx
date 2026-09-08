@@ -2,12 +2,15 @@ import Link from "next/link";
 import Image from "next/image";
 
 const quickLinks = [
+  { href: "/", label: "Home" },
   { href: "/tutoring", label: "Tutoring" },
+  { href: "/studyroom", label: "Studyroom Hub" },
   { href: "/headstart", label: "HeadStart Workshops" },
   { href: "/worksheets", label: "Custom Worksheets" },
   { href: "/about", label: "About" },
   { href: "/contact", label: "Contact" },
   { href: "/blog", label: "Blog" },
+  { href: "/become-a-tutor", label: "Tutor with us" },
 ];
 
 export default function Footer() {

@@ -1,5 +1,12 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
+
+export const metadata: Metadata = {
+  // Homepage keeps the root layout's `title.default` verbatim — no
+  // page-level title override needed here.
+  alternates: { canonical: "/" },
+};
 
 /**
  * TERM 2 PACKAGE SALE
@@ -947,6 +954,49 @@ export default function HomePage() {
                 </p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* MORE WAYS TO EXPLORE STUDYROOM */}
+      <section className="px-4 md:px-6">
+        <div className="mx-auto max-w-6xl space-y-6">
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--brand)]">
+              More from Studyroom
+            </p>
+            <h2 className="text-2xl font-semibold text-[color:var(--ink)]">
+              A few other ways to find your way here.
+            </h2>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-2xl bg-[color:var(--card)] p-6 shadow-sm ring-1 ring-[color:var(--ring)]">
+              <p className="text-base font-semibold text-[color:var(--ink)]">Looking for tutoring?</p>
+              <p className="mt-2 text-sm text-[color:var(--muted)]">
+                See subjects, packages, and how Studyroom tutoring works.
+              </p>
+              <Link href="/tutoring" className="mt-4 inline-flex text-sm font-semibold text-[color:var(--brand)] hover:underline">
+                Explore tutoring →
+              </Link>
+            </div>
+            <div className="rounded-2xl bg-[color:var(--card)] p-6 shadow-sm ring-1 ring-[color:var(--ring)]">
+              <p className="text-base font-semibold text-[color:var(--ink)]">Curious about the Studyroom platform?</p>
+              <p className="mt-2 text-sm text-[color:var(--muted)]">
+                See how the Hub supports students between tutoring sessions.
+              </p>
+              <Link href="/studyroom" className="mt-4 inline-flex text-sm font-semibold text-[color:var(--brand)] hover:underline">
+                Explore Studyroom Hub →
+              </Link>
+            </div>
+            <div className="rounded-2xl bg-[color:var(--card)] p-6 shadow-sm ring-1 ring-[color:var(--ring)]">
+              <p className="text-base font-semibold text-[color:var(--ink)]">Want to tutor with us?</p>
+              <p className="mt-2 text-sm text-[color:var(--muted)]">
+                We&apos;re especially looking for in-home tutors across Logan and Brisbane Southside.
+              </p>
+              <Link href="/become-a-tutor" className="mt-4 inline-flex text-sm font-semibold text-[color:var(--brand)] hover:underline">
+                Tutor with us →
+              </Link>
+            </div>
           </div>
         </div>
       </section>

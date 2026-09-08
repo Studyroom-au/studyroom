@@ -128,6 +128,12 @@ const CARDS = [
     href: "/hub/admin/invoices",
     accent: "#c9a7ff",
   },
+  {
+    title: "Hub Early Access",
+    description: "Expressions of interest in standalone Hub access, from the public /studyroom page",
+    href: "/hub/admin/hub-early-access",
+    accent: "#7aa8c0",
+  },
 ];
 
 function AdminCard({ title, description, href, accent }: {

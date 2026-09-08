@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
+import { secureAppUrl } from "@/lib/siteUrl";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2026-02-25.clover",
@@ -21,7 +22,7 @@ export async function POST(req: NextRequest) {
     const decoded = await getAdminAuth().verifyIdToken(token);
     const uid = decoded.uid;
 
-    let returnUrl = `${process.env.NEXT_PUBLIC_APP_URL}/hub/profile`;
+    let returnUrl = `${secureAppUrl()}/hub/profile`;
     try {
       const body = await req.json() as { returnUrl?: string };
       if (body.returnUrl) returnUrl = body.returnUrl;

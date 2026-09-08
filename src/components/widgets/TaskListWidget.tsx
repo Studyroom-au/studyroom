@@ -17,6 +17,8 @@ import {
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
+import SubjectBadge from "@/components/SubjectBadge";
+import { resolveLinkedSubject } from "@/lib/subjectBadge";
 
 type Task = {
   id: string;
@@ -28,7 +30,9 @@ type Task = {
   dueDate?: string | null;
 };
 
-type MinUpcomingItem = { id: string; completed: boolean };
+// Callers (src/app/hub/page.tsx) pass the full assessment list, which already
+// carries `subject`/`title` — this type only declares what this widget reads.
+type MinUpcomingItem = { id: string; completed: boolean; subject?: string; title?: string };
 
 export default function TaskListWidget({ upcomingItems = [] }: { upcomingItems?: MinUpcomingItem[] }) {
   const [authReady, setAuthReady] = useState(false);
@@ -198,6 +202,16 @@ export default function TaskListWidget({ upcomingItems = [] }: { upcomingItems?:
   const incompleteAssessmentTasks = assessmentTasks.filter(t => !t.done);
   const completedAssessmentTasks = assessmentTasks.filter(t => t.done);
 
+  const linkedSubject = (t: Task): string | null => {
+    if (!t.upcomingId) return null;
+    // Resolve from the owning ASSESSMENT's own subject/title, never the
+    // checkpoint/task's own title — "Write introduction" carries no subject
+    // signal; the assessment's title ("History Investigation") does.
+    const parent = upcomingItems.find((i) => i.id === t.upcomingId);
+    if (!parent) return null;
+    return resolveLinkedSubject(parent.subject, parent.title ?? "");
+  };
+
   const taskLi = (t: Task) => (
     <li
       key={t.id}
@@ -226,6 +240,7 @@ export default function TaskListWidget({ upcomingItems = [] }: { upcomingItems?:
       {/* Title */}
       <span style={{ flex: 1, fontSize: 12, lineHeight: 1.4, color: t.done ? "var(--sr-muted)" : "var(--sr-ink)", textDecoration: t.done ? "line-through" : "none", display: "flex", alignItems: "center", flexWrap: "wrap", gap: 4 }}>
         {t.title}
+        {linkedSubject(t) && <SubjectBadge subject={linkedSubject(t)!} />}
         {t.source === "tutor_assigned" && (
           <span style={{ fontSize: 9, fontWeight: 600, padding: "2px 7px", borderRadius: 20, background: "#d6e5e3", color: "#1a3a4a", marginLeft: 6, whiteSpace: "nowrap", flexShrink: 0 }}>
             From tutor

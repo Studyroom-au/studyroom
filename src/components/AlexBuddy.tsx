@@ -47,7 +47,7 @@ const MESSAGES: Record<MessageKey, string[]> = {
     "No pressure. But also... slight pressure.",
   ],
   mood_save: [
-    "Saved. Just between us. \uD83D\uDD12",
+    "Mood check-in saved.",
     "Got it. How you feel matters.",
   ],
   deadline_soon: [

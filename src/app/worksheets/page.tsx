@@ -1,5 +1,13 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
+
+export const metadata: Metadata = {
+  title: "Custom Worksheets",
+  description:
+    "Printable worksheets matched to your child's year level, topics and skill gaps in literacy, numeracy and study skills, from Studyroom Australia.",
+  alternates: { canonical: "/worksheets" },
+};
 
 const whatAre = [
   "Custom worksheets that target the exact gaps your child has in literacy, numeracy or study skills.",

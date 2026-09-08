@@ -1,4 +1,12 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: "Tutoring in Logan & Brisbane Southside",
+  description:
+    "Personalised 1:1 tutoring for Prep to Year 12 students, in-home across Logan and Brisbane Southside or online. Calm, confidence-focused support in Maths, English, Science and more.",
+  alternates: { canonical: "/tutoring" },
+};
 
 /**
  * TERM 2 PACKAGE SALE

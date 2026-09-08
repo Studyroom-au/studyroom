@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyIdTokenFromRequest, getAdminDb } from "@/lib/firebaseAdmin";
+import { attachResolvedSubjects } from "@/lib/studyroom/attachResolvedSubjects";
 
 export async function GET(req: NextRequest) {
   try {
@@ -73,6 +74,8 @@ export async function GET(req: NextRequest) {
           done: boolean;
           source?: string;
           dueDate?: string | null;
+          upcomingId?: string;
+          subject?: string;
         }> = [];
 
         let pomoHistory: Array<{
@@ -118,13 +121,35 @@ export async function GET(req: NextRequest) {
             completed: Boolean(d.data().completed),
           }));
 
-          tasks = tasksSnap.docs.map((d) => ({
-            id: d.id,
-            title: String(d.data().title ?? ""),
-            done: Boolean(d.data().done),
-            source: d.data().source ? String(d.data().source) : undefined,
-            dueDate: d.data().dueDate ? String(d.data().dueDate) : null,
-          }));
+          const rawTasks = tasksSnap.docs.map((d) => {
+            const data = d.data();
+            const upcomingId = data.upcomingId
+              ? String(data.upcomingId)
+              : data.assessmentId
+              ? String(data.assessmentId)
+              : undefined;
+            return {
+              id: d.id,
+              title: String(data.title ?? ""),
+              done: Boolean(data.done),
+              source: data.source ? String(data.source) : undefined,
+              dueDate: data.dueDate ? String(data.dueDate) : null,
+              upcomingId,
+            };
+          });
+
+          // Subject lives only on the assessment doc. The `upcoming` batch
+          // above only queries INCOMPLETE assessments, so a task linked to an
+          // assessment that's since been completed needs a small, bounded,
+          // targeted lookup — one direct doc get per distinct missing
+          // assessment ID actually referenced by a task, never a broad
+          // re-query — so completed-assessment tasks keep their subject too.
+          tasks = await attachResolvedSubjects(rawTasks, upcoming, async (id) => {
+            const snap = await db.collection("users").doc(hubUid).collection("upcoming").doc(id).get();
+            if (!snap.exists) return null;
+            const d = snap.data() ?? {};
+            return { id, subject: String(d.subject ?? ""), title: String(d.title ?? "") };
+          });
 
           // History queries — gracefully degrade on missing index or empty collection
           const [pomoResult, moodResult] = await Promise.allSettled([

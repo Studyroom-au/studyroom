@@ -1,4 +1,12 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: "HeadStart Holiday Workshop in Logan",
+  description:
+    "A holiday workshop helping high school students in Logan and Brisbane Southside build organisation, study habits and a clear plan before term starts.",
+  alternates: { canonical: "/headstart" },
+};
 
 const outcomes = [
   "A personalised weekly Google Calendar study schedule",

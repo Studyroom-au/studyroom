@@ -89,6 +89,31 @@ type TutorRequestRow = {
   createdAt: Date | null;
 };
 
+// Release 1C — public "Apply to tutor with Studyroom" intake. A separate,
+// pre-account concern from the two lists above: no role, no Auth account, no
+// tutorAccessRequest. Intake inbox only — reviewStatus is admin/server-set
+// triage state, never a recruitment-stage state machine (Stage 1/Stage 2
+// remain in Notion, see docs).
+type TutorApplicationRow = {
+  id: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  suburb: string;
+  mode: string;
+  willingInHome: boolean;
+  hasCar: boolean;
+  serviceAreas: string | null;
+  subjects: string;
+  yearLevelsComfortable: string;
+  blueCardStatus: string;
+  abnStatus: string;
+  whyTutor: string;
+  reviewStatus: "new" | "reviewed" | "archived";
+  source: string;
+  submittedAt: Date | null;
+};
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function rawDisplayName(user?: UserDoc) {
@@ -464,6 +489,10 @@ export default function AdminTutorsPage() {
   const [rows, setRows] = useState<TutorRow[]>([]);
   const [pendingRows, setPendingRows] = useState<PendingTutorRow[]>([]);
   const [tutorRequests, setTutorRequests] = useState<TutorRequestRow[]>([]);
+  const [applications, setApplications] = useState<TutorApplicationRow[]>([]);
+  const [applicationBusyId, setApplicationBusyId] = useState<string | null>(null);
+  const [expandedApplicationId, setExpandedApplicationId] = useState<string | null>(null);
+  const [showArchivedApplications, setShowArchivedApplications] = useState(false);
   const [actionBusyUid, setActionBusyUid] = useState<string | null>(null);
   const [requestInviteBusyId, setRequestInviteBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -475,7 +504,7 @@ export default function AdminTutorsPage() {
   async function load() {
     setLoading(true);
     try {
-      const [rolesTutorSnap, rolesPendingSnap, tutorRequestsSnap] = await Promise.all([
+      const [rolesTutorSnap, rolesPendingSnap, tutorRequestsSnap, applicationsSnap] = await Promise.all([
         getDocs(query(collection(db, "roles"), where("role", "==", "tutor"))),
         getDocs(query(collection(db, "roles"), where("role", "==", "tutor_pending"))),
         getDocs(
@@ -486,6 +515,7 @@ export default function AdminTutorsPage() {
             limit(50)
           )
         ),
+        getDocs(query(collection(db, "tutorApplications"), orderBy("submittedAt", "desc"), limit(100))),
       ]);
       const tutorUids = rolesTutorSnap.docs.map((d) => d.id);
       const pendingUids = rolesPendingSnap.docs.map((d) => d.id);
@@ -653,6 +683,33 @@ export default function AdminTutorsPage() {
         } satisfies TutorRequestRow;
       });
       setTutorRequests(loadedRequests);
+
+      const loadedApplications = applicationsSnap.docs.map((appDoc) => {
+        const data = appDoc.data();
+        const reviewStatusRaw = data.reviewStatus;
+        const reviewStatus: TutorApplicationRow["reviewStatus"] =
+          reviewStatusRaw === "reviewed" || reviewStatusRaw === "archived" ? reviewStatusRaw : "new";
+        return {
+          id: appDoc.id,
+          fullName: String(data.fullName ?? ""),
+          email: String(data.email ?? ""),
+          phone: String(data.phone ?? ""),
+          suburb: String(data.suburb ?? ""),
+          mode: String(data.mode ?? ""),
+          willingInHome: data.willingInHome === true,
+          hasCar: data.hasCar === true,
+          serviceAreas: typeof data.serviceAreas === "string" ? data.serviceAreas : null,
+          subjects: String(data.subjects ?? ""),
+          yearLevelsComfortable: String(data.yearLevelsComfortable ?? ""),
+          blueCardStatus: String(data.blueCardStatus ?? ""),
+          abnStatus: String(data.abnStatus ?? ""),
+          whyTutor: String(data.whyTutor ?? ""),
+          reviewStatus,
+          source: String(data.source ?? "tutor_application"),
+          submittedAt: typeof data.submittedAt?.toDate === "function" ? data.submittedAt.toDate() : null,
+        } satisfies TutorApplicationRow;
+      });
+      setApplications(loadedApplications);
     } finally {
       setLoading(false);
     }
@@ -752,6 +809,24 @@ export default function AdminTutorsPage() {
     }
   }
 
+  async function updateApplicationReviewStatus(id: string, reviewStatus: "reviewed" | "archived") {
+    setApplicationBusyId(id);
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      const res = await fetch(`/api/admin/tutor-applications/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ reviewStatus }),
+      });
+      if (!res.ok) throw new Error("Failed to update application.");
+      setApplications((prev) => prev.map((a) => (a.id === id ? { ...a, reviewStatus } : a)));
+    } catch (e) {
+      console.error("[admin/tutors] application review-status update failed:", e);
+    } finally {
+      setApplicationBusyId(null);
+    }
+  }
+
   function handleEditSave(uid: string, patch: Partial<TutorRow>) {
     setRows((prev) =>
       prev.map((r) => (r.uid === uid ? { ...r, ...patch } : r))
@@ -797,6 +872,17 @@ export default function AdminTutorsPage() {
   const newTutorRequestCount = useMemo(
     () => tutorRequests.filter((r) => r.status === "new").length,
     [tutorRequests]
+  );
+  const sortedApplications = useMemo(
+    () =>
+      [...applications]
+        .filter((a) => showArchivedApplications || a.reviewStatus !== "archived")
+        .sort((a, b) => (b.submittedAt?.getTime() ?? 0) - (a.submittedAt?.getTime() ?? 0)),
+    [applications, showArchivedApplications]
+  );
+  const newApplicationCount = useMemo(
+    () => applications.filter((a) => a.reviewStatus === "new").length,
+    [applications]
   );
 
   // Column count for the tutor table colspan (Tutor | Email | Students | Profile | Open | Actions)
@@ -942,6 +1028,116 @@ export default function AdminTutorsPage() {
           ))}
         </section>
       )}
+
+      {/* ── New applications (Release 1C public tutor-application intake) ───
+          Deliberately a separate list — NOT merged into Pending Tutor
+          Approvals or Tutor requests above. This is a pre-account intake
+          inbox only (see docs/comment on TutorApplicationRow above); once
+          Studyroom decides to progress a candidate, Lily/Tiara add them to
+          the Notion Recruitment Pipeline manually — reviewStatus here tracks
+          "seen vs not seen" only, never Stage 1/Stage 2/Offer. */}
+      <section style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#748398", marginBottom: 10, display: "flex", alignItems: "center", gap: 10 }}>
+          <span>New applications</span>
+          <div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.07)" }} />
+          {newApplicationCount > 0 && (
+            <span style={{ fontSize: 10, fontWeight: 700, background: "#fce8ee", color: "#c0445e", borderRadius: 20, padding: "2px 8px" }}>
+              {newApplicationCount} new
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowArchivedApplications((v) => !v)}
+            style={{ fontSize: 10, fontWeight: 600, color: "#748398", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}
+          >
+            {showArchivedApplications ? "Hide archived" : "Show archived"}
+          </button>
+        </div>
+
+        {sortedApplications.length === 0 ? (
+          <div style={{ background: "#fff", borderRadius: 14, padding: "16px", border: "1px solid rgba(0,0,0,0.06)", fontSize: 12, color: "#8a96a3" }}>
+            No public tutor applications yet.
+          </div>
+        ) : (
+          sortedApplications.map((a) => {
+            const expanded = expandedApplicationId === a.id;
+            const statusStyle =
+              a.reviewStatus === "reviewed"
+                ? { background: "#d4edcc", color: "#2d5a24" }
+                : a.reviewStatus === "archived"
+                ? { background: "#eceff1", color: "#748398" }
+                : { background: "#fce8ee", color: "#c0445e" };
+            return (
+              <div key={a.id} style={{ background: "#fff", borderRadius: 14, padding: "12px 16px", border: "1px solid rgba(0,0,0,0.06)", marginBottom: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#1d2428" }}>{a.fullName || a.email}</div>
+                    <div style={{ fontSize: 11, color: "#8a96a3", marginTop: 2 }}>
+                      {a.suburb || "No suburb given"} · {a.mode === "in_home" ? "In-home" : a.mode === "online" ? "Online" : a.mode === "both" ? "In-home & online" : a.mode}
+                      {a.willingInHome ? " · Willing in-home" : ""}
+                      {a.hasCar ? " · Has car" : ""}
+                    </div>
+                    <div style={{ fontSize: 11, color: "#8a96a3", marginTop: 2 }}>
+                      Subjects: {a.subjects || "—"} · Years: {a.yearLevelsComfortable || "—"}
+                    </div>
+                    <div style={{ fontSize: 11, color: "#8a96a3", marginTop: 2 }}>
+                      {a.submittedAt ? a.submittedAt.toLocaleString() : "No submission date"} · Source: {a.source}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+                    <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 9px", borderRadius: 20, ...statusStyle }}>
+                      {a.reviewStatus === "reviewed" ? "Reviewed" : a.reviewStatus === "archived" ? "Archived" : "New"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedApplicationId(expanded ? null : a.id)}
+                      style={{ background: "transparent", color: "#456071", border: "1.5px solid rgba(0,0,0,0.08)", borderRadius: 9, padding: "5px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+                    >
+                      {expanded ? "Close" : "View"}
+                    </button>
+                    {a.reviewStatus !== "reviewed" && (
+                      <button
+                        type="button"
+                        onClick={() => void updateApplicationReviewStatus(a.id, "reviewed")}
+                        disabled={applicationBusyId === a.id}
+                        style={{ background: "#456071", color: "#fff", border: "none", borderRadius: 9, padding: "5px 14px", fontSize: 11, fontWeight: 600, cursor: applicationBusyId === a.id ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: applicationBusyId === a.id ? 0.6 : 1 }}
+                      >
+                        Mark reviewed
+                      </button>
+                    )}
+                    {a.reviewStatus !== "archived" && (
+                      <button
+                        type="button"
+                        onClick={() => void updateApplicationReviewStatus(a.id, "archived")}
+                        disabled={applicationBusyId === a.id}
+                        style={{ background: "transparent", color: "#8a96a3", border: "1.5px solid rgba(0,0,0,0.08)", borderRadius: 9, padding: "5px 12px", fontSize: 11, fontWeight: 600, cursor: applicationBusyId === a.id ? "not-allowed" : "pointer", fontFamily: "inherit" }}
+                      >
+                        Archive
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {expanded && (
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(0,0,0,0.06)", fontSize: 12, color: "#1d2428", display: "grid", gap: 6 }}>
+                    <div>Email: {a.email || "—"}</div>
+                    <div>Phone: {a.phone || "—"}</div>
+                    <div>Service areas: {a.serviceAreas || "—"}</div>
+                    <div>Blue Card: {a.blueCardStatus || "—"}</div>
+                    <div>ABN: {a.abnStatus || "—"}</div>
+                    <div style={{ marginTop: 4 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#8a96a3", marginBottom: 2 }}>
+                        Why they&apos;d like to tutor with Studyroom
+                      </div>
+                      <div style={{ whiteSpace: "pre-wrap" }}>{a.whyTutor || "—"}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </section>
 
       {/* ── Add tutor ──────────────────────────────────────────────────────── */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "20px 0 12px" }}>

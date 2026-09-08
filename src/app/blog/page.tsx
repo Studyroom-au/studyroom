@@ -5,9 +5,12 @@ import { getAllPosts } from "../../lib/posts";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Blog — Studyroom Australia",
+  // No manual "— Studyroom Australia" suffix — the root layout's title
+  // template already appends "| Studyroom Australia".
+  title: "Blog",
   description:
     "Calm study tips, literacy help, and support for confident learners. Short, practical articles for parents and students.",
+  alternates: { canonical: "/blog" },
 };
 
 export default async function BlogPage() {
